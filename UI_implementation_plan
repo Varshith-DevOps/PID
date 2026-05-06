@@ -1,0 +1,182 @@
+# HRMS Application — Modern Futuristic UI Overhaul
+
+Complete visual redesign of the HRMS application from a basic, unstyled white UI to a premium, dark-mode futuristic interface with glassmorphism, gradient accents, smooth animations, contextual SVG icons, and a persistent sidebar navigation.
+
+## Scope — 15 Files to Update
+
+| # | File | Description |
+|---|------|-------------|
+| 1 | `globals.css` | Design system: CSS variables, keyframes, component classes |
+| 2 | `layout.tsx` | Add Google Font (Inter), meta viewport, favicon |
+| 3 | `page.tsx` (root) | Login page — futuristic dark glass design |
+| 4 | `dashboard/page.tsx` | Main hub — sidebar + grid of module cards with icons |
+| 5 | `employees/page.tsx` | Employee management with styled tables, forms |
+| 6 | `attendance/page.tsx` | Attendance tracking with status-color cards |
+| 7 | `leave/page.tsx` | Leave management with styled modals |
+| 8 | `payroll/page.tsx` | Payroll with structure preview cards |
+| 9 | `payslips/page.tsx` | Payslip list + detail view |
+| 10 | `projects/page.tsx` | Project management with progress bars |
+| 11 | `timesheet/page.tsx` | Timesheet logging with summary cards |
+| 12 | `overtime/page.tsx` | Overtime requests with reject modal |
+| 13 | `permissions/page.tsx` | Permission matrix with toggle switches |
+| 14 | `dashboard/admin/page.tsx` | Admin analytics — charts with dark theme |
+| 15 | `dashboard/manager/page.tsx` | Manager workload dashboard |
+| 16 | `dashboard/employee/page.tsx` | Employee personal dashboard |
+
+## Design Language
+
+### Theme
+- **Dark mode** base: `#0a0e1a` background with subtle blue-purple gradient tint
+- **Glass cards**: `rgba(255,255,255,0.05)` background with `backdrop-filter: blur(20px)` and `1px solid rgba(255,255,255,0.08)` borders
+- **Accent gradient**: Electric blue → Violet (`#3b82f6` → `#8b5cf6`)
+- **Typography**: Google Font **Inter** (400, 500, 600, 700)
+- **Border radius**: `16px` for cards, `12px` for buttons, `8px` for inputs
+
+### Color Palette
+| Purpose | Color |
+|---------|-------|
+| Primary Accent | `#3b82f6` (Blue) |
+| Secondary Accent | `#8b5cf6` (Violet) |
+| Success | `#10b981` (Emerald) |
+| Warning | `#f59e0b` (Amber) |
+| Danger | `#ef4444` (Red) |
+| Info | `#06b6d4` (Cyan) |
+| Text Primary | `rgba(255,255,255,0.95)` |
+| Text Secondary | `rgba(255,255,255,0.6)` |
+| Card BG | `rgba(255,255,255,0.05)` |
+| Input BG | `rgba(255,255,255,0.08)` |
+
+### Icons
+Every module card and page header will have contextual **inline SVG icons** (no external library needed). Each icon is unique to the module:
+
+| Module | Icon |
+|--------|------|
+| Dashboard | Grid/squares layout |
+| Employees | Person group |
+| Attendance | Clock/check |
+| Leave | Calendar with arrow |
+| Payroll | Wallet/money |
+| Payslips | Receipt/document |
+| Projects | Folder/briefcase |
+| Timesheet | Clipboard/timer |
+| Overtime | Clock with plus |
+| Permissions | Shield/lock |
+| Admin Dashboard | Chart bar |
+| Settings | Gear |
+| Users | Person |
+
+### Animations & Micro-interactions
+- **Card hover**: `translateY(-4px)` lift with glow shadow
+- **Page load**: `fadeInUp` animation with staggered delay
+- **Button hover**: subtle brightness increase + shadow glow
+- **Status badges**: soft pulse for "PENDING" items
+- **Sidebar**: smooth slide transitions on active state
+- **Loading**: animated gradient shimmer skeleton
+- **Modals**: fade + scale-up entrance
+
+### Layout
+- **Sidebar** (fixed left, 260px wide): Persistent navigation with logo, nav links, user info, logout
+- **Main content**: Right-side scrollable area with `padding: 2rem`
+- All pages except login share the sidebar layout via a shared wrapper pattern in each page
+
+## Proposed Changes
+
+### Phase 1: Design Foundation
+
+#### [MODIFY] [globals.css](file:///d:/AG/HRMS%20application/frontend/src/app/globals.css)
+Complete rewrite with:
+- CSS custom properties (design tokens for colors, spacing, shadows)
+- `@import` for Google Fonts (Inter)
+- Keyframe animations (`fadeInUp`, `shimmer`, `pulse`, `slideIn`)
+- Reusable component classes: `.glass-card`, `.btn-primary`, `.btn-danger`, `.input-field`, `.select-field`, `.status-badge`, `.data-table`, `.stat-card`, `.page-header`, `.sidebar`, `.modal-overlay`, `.modal-content`
+- Dark scrollbar styling
+- Form element restyling for dark theme
+
+#### [MODIFY] [layout.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/layout.tsx)
+- Add Inter font via `<link>` tag
+- Update metadata title to "NexusHR — Human Resource Management"
+- Set body class for dark background
+
+---
+
+### Phase 2: Login Page
+
+#### [MODIFY] [page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/page.tsx)
+- Full-screen dark gradient background with animated mesh pattern
+- Center-aligned glass card with subtle glow border
+- Company logo/icon at top (SVG)
+- Styled dark inputs with icons (mail, lock)
+- Gradient submit button with hover effects
+- Error message with icon styling
+- Animated background elements (floating orbs/shapes)
+
+---
+
+### Phase 3: Dashboard & Navigation
+
+#### [MODIFY] [dashboard/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/dashboard/page.tsx)
+- Full sidebar navigation (persistent left panel)
+- Welcome banner with gradient background and user avatar placeholder
+- Module cards in a grid with unique SVG icons per module
+- Each card has gradient accent line at top + hover lift effect
+- Quick stats row at top (total employees, pending leaves, etc.)
+
+---
+
+### Phase 4: All Module Pages (Same Pattern)
+Each page gets the same structural treatment:
+1. Sidebar navigation (consistent across all pages, rendered inline in each page)
+2. Page header with icon, title, and action buttons
+3. Glass-card tables with dark theme
+4. Styled form inputs, selects, textareas
+5. Status badges with color-coded glass backgrounds
+6. Summary stat cards where applicable
+7. Modals with backdrop blur and dark glass
+
+Files updated:
+
+#### [MODIFY] [employees/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/employees/page.tsx)
+#### [MODIFY] [attendance/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/attendance/page.tsx)
+#### [MODIFY] [leave/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/leave/page.tsx)
+#### [MODIFY] [payroll/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/payroll/page.tsx)
+#### [MODIFY] [payslips/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/payslips/page.tsx)
+#### [MODIFY] [projects/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/projects/page.tsx)
+#### [MODIFY] [timesheet/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/timesheet/page.tsx)
+#### [MODIFY] [overtime/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/overtime/page.tsx)
+#### [MODIFY] [permissions/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/permissions/page.tsx)
+
+---
+
+### Phase 5: Sub-Dashboards
+
+#### [MODIFY] [dashboard/admin/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/dashboard/admin/page.tsx)
+- Dark-themed recharts (dark grid, colored bars)
+- Glass stat cards with gradient numbers
+- Sidebar navigation
+
+#### [MODIFY] [dashboard/manager/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/dashboard/manager/page.tsx)
+- Same dark treatment for charts
+- Team workload visualization
+
+#### [MODIFY] [dashboard/employee/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/dashboard/employee/page.tsx)
+- Personal stats with glass cards
+- Weekly hours chart in dark theme
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `npm run dev` and verify no build errors
+- Browser test: Navigate to login → login → verify dashboard renders → navigate to each module page
+
+### Manual Verification
+- Visual inspection of all 15 pages via browser screenshots
+- Verify responsive layout
+- Confirm all existing functionality still works (login, navigation, API calls)
+
+> [!IMPORTANT]
+> **No backend changes** — this is a purely frontend visual overhaul. All API calls, business logic, and routing remain identical. Only the JSX markup and inline styles are updated.
+
+> [!NOTE]
+> The admin, manager, and employee dashboard pages currently use Tailwind-style `className` props but Tailwind is NOT installed. These pages likely render with broken/unstyled content. The redesign will fix this by converting everything to inline styles + CSS classes from our globals.css.

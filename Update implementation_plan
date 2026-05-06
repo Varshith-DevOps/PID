@@ -1,0 +1,125 @@
+# HRMS Feature Enhancement — Employee Dashboard, Resource Tracking & Seed Data
+
+Add employee self-service attendance on dashboard, admin resource visibility, and comprehensive 2-month seed data for a realistic 20-employee organization.
+
+## Proposed Changes
+
+### Component 1: Comprehensive Seed Data (20 Employees, 2 Projects, 2 Months of Records)
+
+#### [MODIFY] [seed.js](file:///d:/AG/HRMS%20application/backend/prisma/seed.js)
+
+Complete rewrite of the seed file to generate:
+
+**Users (4 system accounts — unchanged)**
+- `superadmin@hrms.com` (SUPER_ADMIN)
+- `admin@hrms.com` (ADMIN)
+- `manager@hrms.com` (MANAGER)
+- `employee@hrms.com` (EMPLOYEE)
+
+**20 Employees across 5 departments:**
+| # | Department | Count | Roles |
+|---|-----------|-------|-------|
+| 1 | Engineering | 8 | 1 Lead + 7 Developers |
+| 2 | Human Resources | 3 | 1 HR Manager + 2 HR Staff |
+| 3 | Finance | 3 | 1 Finance Lead + 2 Accountants |
+| 4 | Marketing | 3 | 1 Marketing Lead + 2 Execs |
+| 5 | Operations | 3 | 1 Ops Lead + 2 Coordinators |
+
+**2 Application Development Projects (ACTIVE status):**
+1. **NexusHR Mobile App** — Manager: Engineering Lead, 8 assigned employees, ~12 tasks
+2. **Customer Portal Revamp** — Manager: Marketing Lead, 8 assigned employees, ~10 tasks
+3. **4 employees have NO tasks assigned** (bench resources from HR/Ops)
+
+**2 Months of Historical Data (March 1–April 30, 2026):**
+- **Attendance**: ~20 records/working day × ~44 working days = ~880 attendance records. Mix of PRESENT, LATE, HALF_DAY, ABSENT. Realistic check-in/out times (8:45–9:15 AM / 5:30–7 PM)
+- **Leaves**: 15–20 leave requests across the 2 months (ANNUAL, SICK, CASUAL). Some APPROVED, some PENDING, some REJECTED
+- **Timesheets**: For all employees with tasks, log 7–9 hours/day tied to their assigned tasks
+- **Salary Structures**: All 20 employees get salary structures (Basic + HRA + DA + allowances)
+- **Payroll Runs**: 2 runs (March 2026, April 2026) with full PayrollRecords for all 20 employees
+- **Leave Quotas**: Year 2026 quotas (Annual: 20, Sick: 10, Casual: 5) for all employees
+
+---
+
+### Component 2: Employee Self-Service — Login/Logout/Break on Dashboard
+
+#### [MODIFY] [employee dashboard](file:///d:/AG/HRMS%20application/frontend/src/app/dashboard/employee/page.tsx)
+
+Add a **Time Clock Card** at the top of the employee dashboard with:
+- **Login (Check-In)** button — calls `POST /api/attendance/checkin` with the employee's own ID
+- **Logout (Check-Out)** button — calls `POST /api/attendance/checkout`
+- **Break Start / Break End** toggle — tracks break time (UI-only timer, no backend changes)
+- Live timer showing current session duration since check-in
+- Display today's status (check-in time, current hours worked, status badge)
+- Buttons disabled based on state (can't check-in twice, can't check-out without check-in)
+
+#### [MODIFY] [api.ts](file:///d:/AG/HRMS%20application/frontend/src/lib/api.ts)
+
+Add a new function `getMyAttendance(employeeId, params)` for employee-specific attendance history.
+
+---
+
+### Component 3: Employee Attendance View — Own Records Only
+
+#### [MODIFY] [attendance page](file:///d:/AG/HRMS%20application/frontend/src/app/attendance/page.tsx)
+
+- When `user.role === 'EMPLOYEE'`: Show only their own attendance records (no employee selector, no settings tab)
+- Use `getEmployeeAttendance(employeeId)` to fetch only their records
+- Show a simplified view with: Date, Check-In, Check-Out, Hours, Status
+- Hide the admin check-in/check-out panel for EMPLOYEE role
+
+---
+
+### Component 4: Admin Resource Occupancy View (Occupied vs Bench)
+
+#### [MODIFY] [admin dashboard](file:///d:/AG/HRMS%20application/frontend/src/app/dashboard/admin/page.tsx)
+
+Add a new **Resource Allocation** card showing:
+- **Occupied**: Employees currently assigned to at least one active task
+- **Bench**: Employees with zero active task assignments
+- Visual split (pie chart or stat cards with count + percentage)
+- List of bench employees with name, department, and days on bench
+
+#### [MODIFY] [utilizationController.js](file:///d:/AG/HRMS%20application/backend/src/controllers/utilizationController.js)
+
+Add a new endpoint `getResourceAllocation` that returns:
+```json
+{
+  "total": 20,
+  "occupied": 16,
+  "bench": 4,
+  "benchEmployees": [{ "id", "name", "department", "daysSinceLastTask" }]
+}
+```
+
+#### [MODIFY] [utilization routes](file:///d:/AG/HRMS%20application/backend/src/routes)
+
+Register the new `getResourceAllocation` endpoint.
+
+---
+
+### Component 5: Task-Based Time Recording
+
+The existing system already links tasks → timesheets. The seed data will ensure:
+- Each assigned employee has timesheet entries linked to their tasks
+- Task `actualHours` is updated from timesheet aggregations
+- Completed tasks have `completedAt` timestamps
+
+No code changes needed — just proper seed data linkage.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+1. Run `npx prisma db seed` — verify no errors, 20 employees created
+2. Start backend + frontend servers
+3. Login as `admin@hrms.com` — verify dashboard shows 20 employees, 2 projects
+4. Check attendance page for March/April reports — verify data exists
+5. Check payroll page — verify 2 payroll runs visible
+6. Login as `employee@hrms.com` — verify employee dashboard shows clock-in buttons
+7. Check admin dashboard — verify resource allocation card shows occupied/bench split
+
+### Manual Verification
+- Browse each page to confirm data loads correctly
+- Test the employee check-in/check-out flow from the dashboard
+- Verify the bench/occupied resource split matches expectations (16 occupied, 4 bench)

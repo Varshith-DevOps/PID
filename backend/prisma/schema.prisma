@@ -1,0 +1,559 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  password     String
+  name         String
+  role         String       @default("EMPLOYEE")
+  isActive     Boolean      @default(true)
+  permissions  Permission[] @relation("UserPermissions")
+  employee     Employee?    @relation("UserEmployee")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("users")
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  module    String
+  action    String
+  isGranted Boolean  @default(false)
+  user      User     @relation("UserPermissions", fields: [userId], references: [id])
+  userId    String
+
+  @@unique([userId, module, action])
+  @@map("permissions")
+}
+
+model Department {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  isActive    Boolean    @default(true)
+  employees   Employee[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("departments")
+}
+
+model Employee {
+  id              String        @id @default(uuid())
+  employeeId      String        @unique
+  firstName       String
+  lastName        String
+  email           String        @unique
+  phone           String?
+  dateOfBirth     DateTime?
+  gender          String?
+  photoUrl        String?
+  accountStage    String    @default("EMPLOYEE")
+  address         String?
+  nationality     String?
+
+  // Personal details
+  bloodGroup      String?
+  maritalStatus   String?
+  personalEmail   String?
+  panNumber       String?
+  aadharNumber    String?
+
+  // Emergency contact
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+
+  // Professional
+  jobTitle        String
+  department      Department    @relation(fields: [departmentId], references: [id])
+  departmentId    String
+  employmentType  String        @default("FULL_TIME")
+  joinDate        DateTime      @default(now())
+  salary          Float
+  annualCTC       Float?
+  bonusPercent    Float?
+
+  // Linked user account
+  user            User?         @relation("UserEmployee", fields: [userId], references: [id])
+  userId          String?       @unique
+
+  manager         Employee?     @relation("ManagerRelation", fields: [managerId], references: [id])
+  managerId       String?
+  subordinates    Employee[]    @relation("ManagerRelation")
+
+  documents       Document[]
+  attendances     Attendance[]
+  leaves          Leave[]
+  leaveQuotas     LeaveQuota[]
+  salaryStructure SalaryStructure?
+  payrollRecords  PayrollRecord[]
+  managedProjects Project[]      @relation("ProjectManager")
+  projectResources ProjectResource[] @relation("EmployeeResources")
+  tasks           Task[]
+  timesheets      Timesheet[]
+  overtimes       Overtime[]
+
+  // New relations
+  addresses       EmployeeAddress[]
+  education       Education[]
+  experience      ProfessionalExperience[]
+  salaryRevisions SalaryRevision[]
+  bankDetails     BankDetails?
+  pfDetails       PFDetails?
+  exitDetails     ExitDetails?
+  dependents      Dependent[]
+  changeHistory   ChangeHistory[]
+
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("employees")
+}
+
+model EmployeeAddress {
+  id          String   @id @default(uuid())
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  type        String   @default("CURRENT")
+  line1       String
+  line2       String?
+  city        String
+  state       String
+  pincode     String
+  country     String   @default("India")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("employee_addresses")
+}
+
+model Education {
+  id              String   @id @default(uuid())
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  employeeId      String
+  degree          String
+  specialization  String?
+  institution     String
+  university      String?
+  yearOfPassing   Int
+  percentage      Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("education")
+}
+
+model ProfessionalExperience {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  company     String
+  designation String
+  fromDate    DateTime
+  toDate      DateTime?
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("professional_experience")
+}
+
+model SalaryRevision {
+  id             String   @id @default(uuid())
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  employeeId     String
+  effectiveDate  DateTime
+  previousSalary Float
+  revisedSalary  Float
+  reason         String?
+  revisedBy      String?
+  createdAt      DateTime @default(now())
+
+  @@map("salary_revisions")
+}
+
+model ChangeHistory {
+  id          String   @id @default(uuid())
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  changedBy   String
+  entity      String
+  field       String
+  oldValue    String?
+  newValue    String?
+  reason      String
+  createdAt   DateTime @default(now())
+
+  @@map("change_history")
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  name        String
+  type        String
+  description String?
+  fileName    String
+  filePath    String
+  fileSize    Int?
+  mimeType    String?
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@map("documents")
+}
+
+model BankDetails {
+  id            String   @id @default(uuid())
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  employeeId    String   @unique
+  bankName      String
+  accountNumber String
+  ifscCode      String
+  branchName    String?
+  accountType   String   @default("SAVINGS")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("bank_details")
+}
+
+model PFDetails {
+  id            String    @id @default(uuid())
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  employeeId    String    @unique
+  pfNumber      String?
+  uanNumber     String?
+  epsNumber     String?
+  pfJoinDate    DateTime?
+  voluntaryPF   Boolean   @default(false)
+  vpfPercentage Float?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("pf_details")
+}
+
+model ExitDetails {
+  id                String    @id @default(uuid())
+  employee          Employee  @relation(fields: [employeeId], references: [id])
+  employeeId        String    @unique
+  exitType          String?
+  resignationDate   DateTime?
+  lastWorkingDate   DateTime?
+  noticePeriodDays  Int?
+  exitReason        String?
+  exitInterview     Boolean   @default(false)
+  rehireEligible    Boolean   @default(true)
+  fnfStatus         String    @default("PENDING")
+  fnfAmount         Float?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("exit_details")
+}
+
+model Dependent {
+  id            String    @id @default(uuid())
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  employeeId    String
+  name          String
+  relationship  String
+  dateOfBirth   DateTime?
+  gender        String?
+  isNominee     Boolean   @default(false)
+  nomineePercent Float?
+  isActive      Boolean   @default(true)
+  inactiveRemark String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("dependents")
+}
+
+model Attendance {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  date        DateTime  @default(now())
+  checkIn     DateTime?
+  checkOut    DateTime?
+  status      String    @default("PRESENT")
+  lateMinutes Int?
+  workHours   Float?
+  notes       String?
+  markedBy    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([employeeId, date])
+  @@map("attendances")
+}
+
+model AttendanceSettings {
+  id               String   @id @default(uuid())
+  checkInStartTime String   @default("09:00")
+  checkInEndTime   String   @default("09:30")
+  checkOutTime     String   @default("18:00")
+  lateThreshold    Int      @default(30)
+  halfDayThreshold Int      @default(4)
+  isActive         Boolean  @default(true)
+
+  @@map("attendance_settings")
+}
+
+model Leave {
+  id            String    @id @default(uuid())
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  employeeId    String
+  leaveType     String
+  startDate     DateTime
+  endDate       DateTime
+  days          Float
+  reason        String?
+  status        String    @default("PENDING")
+  approvedBy    String?
+  approvedAt    DateTime?
+  rejectReason  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("leaves")
+}
+
+model LeaveQuota {
+  id          String   @id @default(uuid())
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  year        Int
+  leaveType   String
+  quota       Float
+  used        Float    @default(0)
+
+  @@unique([employeeId, year, leaveType])
+  @@map("leave_quotas")
+}
+
+model SalaryStructure {
+  id              String    @id @default(uuid())
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  employeeId      String
+  basicSalary     Float
+  hra             Float     @default(0)
+  da              Float     @default(0)
+  conveyance      Float     @default(0)
+  medical         Float     @default(0)
+  specialAllowance Float    @default(0)
+  otherAllowance  Float     @default(0)
+  
+  pfEnabled       Boolean   @default(true)
+  pfRate          Float     @default(0.12)
+  tdsEnabled      Boolean   @default(true)
+  insurance       Float     @default(0)
+  otherDeduction  Float     @default(0)
+  
+  effectiveFrom   DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([employeeId])
+  @@map("salary_structures")
+}
+
+model PayrollSettings {
+  id              String   @id @default(uuid())
+  pfRate          Float    @default(0.12)
+  maxPf           Float    @default(2160)
+  gratuityRate    Float    @default(0.0481)
+  tdsEnabled      Boolean  @default(true)
+  epfEnabled      Boolean  @default(true)
+  epsEnabled      Boolean  @default(true)
+  otMultiplier    Float    @default(1.5)
+  standardHours   Float    @default(176)
+  isActive        Boolean  @default(true)
+
+  @@map("payroll_settings")
+}
+
+model PayrollRecord {
+  id              String      @id @default(uuid())
+  payrollRun       PayrollRun  @relation(fields: [payrollRunId], references: [id])
+  payrollRunId    String
+  employee        Employee    @relation(fields: [employeeId], references: [id])
+  employeeId      String
+  
+  basicSalary     Float
+  hra             Float
+  da              Float
+  conveyance      Float
+  medical         Float
+  specialAllowance Float
+  otherAllowance  Float
+  
+  grossEarnings   Float
+  pf              Float
+  tax             Float
+  insurance       Float
+  otherDeductions Float
+  totalDeductions Float
+  
+  netSalary       Float
+  
+  workDays        Int
+  daysWorked      Int
+  leaves          Float
+  deductions      Float
+  lopDays         Float       @default(0)
+  lopDeduction    Float       @default(0)
+  overtimeHours   Float       @default(0)
+  overtimePay     Float       @default(0)
+  arrears         Float       @default(0)
+  incentives      Float       @default(0)
+  incomeTaxDeclaration Boolean @default(false)
+  investmentProofs Boolean    @default(false)
+  complianceNotes String?
+  
+  status          String      @default("PROCESSED")
+  createdAt       DateTime    @default(now())
+
+  @@unique([payrollRunId, employeeId])
+  @@map("payroll_records")
+}
+
+model PayrollRun {
+  id              String         @id @default(uuid())
+  month           Int
+  year            Int
+  status          String         @default("DRAFT")
+  totalAmount     Float?
+  totalPf         Float?         @default(0)
+  totalTds        Float?         @default(0)
+  totalGratuity   Float?         @default(0)
+  employeeCount   Int?
+  processedBy     String?
+  processedAt     DateTime?
+  records         PayrollRecord[]
+  createdAt       DateTime        @default(now())
+
+  @@unique([month, year])
+  @@map("payroll_runs")
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  startDate   DateTime?
+  deadline    DateTime?
+  budget      Float         @default(0)
+  status      String        @default("PLANNING")
+  
+  manager     Employee      @relation("ProjectManager", fields: [managerId], references: [id])
+  managerId   String
+  resources   ProjectResource[]
+  
+  tasks       Task[]
+  expenses    ProjectExpense[]
+  
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("projects")
+}
+
+model ProjectResource {
+  id          String   @id @default(uuid())
+  project     Project  @relation(fields: [projectId], references: [id])
+  projectId   String
+  employee    Employee @relation("EmployeeResources", fields: [employeeId], references: [id])
+  employeeId  String
+  joinedAt    DateTime @default(now())
+
+  @@unique([projectId, employeeId])
+  @@map("project_resources")
+}
+
+model ProjectExpense {
+  id          String   @id @default(uuid())
+  project     Project  @relation(fields: [projectId], references: [id])
+  projectId   String
+  description String
+  amount      Float
+  date        DateTime @default(now())
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@map("project_expenses")
+}
+
+model Task {
+  id             String      @id @default(uuid())
+  title          String
+  description    String?
+  project        Project?    @relation(fields: [projectId], references: [id])
+  projectId      String?
+  assignee       Employee    @relation(fields: [assigneeId], references: [id])
+  assigneeId    String
+  
+  estimatedHours Float?
+  actualHours    Float       @default(0)
+  deadline       DateTime?
+  priority       String      @default("MEDIUM")
+  status         String      @default("TODO")
+  
+  completedAt    DateTime?
+  createdBy      String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  timesheets     Timesheet[]
+
+  @@map("tasks")
+}
+
+model Timesheet {
+  id          String   @id @default(uuid())
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  task        Task?    @relation(fields: [taskId], references: [id])
+  taskId      String?
+  date        DateTime
+  hoursWorked Float
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@unique([employeeId, taskId, date])
+  @@map("timesheets")
+}
+
+model Overtime {
+  id            String    @id @default(uuid())
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  employeeId    String
+  date          DateTime
+  regularHours  Float     @default(8)
+  otHours       Float
+  reason        String?
+  status        String    @default("PENDING")
+  
+  approvedBy    String?
+  approvedAt    DateTime?
+  rejectReason  String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("overtime_requests")
+}

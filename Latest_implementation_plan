@@ -1,0 +1,177 @@
+# Employee Login & Comprehensive Profile Management
+
+Enable every employee to login with their actual company email (e.g., `rajesh.kumar@company.com`), and build a rich, tabbed employee profile page in the Admin portal to manage personal, professional, education, salary revision, documents, address details, and password changes.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Employee-User Linking**: Currently `User` and `Employee` are separate, unlinked tables. This plan links them via a `userId` field on `Employee`. Every employee will get a `User` account created automatically (with EMPLOYEE role and default password `employee123`). Admins can still login via their existing accounts.
+
+> [!WARNING]
+> **Database Reset Required**: Schema changes (new models + new fields) will require `prisma db push --force-reset` + re-seed. Existing data in `dev.db` will be wiped and re-created from the updated seed.
+
+## Proposed Changes
+
+### Component 1: Schema — New Models & Employee-User Link
+
+#### [MODIFY] [schema.prisma](file:///d:/AG/HRMS%20application/backend/prisma/schema.prisma)
+
+**Changes to existing `Employee` model:**
+- Add `userId String? @unique` + relation to `User` (optional for backward compat)
+- Add personal fields: `bloodGroup`, `maritalStatus`, `personalEmail`, `panNumber`, `aadharNumber`
+- Add `emergencyContactName`, `emergencyContactPhone`, `emergencyContactRelation`
+
+**New models:**
+
+| Model | Purpose | Fields |
+|-------|---------|--------|
+| `EmployeeAddress` | Current + permanent address | `type` (CURRENT/PERMANENT), `line1`, `line2`, `city`, `state`, `pincode`, `country` |
+| `Education` | Degree records | `degree`, `institution`, `university`, `yearOfPassing`, `percentage`, `specialization` |
+| `ProfessionalExperience` | Past work history | `company`, `designation`, `fromDate`, `toDate`, `description` |
+| `SalaryRevision` | Salary change history | `effectiveDate`, `previousSalary`, `revisedSalary`, `reason`, `revisedBy` |
+
+---
+
+### Component 2: Backend — Auth Login by Employee Email
+
+#### [MODIFY] [authController.js](file:///d:/AG/HRMS%20application/backend/src/controllers/authController.js)
+
+- Update `getProfile()` to also return the linked `employeeId` from the `Employee` table when the user has a linked employee record. This fixes the Employee Dashboard which needs the Employee UUID.
+
+#### [MODIFY] [login flow](file:///d:/AG/HRMS%20application/backend/src/controllers/authController.js)
+
+- Login already works by looking up `User.email`. No changes needed to the login controller — we just need to create User accounts with the employee's email addresses (handled in seed).
+
+---
+
+### Component 3: Backend — Employee Profile CRUD APIs
+
+#### [MODIFY] [employeeController.js](file:///d:/AG/HRMS%20application/backend/src/controllers/employeeController.js)
+
+Enhance `getEmployeeById` to include all new relations:
+```js
+include: {
+  department, manager, subordinates, documents,
+  addresses: true,
+  education: { orderBy: { yearOfPassing: 'desc' } },
+  experience: { orderBy: { fromDate: 'desc' } },
+  salaryRevisions: { orderBy: { effectiveDate: 'desc' } },
+  user: { select: { id, email, role } },
+}
+```
+
+Add new endpoints:
+- `addAddress(employeeId, data)` / `updateAddress(id, data)` / `deleteAddress(id)`
+- `addEducation(employeeId, data)` / `updateEducation(id, data)` / `deleteEducation(id)`
+- `addExperience(employeeId, data)` / `updateExperience(id, data)` / `deleteExperience(id)`
+- `addSalaryRevision(employeeId, data)`
+
+#### [MODIFY] [authController.js](file:///d:/AG/HRMS%20application/backend/src/controllers/authController.js)
+
+Add `changePassword(req, res)` endpoint:
+- Accepts `{ currentPassword, newPassword }`
+- Validates current password
+- Hashes and saves new password
+
+#### [MODIFY] [employeeRoutes.js](file:///d:/AG/HRMS%20application/backend/src/routes/employeeRoutes.js)
+
+Register all new sub-resource routes:
+```
+POST   /employees/:id/address
+PUT    /employees/address/:addressId
+DELETE /employees/address/:addressId
+POST   /employees/:id/education
+PUT    /employees/education/:eduId
+DELETE /employees/education/:eduId
+POST   /employees/:id/experience
+PUT    /employees/experience/:expId
+DELETE /employees/experience/:expId
+POST   /employees/:id/salary-revision
+```
+
+#### [MODIFY] [authRoutes.js](file:///d:/AG/HRMS%20application/backend/src/routes/authRoutes.js)
+
+Add: `PUT /auth/change-password` — authenticated, any role
+
+---
+
+### Component 4: Seed Data — User Accounts for All 20 Employees
+
+#### [MODIFY] [seed.js](file:///d:/AG/HRMS%20application/backend/prisma/seed.js)
+
+- Create a `User` account (role: EMPLOYEE) for each of the 20 employees with their company email and password `employee123`
+- Link each Employee record to its User via `userId`
+- Add sample data for:
+  - 2 addresses per employee (current + permanent)
+  - 1-2 education records per employee
+  - 1-2 experience records for senior employees
+  - 2 salary revisions per employee (initial + one revision)
+
+---
+
+### Component 5: Frontend — Comprehensive Employee Detail Page (Tabbed)
+
+#### [NEW] [employees/[id]/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/employees/[id]/page.tsx)
+
+A **dedicated employee detail page** with a tabbed interface. Tabs:
+
+| Tab | Content |
+|-----|---------|
+| **Personal** | Name, DOB, gender, blood group, marital status, emergency contact, PAN, Aadhar |
+| **Professional** | Job title, department, manager, join date, employment type + work experience history |
+| **Education** | List of degrees with add/edit/delete |
+| **Salary** | Current salary, salary structure + revision history timeline |
+| **Documents** | File upload/download/delete (existing functionality moved here) |
+| **Address** | Current + permanent address with add/edit |
+| **Account** | Linked user email, role, and **Change Password** form |
+
+Each tab has inline editing with save/cancel. Uses the existing glassmorphism design system.
+
+#### [MODIFY] [employees/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/employees/page.tsx)
+
+- Add a **"View"** button in the employee list table → navigates to `/employees/[id]`
+- Keep the existing "Edit" button for quick inline edits
+
+#### [MODIFY] [api.ts](file:///d:/AG/HRMS%20application/frontend/src/lib/api.ts)
+
+Add new API functions:
+```ts
+// Employee sub-resources
+addEmployeeAddress(employeeId, data)
+updateEmployeeAddress(addressId, data)
+deleteEmployeeAddress(addressId)
+addEmployeeEducation(employeeId, data)
+updateEmployeeEducation(eduId, data)
+deleteEmployeeEducation(eduId)
+addEmployeeExperience(employeeId, data)
+updateEmployeeExperience(expId, data)
+deleteEmployeeExperience(expId)
+addSalaryRevision(employeeId, data)
+changePassword(currentPassword, newPassword)
+```
+
+---
+
+### Component 6: Frontend — Login Page Update
+
+#### [MODIFY] [page.tsx (login)](file:///d:/AG/HRMS%20application/frontend/src/app/page.tsx)
+
+- Update the footer hint text to say: `Use your company email or admin@hrms.com / admin123`
+
+---
+
+## Verification Plan
+
+### Automated Tests
+1. Run `npx prisma db push --force-reset` then `npx prisma db seed`
+2. Start backend + frontend servers
+3. **Test Employee Login**: Login as `rajesh.kumar@company.com` / `employee123` → should see Employee Dashboard with clock-in/out
+4. **Test Admin Login**: Login as `admin@hrms.com` / `admin123` → navigate to Employees → click View on any employee → verify all 7 tabs load with data
+5. **Test CRUD on each tab**: Add/edit/delete address, education, experience, salary revision
+6. **Test Password Change**: Login as employee → go to Account tab → change password → logout → login with new password
+7. **Test Documents**: Upload a file on the Documents tab, verify it appears in the list
+
+### Manual Verification
+- Browse each tab and verify data renders correctly
+- Test the employee self-service dashboard loads properly after employee login
+- Verify admin cannot see password change for other users (only self)
