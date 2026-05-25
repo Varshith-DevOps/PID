@@ -60,8 +60,10 @@ const generatePayslipPDF = (record, employee, company) => {
       doc.fontSize(10).font('Helvetica');
 
       const deductionsData = [
-        ['PF', record.pf?.toFixed(2)],
-        ['TDS', record.tax?.toFixed(2)],
+        ['Provident Fund (PF)', record.pf?.toFixed(2)],
+        ['Employee State Insurance (ESI)', record.esi?.toFixed(2)],
+        ['Professional Tax (PT)', record.professionalTax?.toFixed(2)],
+        ['TDS / Income Tax', record.tax?.toFixed(2)],
         ['Insurance', record.insurance?.toFixed(2)],
         ['Other Deductions', record.otherDeductions?.toFixed(2)],
       ];

@@ -741,6 +741,9 @@ const getOrgChart = async (req, res) => {
         lastName: true,
         jobTitle: true,
         managerId: true,
+        email: true,
+        photoUrl: true,
+        department: { select: { name: true } },
       },
       orderBy: { firstName: 'asc' },
     });
@@ -750,6 +753,9 @@ const getOrgChart = async (req, res) => {
       name: `${e.firstName} ${e.lastName}`,
       title: e.jobTitle,
       managerId: e.managerId,
+      email: e.email,
+      photoUrl: e.photoUrl,
+      department: e.department?.name || '',
     }));
 
     res.json(chart);

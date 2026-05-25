@@ -274,6 +274,8 @@ const runPayroll = async (req, res) => {
           grossEarnings: calc.grossEarnings,
           pf: calc.breakdowns.deductions.employeePf,
           tax: calc.breakdowns.deductions.tds,
+          esi: calc.breakdowns.deductions.employeeEsi || 0,
+          professionalTax: calc.breakdowns.deductions.professionalTax || 0,
           insurance: calc.breakdowns.deductions.insurance,
           otherDeductions: calc.breakdowns.deductions.otherDeductions,
           totalDeductions: calc.totalDeductions,
@@ -373,6 +375,8 @@ const buildPayrollExportRows = (records) => records.map((record) => ({
   overtimePay: record.overtimePay || 0,
   grossEarnings: record.grossEarnings,
   employeePf: record.pf,
+  employeeEsi: record.esi || 0,
+  professionalTax: record.professionalTax || 0,
   incomeTax: record.tax,
   insurance: record.insurance,
   otherDeductions: record.otherDeductions,
@@ -399,7 +403,7 @@ const getPayrollExport = async (req, res) => {
     });
     const rows = buildPayrollExportRows(records);
     const headers = Object.keys(rows[0] || {
-      employeeId: '', employeeName: '', department: '', workDays: '', payableDays: '', lopDays: '', basicSalary: '', hra: '', da: '', conveyance: '', medical: '', specialAllowance: '', otherAllowance: '', arrears: '', incentives: '', overtimeHours: '', overtimePay: '', grossEarnings: '', employeePf: '', incomeTax: '', insurance: '', otherDeductions: '', lopDeduction: '', totalDeductions: '', netSalary: '', incomeTaxDeclaration: '', investmentProofs: '', notes: '',
+      employeeId: '', employeeName: '', department: '', workDays: '', payableDays: '', lopDays: '', basicSalary: '', hra: '', da: '', conveyance: '', medical: '', specialAllowance: '', otherAllowance: '', arrears: '', incentives: '', overtimeHours: '', overtimePay: '', grossEarnings: '', employeePf: '', employeeEsi: '', professionalTax: '', incomeTax: '', insurance: '', otherDeductions: '', lopDeduction: '', totalDeductions: '', netSalary: '', incomeTaxDeclaration: '', investmentProofs: '', notes: '',
     });
     const fileBase = `payroll-${targetYear}-${String(targetMonth).padStart(2, '0')}`;
 
@@ -411,7 +415,7 @@ const getPayrollExport = async (req, res) => {
       doc.fontSize(14).text(`Payroll Salary Breakup - ${targetMonth}/${targetYear}`);
       doc.moveDown();
       rows.forEach((row) => {
-        doc.fontSize(9).text(`${row.employeeId}  ${row.employeeName}  Net: ${row.netSalary}  Gross: ${row.grossEarnings}  PF: ${row.employeePf}  Tax: ${row.incomeTax}  LOP: ${row.lopDays}  OT: ${row.overtimePay}`);
+        doc.fontSize(9).text(`${row.employeeId}  ${row.employeeName}  Net: ${row.netSalary}  Gross: ${row.grossEarnings}  PF: ${row.employeePf}  ESI: ${row.employeeEsi}  PT: ${row.professionalTax}  Tax: ${row.incomeTax}  LOP: ${row.lopDays}  OT: ${row.overtimePay}`);
       });
       doc.end();
       return;

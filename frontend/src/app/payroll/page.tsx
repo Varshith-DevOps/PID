@@ -30,6 +30,8 @@ interface PayrollRecord {
   grossEarnings: number;
   pf: number;
   tax: number;
+  esi?: number;
+  professionalTax?: number;
   insurance: number;
   otherDeductions: number;
   totalDeductions: number;
@@ -62,7 +64,7 @@ export default function PayrollPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [structure, setStructure] = useState<any>(null);
-  const [form, setForm] = useState({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, insurance: 0, otherDeduction: 0 });
+  const [form, setForm] = useState({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, esiEnabled: true, professionalTaxEnabled: true, insurance: 0, otherDeduction: 0 });
   const [processing, setProcessing] = useState(false);
   const [globalSettings, setGlobalSettings] = useState<any>(null);
   const previousMonth = new Date();
@@ -174,18 +176,20 @@ export default function PayrollPage() {
           basicSalary: data.basicSalary,
           hra: data.hra,
           da: data.da,
-          conveyance: data.conveyence,
+          conveyance: data.conveyance || data.conveyence || 0,
           medical: data.medical,
           specialAllowance: data.specialAllowance,
           otherAllowance: data.otherAllowance,
           pfEnabled: data.pfEnabled !== false,
           tdsEnabled: data.tdsEnabled !== false,
+          esiEnabled: data.esiEnabled !== false,
+          professionalTaxEnabled: data.professionalTaxEnabled !== false,
           insurance: data.insurance,
           otherDeduction: data.otherDeduction,
         });
       } else {
         setStructure(null);
-        setForm({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, insurance: 0, otherDeduction: 0 });
+        setForm({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, esiEnabled: true, professionalTaxEnabled: true, insurance: 0, otherDeduction: 0 });
       }
     } catch (err) { console.error(err); }
   };
@@ -200,40 +204,69 @@ export default function PayrollPage() {
 
   const calculatePreview = () => {
     const basicSalary = form.basicSalary || 0;
-    const grossEarnings = basicSalary + (form.hra || 0) + (form.da || 0) + (form.conveyance || 0) + (form.medical || 0) + (form.specialAllowance || 0) + (form.otherAllowance || 0);
-    const pf = form.pfEnabled ? Math.min(basicSalary * 0.12, 2160) : 0;
+    const da = form.da || 0;
+    const grossEarnings = basicSalary + (form.hra || 0) + da + (form.conveyance || 0) + (form.medical || 0) + (form.specialAllowance || 0) + (form.otherAllowance || 0);
+    
+    // Indian PF: 12% of Basic + DA capped at ₹15,000 wage base (Max ₹1,800/month)
+    const pfWages = basicSalary + da;
+    const pf = form.pfEnabled ? Math.min(pfWages * 0.12, 1800) : 0;
+    
+    // ESI: 0.75% of Gross if monthly gross <= ₹21,000
+    const esi = (form.esiEnabled !== false && grossEarnings <= 21000) ? (grossEarnings * 0.0075) : 0;
+    
+    // Professional Tax (PT): ₹200 flat if gross > ₹25,000
+    const pt = (form.professionalTaxEnabled !== false && grossEarnings > 25000) ? 200 : 0;
+    
     const tds = form.tdsEnabled ? calculateTDS(grossEarnings) : 0;
-    const totalDeductions = pf + tds + (form.insurance || 0) + (form.otherDeduction || 0);
+    const totalDeductions = pf + esi + pt + tds + (form.insurance || 0) + (form.otherDeduction || 0);
     const netSalary = grossEarnings - totalDeductions;
+    
     return {
       grossEarnings,
       employeePf: pf,
       employerPf: pf,
+      employeeEsi: esi,
+      employerEsi: (form.esiEnabled !== false && grossEarnings <= 21000) ? (grossEarnings * 0.0325) : 0,
+      professionalTax: pt,
       tds,
       totalDeductions,
       netSalary,
-      taxSlab: getTaxSlab(grossEarnings * 12),
+      taxSlab: getTaxSlab(Math.max(0, grossEarnings * 12 - 75000)),
     };
   };
 
   const calculateTDS = (monthlyGross: number) => {
     const annual = monthlyGross * 12;
-    if (annual <= 250000) return 0;
-    if (annual <= 500000) return ((annual - 250000) * 0.05) / 12;
-    if (annual <= 750000) return (12500 + (annual - 500000) * 0.10) / 12;
-    if (annual <= 1000000) return (37500 + (annual - 750000) * 0.15) / 12;
-    if (annual <= 1250000) return (75000 + (annual - 1000000) * 0.20) / 12;
-    if (annual <= 1500000) return (125000 + (annual - 1250000) * 0.25) / 12;
-    return (187500 + (annual - 1500000) * 0.30) / 12;
+    const standardDeduction = 75000;
+    const taxable = Math.max(0, annual - standardDeduction);
+    if (taxable <= 700000) return 0; // Section 87A rebate
+    
+    let tax = 0;
+    if (taxable <= 300000) {
+      tax = 0;
+    } else if (taxable <= 700000) {
+      tax = (taxable - 300000) * 0.05;
+    } else if (taxable <= 1000000) {
+      tax = 20000 + (taxable - 700000) * 0.10;
+    } else if (taxable <= 1200000) {
+      tax = 50000 + (taxable - 1000000) * 0.15;
+    } else if (taxable <= 1500000) {
+      tax = 80000 + (taxable - 1200000) * 0.20;
+    } else {
+      tax = 140000 + (taxable - 1500000) * 0.30;
+    }
+    
+    // Add 4% Cess
+    const totalTax = tax * 1.04;
+    return totalTax / 12;
   };
 
-  const getTaxSlab = (annualGross: number) => {
-    if (annualGross <= 250000) return 'Nil';
-    if (annualGross <= 500000) return '5%';
-    if (annualGross <= 750000) return '10%';
-    if (annualGross <= 1000000) return '15%';
-    if (annualGross <= 1250000) return '20%';
-    if (annualGross <= 1500000) return '25%';
+  const getTaxSlab = (annualNetTaxable: number) => {
+    if (annualNetTaxable <= 300000) return 'Nil';
+    if (annualNetTaxable <= 700000) return '5%';
+    if (annualNetTaxable <= 1000000) return '10%';
+    if (annualNetTaxable <= 1200000) return '15%';
+    if (annualNetTaxable <= 1500000) return '20%';
     return '30%';
   };
 
@@ -283,7 +316,7 @@ export default function PayrollPage() {
                       <tr key={run.id}>
                         <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{new Date(0, run.month - 1).toLocaleString('en', { month: 'long' })} {run.year}</td>
                         <td style={{ textAlign: 'center' }}>{run.employeeCount}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>${run.totalAmount?.toLocaleString()}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>₹{run.totalAmount?.toLocaleString()}</td>
                         <td><span className={`badge ${run.status === 'PAID' ? 'badge-success' : 'badge-warning'}`}>{run.status}</span></td>
                         <td><button onClick={() => loadReport(run)} className="btn btn-primary btn-sm">View</button></td>
                       </tr>
@@ -304,21 +337,23 @@ export default function PayrollPage() {
                   <button className="btn btn-ghost btn-sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'pdf' })}>PDF</button>
                 </div>
                 <table className="data-table">
-                  <thead><tr><th>Employee</th><th style={{ textAlign: 'right' }}>Basic</th><th style={{ textAlign: 'right' }}>Gross</th><th style={{ textAlign: 'right' }}>LOP</th><th style={{ textAlign: 'right' }}>OT</th><th style={{ textAlign: 'right' }}>Arrears</th><th style={{ textAlign: 'right' }}>Incentives</th><th style={{ textAlign: 'right' }}>PF</th><th style={{ textAlign: 'right' }}>Tax</th><th style={{ textAlign: 'right' }}>Deductions</th><th style={{ textAlign: 'right' }}>Net</th></tr></thead>
+                  <thead><tr><th>Employee</th><th style={{ textAlign: 'right' }}>Basic</th><th style={{ textAlign: 'right' }}>Gross</th><th style={{ textAlign: 'right' }}>LOP</th><th style={{ textAlign: 'right' }}>OT</th><th style={{ textAlign: 'right' }}>Arrears</th><th style={{ textAlign: 'right' }}>Incentives</th><th style={{ textAlign: 'right' }}>PF</th><th style={{ textAlign: 'right' }}>ESI</th><th style={{ textAlign: 'right' }}>PT</th><th style={{ textAlign: 'right' }}>Tax (TDS)</th><th style={{ textAlign: 'right' }}>Deductions</th><th style={{ textAlign: 'right' }}>Net</th></tr></thead>
                   <tbody>
                     {records.map((rec) => (
                       <tr key={rec.id}>
                         <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rec.employee?.firstName} {rec.employee?.lastName}</td>
-                        <td style={{ textAlign: 'right' }}>${rec.basicSalary?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>${rec.grossEarnings?.toFixed(0)}</td>
+                        <td style={{ textAlign: 'right' }}>₹{rec.basicSalary?.toFixed(0)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>₹{rec.grossEarnings?.toFixed(0)}</td>
                         <td style={{ textAlign: 'right' }}>{rec.lopDays || rec.leaves || 0}</td>
-                        <td style={{ textAlign: 'right' }}>${(rec.overtimePay || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right' }}>${(rec.arrears || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right' }}>${(rec.incentives || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>${rec.pf?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>${rec.tax?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>${rec.totalDeductions?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>${rec.netSalary?.toFixed(0)}</td>
+                        <td style={{ textAlign: 'right' }}>₹{(rec.overtimePay || 0).toFixed(0)}</td>
+                        <td style={{ textAlign: 'right' }}>₹{(rec.arrears || 0).toFixed(0)}</td>
+                        <td style={{ textAlign: 'right' }}>₹{(rec.incentives || 0).toFixed(0)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{rec.pf?.toFixed(0)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{(rec.esi || 0).toFixed(0)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{(rec.professionalTax || 0).toFixed(0)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{rec.tax?.toFixed(0)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{rec.totalDeductions?.toFixed(0)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>₹{rec.netSalary?.toFixed(0)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -435,28 +470,32 @@ export default function PayrollPage() {
                     <div className="form-group"><label className="form-label">Conveyance</label><input type="number" value={form.conveyance} onChange={(e) => setForm({ ...form, conveyance: parseFloat(e.target.value) })} className="input-field" /></div>
                     <div className="form-group"><label className="form-label">Medical</label><input type="number" value={form.medical} onChange={(e) => setForm({ ...form, medical: parseFloat(e.target.value) })} className="input-field" /></div>
                     <div className="form-group"><label className="form-label">Special Allowance</label><input type="number" value={form.specialAllowance} onChange={(e) => setForm({ ...form, specialAllowance: parseFloat(e.target.value) })} className="input-field" /></div>
-                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.pfEnabled} onChange={(e) => setForm({ ...form, pfEnabled: e.target.checked })} /> Enable PF (12%)</label></div>
-                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.tdsEnabled} onChange={(e) => setForm({ ...form, tdsEnabled: e.target.checked })} /> Enable TDS</label></div>
-                    <div className="form-group"><label className="form-label">Insurance</label><input type="number" value={form.insurance} onChange={(e) => setForm({ ...form, insurance: parseFloat(e.target.value) })} className="input-field" /></div>
+                    <div className="form-group"><label className="form-label">Insurance Deduction</label><input type="number" value={form.insurance} onChange={(e) => setForm({ ...form, insurance: parseFloat(e.target.value) })} className="input-field" /></div>
+                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.pfEnabled} onChange={(e) => setForm({ ...form, pfEnabled: e.target.checked })} /> Enable EPF (12%)</label></div>
+                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.esiEnabled} onChange={(e) => setForm({ ...form, esiEnabled: e.target.checked })} /> Enable ESI (0.75%)</label></div>
+                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.professionalTaxEnabled} onChange={(e) => setForm({ ...form, professionalTaxEnabled: e.target.checked })} /> Enable Professional Tax (PT)</label></div>
+                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.tdsEnabled} onChange={(e) => setForm({ ...form, tdsEnabled: e.target.checked })} /> Enable TDS (New Regime)</label></div>
                   </div>
 
                   {preview && (
                     <div className="glass-card mt-2" style={{ padding: '1.25rem' }}>
-                      <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Monthly Calculation Preview</h4>
-                      <div className="grid-2">
-                        <div><span className="form-label">Gross Earnings</span><div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>${preview.grossEarnings.toFixed(2)}</div></div>
-                        <div><span className="form-label">Employee PF (12%)</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>${preview.employeePf.toFixed(2)}</div></div>
-                        <div><span className="form-label">TDS ({preview.taxSlab})</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>${preview.tds.toFixed(2)}</div></div>
-                        <div><span className="form-label">Total Deductions</span><div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--danger)' }}>${preview.totalDeductions.toFixed(2)}</div></div>
+                      <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Monthly Calculation Preview (Indian Compliance)</h4>
+                      <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div><span className="form-label">Gross Earnings</span><div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>₹{preview.grossEarnings.toFixed(2)}</div></div>
+                        <div><span className="form-label">Employee PF (12%)</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.employeePf.toFixed(2)}</div></div>
+                        <div><span className="form-label">Employee ESI (0.75%)</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.employeeEsi.toFixed(2)}</div></div>
+                        <div><span className="form-label">Professional Tax (PT)</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.professionalTax.toFixed(2)}</div></div>
+                        <div><span className="form-label">TDS ({preview.taxSlab})</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.tds.toFixed(2)}</div></div>
+                        <div><span className="form-label">Total Deductions</span><div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--danger)' }}>₹{preview.totalDeductions.toFixed(2)}</div></div>
                       </div>
                       <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '1rem', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <span className="form-label">Net Salary (Take Home)</span>
-                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success)' }}>${preview.netSalary.toFixed(2)}</div>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success)' }}>₹{preview.netSalary.toFixed(2)}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <span className="form-label">Employer PF Contribution</span>
-                          <div style={{ fontSize: '1rem', color: 'var(--warning)' }}>${preview.employerPf.toFixed(2)}</div>
+                          <span className="form-label">Employer Share (PF + ESI)</span>
+                          <div style={{ fontSize: '1rem', color: 'var(--warning)' }}>₹{(preview.employerPf + preview.employerEsi).toFixed(2)}</div>
                         </div>
                       </div>
                     </div>
@@ -493,15 +532,15 @@ export default function PayrollPage() {
             </div>
 
             <div className="glass-card mt-2" style={{ padding: '1rem', borderLeft: '3px solid var(--warning)' }}>
-              <h4 style={{ marginBottom: '0.5rem', color: 'var(--warning)', fontSize: '0.9rem', fontWeight: 700 }}>Indian Tax Slabs (FY 2024-25)</h4>
+              <h4 style={{ marginBottom: '0.5rem', color: 'var(--warning)', fontSize: '0.9rem', fontWeight: 700 }}>Indian New Tax Slabs (Budget 2024-25 / 2026)</h4>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                <div>₹0 - ₹2.5L: Nil</div>
-                <div>₹2.5L - ₹5L: 5%</div>
-                <div>₹5L - ₹7.5L: 10%</div>
-                <div>₹7.5L - ₹10L: 15%</div>
-                <div>₹10L - ₹12.5L: 20%</div>
-                <div>₹12.5L - ₹15L: 25%</div>
-                <div>₹15L+: 30%</div>
+                <div>₹0 - ₹3.0L: Nil</div>
+                <div>₹3.0L - ₹7.0L: 5% (Rebate under Section 87A if taxable &le; ₹7L)</div>
+                <div>₹7.0L - ₹10.0L: 10%</div>
+                <div>₹10.0L - ₹12.0L: 15%</div>
+                <div>₹12.0L - ₹15.0L: 20%</div>
+                <div>₹15.0L+: 30%</div>
+                <div style={{ marginTop: '0.5rem', fontWeight: 600 }}>Standard Deduction: ₹75,000 | Cess: 4% Surcharge</div>
               </div>
             </div>
           </div>

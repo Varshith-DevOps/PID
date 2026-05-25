@@ -360,6 +360,8 @@ model SalaryStructure {
   pfEnabled       Boolean   @default(true)
   pfRate          Float     @default(0.12)
   tdsEnabled      Boolean   @default(true)
+  esiEnabled      Boolean   @default(true)
+  professionalTaxEnabled Boolean @default(true)
   insurance       Float     @default(0)
   otherDeduction  Float     @default(0)
   
@@ -381,6 +383,12 @@ model PayrollSettings {
   epsEnabled      Boolean  @default(true)
   otMultiplier    Float    @default(1.5)
   standardHours   Float    @default(176)
+  ptRate          Float    @default(200.0)
+  esiRateEmployee Float    @default(0.0075)
+  esiRateEmployer Float    @default(0.0325)
+  esiGrossCeiling Float    @default(21000.0)
+  pfWageCeiling   Float    @default(15000.0)
+  restrictPfToCeiling Boolean @default(true)
   isActive        Boolean  @default(true)
 
   @@map("payroll_settings")
@@ -404,6 +412,8 @@ model PayrollRecord {
   grossEarnings   Float
   pf              Float
   tax             Float
+  esi             Float       @default(0)
+  professionalTax Float       @default(0)
   insurance       Float
   otherDeductions Float
   totalDeductions Float
