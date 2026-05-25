@@ -1,6 +1,10 @@
 {
   "/page": "app/page.js",
+  "/employees/page": "app/employees/page.js",
   "/dashboard/page": "app/dashboard/page.js",
+  "/attendance/page": "app/attendance/page.js",
+  "/org-chart/page": "app/org-chart/page.js",
+  "/payroll/page": "app/payroll/page.js",
   "/payslips/page": "app/payslips/page.js",
-  "/payroll/page": "app/payroll/page.js"
+  "/timesheet/page": "app/timesheet/page.js"
 }
