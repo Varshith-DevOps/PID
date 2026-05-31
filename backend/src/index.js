@@ -1,7 +1,15 @@
+/**
+ * @fileoverview Express application entry point.
+ * Configures middleware, mounts API routes, and starts the HTTP server.
+ * @module index
+ */
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+
+// ──── Route Imports ────────────────────────────────────────────────────────
 const authRoutes = require('./routes/authRoutes');
 const permissionRoutes = require('./routes/permissionRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
@@ -14,13 +22,25 @@ const projectRoutes = require('./routes/projectRoutes');
 const timesheetRoutes = require('./routes/timesheetRoutes');
 const overtimeRoutes = require('./routes/overtimeRoutes');
 const utilizationRoutes = require('./routes/utilizationRoutes');
+const recruitmentRoutes = require('./routes/recruitmentRoutes');
+const performanceRoutes = require('./routes/performanceRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
+const shiftRoutes = require('./routes/shiftRoutes');
+const regularizationRoutes = require('./routes/regularizationRoutes');
+const checklistRoutes = require('./routes/checklistRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 
 const app = express();
 
+// ──── Global Middleware ────────────────────────────────────────────────────
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+/** Serve uploaded files as static assets */
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// ──── API Routes ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/employees', employeeRoutes);
@@ -33,8 +53,45 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/timesheet', timesheetRoutes);
 app.use('/api/overtime', overtimeRoutes);
 app.use('/api/utilization', utilizationRoutes);
+app.use('/api/recruitment', recruitmentRoutes);
+app.use('/api/performance', performanceRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/shifts', shiftRoutes);
+app.use('/api/regularizations', regularizationRoutes);
+app.use('/api/checklists', checklistRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+/** Health check endpoint for monitoring and load balancers */
+app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
+// ──── Global Error Handler (Express 5 pattern) ────────────────────────────
+/**
+ * Centralized error handler.
+ * Express 5 automatically routes rejected promises and thrown errors here.
+ * @param {Error} err - The error object
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+app.use((err, req, res, next) => {
+  console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
+
+  // Handle Multer file upload errors
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'File too large' });
+  }
+
+  const statusCode = err.status || err.statusCode || 500;
+  res.status(statusCode).json({
+    error: process.env.NODE_ENV === 'production'
+      ? 'Internal server error'
+      : err.message,
+  });
+});
+
+// ──── Start Server ─────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ HRMS Backend running on http://localhost:${PORT}`);
+  console.log(`📋 Health check: http://localhost:${PORT}/health`);
+});

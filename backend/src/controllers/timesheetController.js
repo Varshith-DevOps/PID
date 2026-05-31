@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Timesheet controller.
+ * Manages daily work hour logging, aggregation, and attendance generation
+ * from timesheet data. Auto-detects overtime entries.
+ * @module controllers/timesheetController
+ */
+
 const prisma = require('../config/database');
 
 const logTimesheet = async (req, res) => {
@@ -43,8 +50,22 @@ const logTimesheet = async (req, res) => {
 
 const getEmployeeTimesheets = async (req, res) => {
   try {
-    const { employeeId, startDate, endDate } = req.query;
-    const where = { employeeId };
+    const targetEmployeeId = req.params.employeeId || req.query.employeeId;
+
+    if (!targetEmployeeId) {
+      return res.status(400).json({ error: 'Employee ID is required' });
+    }
+
+    // BOLA/IDOR Check: EMPLOYEE can only view their own timesheets
+    if (req.user?.role === 'EMPLOYEE') {
+      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
+      if (!linkedEmployee || linkedEmployee.id !== targetEmployeeId) {
+        return res.status(403).json({ error: 'Access denied. You can only view your own timesheets.' });
+      }
+    }
+
+    const { startDate, endDate } = req.query;
+    const where = { employeeId: targetEmployeeId };
 
     if (startDate || endDate) {
       where.date = {};
@@ -56,6 +77,7 @@ const getEmployeeTimesheets = async (req, res) => {
       where,
       include: { task: { select: { id: true, title: true, project: true } } },
       orderBy: { date: 'desc' },
+      take: 150,
     });
 
     const summary = {};

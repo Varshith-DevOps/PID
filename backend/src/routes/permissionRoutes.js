@@ -10,6 +10,7 @@ const {
   updateUserPermissions,
   resetToDefault,
   resetRoleToDefault,
+  addCustomModule,
 } = require('../controllers/permissionController');
 
 router.get('/user/:userId', authenticate, getUserPermissions);
@@ -19,5 +20,6 @@ router.put('/role/:role', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), upd
 router.put('/user/:userId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateUserPermissions);
 router.post('/reset-role/:role', authenticate, requireRole('SUPER_ADMIN'), resetRoleToDefault);
 router.post('/reset/:userId', authenticate, requireRole('SUPER_ADMIN'), resetToDefault);
+router.post('/modules', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), addCustomModule);
 
 module.exports = router;

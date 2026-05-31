@@ -1,8 +1,27 @@
+/**
+ * @fileoverview Employee management controller.
+ * Provides CRUD operations for employees along with sub-resource management
+ * for addresses, education, experience, bank details, PF, exit details,
+ * dependents, salary revisions, and photo uploads.
+ * All changes to employee data are tracked via the ChangeHistory audit log.
+ * @module controllers/employeeController
+ */
+
 const prisma = require('../config/database');
 const path = require('path');
 const fs = require('fs');
 
-// Helper to log changes to ChangeHistory
+/**
+ * Log a field-level change to the ChangeHistory audit trail.
+ * Skips logging if old and new values are identical.
+ * @param {string} employeeId - The employee being changed
+ * @param {string} changedBy - Email/ID of the user making the change
+ * @param {string} entity - Category of change (e.g., 'Personal', 'Bank')
+ * @param {string} field - The specific field that changed
+ * @param {*} oldValue - Previous value
+ * @param {*} newValue - New value
+ * @param {string} reason - Reason for the change
+ */
 const logChange = async (employeeId, changedBy, entity, field, oldValue, newValue, reason) => {
   if (oldValue === newValue) return; // No change
   try {
@@ -61,10 +80,23 @@ const getChangeHistory = async (req, res) => {
 
 const getAllEmployees = async (req, res) => {
   try {
-    const { departmentId, search, page = 1, limit = 20 } = req.query;
+    const { departmentId, search, gender, location, page = 1, limit = 250 } = req.query;
     const where = { isActive: true };
 
     if (departmentId) where.departmentId = departmentId;
+    if (gender) where.gender = gender;
+    if (location) where.location = { contains: location };
+
+    // Role-based filtering: Managers should only see their direct subordinates in listings unless they are Admin/HR/SuperAdmin
+    if (req.user && req.user.role === 'MANAGER') {
+      const managerEmp = await prisma.employee.findUnique({ where: { userId: req.user.id } });
+      if (managerEmp) {
+        where.managerId = managerEmp.id;
+      } else {
+        where.id = 'none'; // Return empty list if manager has no employee profile
+      }
+    }
+
     if (search) {
       where.OR = [
         { firstName: { contains: search, mode: 'insensitive' } },
@@ -112,7 +144,7 @@ const createEmployee = async (req, res) => {
       jobTitle, departmentId, employmentType, joinDate, salary, managerId,
       bloodGroup, maritalStatus, personalEmail, panNumber, aadharNumber,
       emergencyContactName, emergencyContactPhone, emergencyContactRelation,
-      photoUrl, accountStage
+      photoUrl, accountStage, shiftTypeId
     } = req.body;
 
     if (!firstName || !lastName || !email || !jobTitle || !departmentId || !salary) {
@@ -122,12 +154,38 @@ const createEmployee = async (req, res) => {
     const existing = await prisma.employee.findUnique({ where: { email } });
     if (existing) return res.status(400).json({ error: 'Email already exists' });
 
+    // Link or create a corresponding User login record
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    let userId = existingUser ? existingUser.id : null;
+
+    if (!existingUser) {
+      const bcrypt = require('bcryptjs');
+      const tempPassword = 'employee123';
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+      
+      const { getDefaultPermissions } = require('./permissionController');
+
+      const user = await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name: `${firstName} ${lastName}`,
+          role: 'EMPLOYEE',
+          permissions: {
+            create: getDefaultPermissions('EMPLOYEE'),
+          },
+        },
+      });
+      userId = user.id;
+    }
+
     const count = await prisma.employee.count();
     const employeeId = `EMP${String(count + 1).padStart(5, '0')}`;
 
     const employee = await prisma.employee.create({
       data: {
         employeeId,
+        userId,
         firstName,
         lastName,
         email,
@@ -155,6 +213,19 @@ const createEmployee = async (req, res) => {
       },
       include: employeeIncludes,
     });
+
+    // Auto-assign shift if provided during onboarding
+    if (shiftTypeId) {
+      await prisma.shiftAssignment.create({
+        data: {
+          employeeId: employee.id,
+          shiftTypeId,
+          startDate: joinDate ? new Date(joinDate) : new Date(),
+          changedBy: req.user?.email || req.user?.role || 'SYSTEM',
+          changeReason: 'Shift assigned during onboarding',
+        },
+      });
+    }
 
     res.status(201).json(employee);
   } catch (error) {
@@ -665,12 +736,11 @@ const uploadEmployeePhoto = async (req, res) => {
   }
 };
 
-// ──── Account Stage ────
 const updateAccountStage = async (req, res) => {
   try {
     const { id } = req.params;
     const { accountStage } = req.body;
-    const validStages = ['EMPLOYEE', 'MANAGER', 'ADMIN', 'INACTIVE'];
+    const validStages = ['ONBOARDING', 'EMPLOYEE', 'OFFBOARDING', 'TERMINATED', 'MANAGER', 'ADMIN', 'INACTIVE'];
     if (!accountStage || !validStages.includes(accountStage)) {
       return res.status(400).json({ error: `Account stage must be one of: ${validStages.join(', ')}` });
     }

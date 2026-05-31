@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Project and task management controller.
+ * Provides CRUD for projects, tasks, resources, and expense tracking.
+ * @module controllers/projectController
+ */
+
 const prisma = require('../config/database');
 
 const getProjects = async (req, res) => {

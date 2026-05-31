@@ -1,7 +1,15 @@
+/**
+ * @fileoverview Employee management routes.
+ * Provides CRUD endpoints for employees, departments, addresses,
+ * education, experience, bank details, PF, exit, dependents, and photos.
+ * @module routes/employeeRoutes
+ */
+
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
 const {
@@ -35,81 +43,123 @@ const {
   getChangeHistory,
 } = require('../controllers/employeeController');
 
-// Photo upload storage
+// ──── Photo Upload Configuration (Multer v2) ──────────────────────────────
+
+/** Ensure photo upload directory exists */
+const photoDir = path.join(__dirname, '../../uploads/photos');
+if (!fs.existsSync(photoDir)) {
+  fs.mkdirSync(photoDir, { recursive: true });
+}
+
+/**
+ * Multer storage for employee photos.
+ * Photos are saved with unique timestamped filenames to prevent collisions.
+ */
 const photoStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../../uploads/photos');
-    const fs = require('fs');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
+  destination: (req, file, cb) => cb(null, photoDir),
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, 'photo-' + uniqueSuffix + path.extname(file.originalname));
   },
 });
+
+/**
+ * Photo upload handler.
+ * Restricts uploads to image files only (JPEG, PNG, GIF, WebP) with a 5MB limit.
+ */
 const photoUpload = multer({
   storage: photoStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif|webp/;
-    const ext = allowed.test(path.extname(file.originalname).toLowerCase());
-    const mime = allowed.test(file.mimetype);
-    if (ext && mime) return cb(null, true);
-    cb(new Error('Only image files are allowed'));
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const isValidExt = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const isValidMime = allowedTypes.test(file.mimetype);
+    if (isValidExt && isValidMime) return cb(null, true);
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'));
   },
 });
 
+// ──── Department Routes ────────────────────────────────────────────────────
+
+/** GET /api/employees/departments — List all active departments */
 router.get('/departments', authenticate, getDepartments);
+
+/** POST /api/employees/departments — Create a new department (Admin only) */
 router.post('/departments', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), createDepartment);
+
+/** PUT /api/employees/departments/:id — Update a department (Admin only) */
 router.put('/departments/:id', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateDepartment);
 
+// ──── Org Chart ────────────────────────────────────────────────────────────
+
+/** GET /api/employees/org-chart — Get organizational hierarchy */
 router.get('/org-chart', authenticate, getOrgChart);
 
+// ──── Change History ───────────────────────────────────────────────────────
+
+/** GET /api/employees/:id/history — Get change audit log for an employee */
 router.get('/:id/history', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getChangeHistory);
 
+// ──── Employee CRUD ────────────────────────────────────────────────────────
+
+/** GET /api/employees — List employees with optional filters */
 router.get('/', authenticate, rbacMiddleware('EMPLOYEES', 'VIEW'), getAllEmployees);
+
+/** GET /api/employees/:id — Get full employee profile */
 router.get('/:id', authenticate, rbacMiddleware('EMPLOYEES', 'VIEW'), getEmployeeById);
+
+/** POST /api/employees — Create a new employee */
 router.post('/', authenticate, rbacMiddleware('EMPLOYEES', 'CREATE'), createEmployee);
+
+/** PUT /api/employees/:id — Update employee details */
 router.put('/:id', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateEmployee);
+
+/** DELETE /api/employees/:id — Soft-delete (deactivate) an employee */
 router.delete('/:id', authenticate, rbacMiddleware('EMPLOYEES', 'DELETE'), deleteEmployee);
 
-// Address sub-resource
+// ──── Address Sub-resource ─────────────────────────────────────────────────
+
 router.post('/:id/address', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), addAddress);
 router.put('/address/:addressId', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateAddress);
 router.delete('/address/:addressId', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), deleteAddress);
 
-// Education sub-resource
+// ──── Education Sub-resource ───────────────────────────────────────────────
+
 router.post('/:id/education', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), addEducation);
 router.put('/education/:eduId', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateEducation);
 router.delete('/education/:eduId', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), deleteEducation);
 
-// Experience sub-resource
+// ──── Experience Sub-resource ──────────────────────────────────────────────
+
 router.post('/:id/experience', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), addExperience);
 router.put('/experience/:expId', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateExperience);
 router.delete('/experience/:expId', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), deleteExperience);
 
-// Salary revision
+// ──── Salary Revision ──────────────────────────────────────────────────────
+
 router.post('/:id/salary-revision', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), addSalaryRevision);
 
-// Bank details
-router.put('/:id/bank-details', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), upsertBankDetails);
+// ──── Financial Details ────────────────────────────────────────────────────
 
-// PF details
+router.put('/:id/bank-details', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), upsertBankDetails);
 router.put('/:id/pf-details', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), upsertPFDetails);
 
-// Exit details
+// ──── Exit Details ─────────────────────────────────────────────────────────
+
 router.put('/:id/exit-details', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), upsertExitDetails);
 
-// Dependents
+// ──── Dependents ───────────────────────────────────────────────────────────
+
 router.post('/:id/dependent', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), addDependent);
 router.put('/dependent/:depId', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateDependent);
 router.put('/dependent/:depId/inactive', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), deleteDependent);
 
-// Photo upload
+// ──── Photo Upload ─────────────────────────────────────────────────────────
+
 router.post('/:id/photo', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), photoUpload.single('photo'), uploadEmployeePhoto);
 
-// Account stage
+// ──── Account Stage ────────────────────────────────────────────────────────
+
 router.put('/:id/account-stage', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateAccountStage);
 
 module.exports = router;

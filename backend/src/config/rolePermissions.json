@@ -1,0 +1,39 @@
+{
+  "RECRUITER": [
+    {
+      "module": "RECRUITMENT",
+      "action": "VIEW",
+      "isGranted": true
+    },
+    {
+      "module": "RECRUITMENT",
+      "action": "CREATE",
+      "isGranted": true
+    },
+    {
+      "module": "RECRUITMENT",
+      "action": "EDIT",
+      "isGranted": true
+    },
+    {
+      "module": "RECRUITMENT",
+      "action": "DELETE",
+      "isGranted": true
+    },
+    {
+      "module": "RECRUITMENT",
+      "action": "EXPORT",
+      "isGranted": true
+    },
+    {
+      "module": "EMPLOYEES",
+      "action": "VIEW",
+      "isGranted": true
+    },
+    {
+      "module": "PROJECTS",
+      "action": "VIEW",
+      "isGranted": true
+    }
+  ]
+}

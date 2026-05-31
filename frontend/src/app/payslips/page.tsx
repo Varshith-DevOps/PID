@@ -29,6 +29,7 @@ export default function PayslipsPage() {
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedPayslip, setSelectedPayslip] = useState<PayslipRecord | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>('ALL');
   const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function PayslipsPage() {
 
   useEffect(() => {
     if (user) loadPayslips();
-  }, [user, selectedYear]);
+  }, [user, selectedYear, selectedMonth]);
 
   const loadPayslips = async () => {
     setLoading(true);
@@ -46,7 +47,11 @@ export default function PayslipsPage() {
       if (user?.role === 'EMPLOYEE') {
         employeeId = user.employeeId;
       }
-      const data = await getPayslipHistory({ employeeId, year: selectedYear });
+      const data = await getPayslipHistory({
+        employeeId,
+        year: selectedYear,
+        month: selectedMonth === 'ALL' ? undefined : selectedMonth,
+      });
       setPayslips(data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
@@ -134,8 +139,16 @@ export default function PayslipsPage() {
             </div>
             <div><h1 className="page-title">Payslips</h1><p className="page-subtitle">View & download salary slips</p></div>
           </div>
-          <div className="page-header-actions">
-            <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="select-field" style={{ width: '120px' }}>
+          <div className="page-header-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value))} className="select-field" style={{ width: '130px' }}>
+              <option value="ALL">All Months</option>
+              {Array.from({ length: 12 }, (_, idx) => (
+                <option key={idx + 1} value={idx + 1}>
+                  {new Date(0, idx).toLocaleString('en', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="select-field" style={{ width: '100px' }}>
               {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (

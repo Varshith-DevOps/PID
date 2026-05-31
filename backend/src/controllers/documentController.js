@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Document management controller.
+ * Handles file upload, retrieval, download, and deletion for employee documents.
+ * @module controllers/documentController
+ */
+
 const prisma = require('../config/database');
 const path = require('path');
 const fs = require('fs');

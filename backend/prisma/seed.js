@@ -2,28 +2,92 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
-const MODULES = ['USERS', 'EMPLOYEES', 'ATTENDANCE', 'LEAVE', 'PAYROLL', 'REPORTS', 'SETTINGS'];
+const MODULES = [
+  'USERS',
+  'EMPLOYEES',
+  'ATTENDANCE',
+  'LEAVE',
+  'PAYROLL',
+  'REPORTS',
+  'SETTINGS',
+  'RECRUITMENT',
+  'ONBOARDING',
+  'ACCOUNTS',
+  'PERFORMANCE',
+  'PROJECTS'
+];
 const ACTIONS = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'];
 const getPermissions = (role) => {
   const defaults = {
     SUPER_ADMIN: MODULES.flatMap((m) => ACTIONS.map((a) => ({ module: m, action: a, isGranted: true }))),
     ADMIN: MODULES.flatMap((m) => [
-      { module: m, action: 'VIEW', isGranted: true },{ module: m, action: 'CREATE', isGranted: true },
-      { module: m, action: 'EDIT', isGranted: true },{ module: m, action: 'DELETE', isGranted: false },
+      { module: m, action: 'VIEW', isGranted: true },
+      { module: m, action: 'CREATE', isGranted: true },
+      { module: m, action: 'EDIT', isGranted: true },
+      { module: m, action: 'DELETE', isGranted: false },
       { module: m, action: 'EXPORT', isGranted: true },
     ]),
     MANAGER: [
-      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },{ module: 'EMPLOYEES', action: 'CREATE', isGranted: true },
-      { module: 'EMPLOYEES', action: 'EDIT', isGranted: true },{ module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
-      { module: 'ATTENDANCE', action: 'CREATE', isGranted: true },{ module: 'ATTENDANCE', action: 'EDIT', isGranted: true },
-      { module: 'LEAVE', action: 'VIEW', isGranted: true },{ module: 'LEAVE', action: 'CREATE', isGranted: true },
-      { module: 'LEAVE', action: 'EDIT', isGranted: true },{ module: 'REPORTS', action: 'VIEW', isGranted: true },
-      { module: 'REPORTS', action: 'EXPORT', isGranted: true },{ module: 'PAYROLL', action: 'VIEW', isGranted: true },
+      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
+      { module: 'EMPLOYEES', action: 'CREATE', isGranted: true },
+      { module: 'EMPLOYEES', action: 'EDIT', isGranted: true },
+      { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
+      { module: 'ATTENDANCE', action: 'CREATE', isGranted: true },
+      { module: 'ATTENDANCE', action: 'EDIT', isGranted: true },
+      { module: 'LEAVE', action: 'VIEW', isGranted: true },
+      { module: 'LEAVE', action: 'CREATE', isGranted: true },
+      { module: 'LEAVE', action: 'EDIT', isGranted: true },
+      { module: 'REPORTS', action: 'VIEW', isGranted: true },
+      { module: 'REPORTS', action: 'EXPORT', isGranted: true },
+      { module: 'PAYROLL', action: 'VIEW', isGranted: true },
+      { module: 'PROJECTS', action: 'VIEW', isGranted: true },
+      { module: 'PROJECTS', action: 'CREATE', isGranted: true },
+      { module: 'PROJECTS', action: 'EDIT', isGranted: true },
+      { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
+      { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
     ],
     EMPLOYEE: [
-      { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },{ module: 'ATTENDANCE', action: 'CREATE', isGranted: true },
-      { module: 'LEAVE', action: 'VIEW', isGranted: true },{ module: 'LEAVE', action: 'CREATE', isGranted: true },
+      { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
+      { module: 'ATTENDANCE', action: 'CREATE', isGranted: true },
+      { module: 'LEAVE', action: 'VIEW', isGranted: true },
+      { module: 'LEAVE', action: 'CREATE', isGranted: true },
       { module: 'REPORTS', action: 'VIEW', isGranted: true },
+      { module: 'ACCOUNTS', action: 'VIEW', isGranted: true },
+      { module: 'ACCOUNTS', action: 'CREATE', isGranted: true },
+    ],
+    RECRUITER: [
+      { module: 'RECRUITMENT', action: 'VIEW', isGranted: true },
+      { module: 'RECRUITMENT', action: 'CREATE', isGranted: true },
+      { module: 'RECRUITMENT', action: 'EDIT', isGranted: true },
+      { module: 'RECRUITMENT', action: 'DELETE', isGranted: true },
+      { module: 'RECRUITMENT', action: 'EXPORT', isGranted: true },
+      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
+      { module: 'PROJECTS', action: 'VIEW', isGranted: true },
+    ],
+    ONBOARDING: [
+      { module: 'ONBOARDING', action: 'VIEW', isGranted: true },
+      { module: 'ONBOARDING', action: 'CREATE', isGranted: true },
+      { module: 'ONBOARDING', action: 'EDIT', isGranted: true },
+      { module: 'ONBOARDING', action: 'DELETE', isGranted: true },
+      { module: 'ONBOARDING', action: 'EXPORT', isGranted: true },
+      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
+      { module: 'EMPLOYEES', action: 'CREATE', isGranted: true },
+      { module: 'EMPLOYEES', action: 'EDIT', isGranted: true },
+    ],
+    ACCOUNTS: [
+      { module: 'ACCOUNTS', action: 'VIEW', isGranted: true },
+      { module: 'ACCOUNTS', action: 'CREATE', isGranted: true },
+      { module: 'ACCOUNTS', action: 'EDIT', isGranted: true },
+      { module: 'ACCOUNTS', action: 'DELETE', isGranted: true },
+      { module: 'ACCOUNTS', action: 'EXPORT', isGranted: true },
+      { module: 'PAYROLL', action: 'VIEW', isGranted: true },
+      { module: 'PAYROLL', action: 'CREATE', isGranted: true },
+      { module: 'PAYROLL', action: 'EDIT', isGranted: true },
+      { module: 'PAYROLL', action: 'EXPORT', isGranted: true },
+      { module: 'REPORTS', action: 'VIEW', isGranted: true },
+      { module: 'REPORTS', action: 'EXPORT', isGranted: true },
+      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
+      { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
     ],
   };
   return defaults[role] || [];
@@ -59,6 +123,11 @@ const EMPLOYEE_DATA = [
   { first:'Manoj',last:'Tiwari',email:'manoj.tiwari@company.com',title:'Operations Lead',dept:'Operations',salary:90000 },
   { first:'Divya',last:'Saxena',email:'divya.saxena@company.com',title:'Operations Coordinator',dept:'Operations',salary:50000 },
   { first:'Arjun',last:'Rao',email:'arjun.rao@company.com',title:'Logistics Coordinator',dept:'Operations',salary:48000 },
+  { first:'Sunil',last:'Jadhav',email:'sunil.jadhav@company.com',title:'Product Manager',dept:'Engineering',salary:110000 },
+  { first:'Aishwarya',last:'Sen',email:'aishwarya.sen@company.com',title:'UI/UX Designer',dept:'Engineering',salary:78000 },
+  { first:'Rohan',last:'Gupta',email:'rohan.gupta@company.com',title:'Security Analyst',dept:'Engineering',salary:85000 },
+  { first:'Preeti',last:'Bose',email:'preeti.bose@company.com',title:'HR Analyst',dept:'Human Resources',salary:62000 },
+  { first:'Harish',last:'Sharma',email:'harish.sharma@company.com',title:'Financial Analyst',dept:'Finance',salary:72000 },
 ];
 
 const CITIES = ['Mumbai','Delhi','Bangalore','Hyderabad','Chennai','Pune','Kolkata','Ahmedabad','Jaipur','Lucknow'];
@@ -71,6 +140,17 @@ async function main() {
   console.log('🌱 Starting comprehensive seed...');
 
   // Clear all data
+  await prisma.shiftAssignment.deleteMany();
+  await prisma.shiftType.deleteMany();
+  await prisma.travelAdvance.deleteMany();
+  await prisma.expenseClaim.deleteMany();
+  await prisma.feedback360.deleteMany();
+  await prisma.performanceAppraisal.deleteMany();
+  await prisma.kRA.deleteMany();
+  await prisma.jobOffer.deleteMany();
+  await prisma.interview.deleteMany();
+  await prisma.jobApplicant.deleteMany();
+  await prisma.jobOpening.deleteMany();
   await prisma.timesheet.deleteMany();
   await prisma.overtime.deleteMany();
   await prisma.payrollRecord.deleteMany();
@@ -92,6 +172,7 @@ async function main() {
   await prisma.professionalExperience.deleteMany();
   await prisma.education.deleteMany();
   await prisma.employeeAddress.deleteMany();
+  await prisma.changeHistory.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.permission.deleteMany();
   await prisma.user.deleteMany();
@@ -264,6 +345,11 @@ async function main() {
     {title:'Content Migration',assignee:16,est:20,status:'TODO',priority:'MEDIUM'},
     {title:'User Acceptance Testing',assignee:8,est:24,status:'TODO',priority:'MEDIUM'},
     {title:'Stakeholder Presentations',assignee:17,est:12,status:'IN_PROGRESS',priority:'LOW'},
+    {title:'Product Roadmap Scope',assignee:20,est:30,status:'IN_PROGRESS',priority:'HIGH'},
+    {title:'Component UI Design',assignee:21,est:25,status:'COMPLETED',priority:'MEDIUM'},
+    {title:'Penetration Security Testing',assignee:22,est:40,status:'IN_PROGRESS',priority:'HIGH'},
+    {title:'Candidate Sourcing Audit',assignee:23,est:15,status:'COMPLETED',priority:'LOW'},
+    {title:'Quarterly Budget Projections',assignee:24,est:20,status:'IN_PROGRESS',priority:'MEDIUM'},
   ];
   const allTasks = [];
   for (const t of p1Tasks) {
@@ -277,8 +363,18 @@ async function main() {
   console.log('✅ Tasks created');
 
   // Attendance
-  const marchDays = getWorkingDays(2026,3); const aprilDays = getWorkingDays(2026,4);
-  const allWorkDays = [...marchDays,...aprilDays];
+  const last6Months = [
+    { y: 2025, m: 12 },
+    { y: 2026, m: 1 },
+    { y: 2026, m: 2 },
+    { y: 2026, m: 3 },
+    { y: 2026, m: 4 },
+    { y: 2026, m: 5 },
+  ];
+  const allWorkDays = [];
+  for (const item of last6Months) {
+    allWorkDays.push(...getWorkingDays(item.y, item.m));
+  }
   let attCount = 0;
   for (const emp of employees) {
     for (const day of allWorkDays) {
@@ -297,10 +393,12 @@ async function main() {
 
   // Leaves
   const leaveTypes=['ANNUAL','SICK','CASUAL']; const leaveStatuses=['APPROVED','APPROVED','APPROVED','PENDING','REJECTED'];
-  for (let i=0;i<18;i++) {
-    const emp=employees[randInt(0,19)]; const month=pick([3,4]); const startDay=randInt(1,25); const days=randInt(1,3);
+  for (let i=0;i<40;i++) {
+    const emp=employees[randInt(0, employees.length - 1)];
+    const targetMonth = pick(last6Months);
+    const startDay=randInt(1,23); const days=randInt(1,3);
     const status=pick(leaveStatuses);
-    await prisma.leave.create({ data:{ employeeId:emp.id, leaveType:pick(leaveTypes), startDate:new Date(2026,month-1,startDay), endDate:new Date(2026,month-1,startDay+days-1), days, reason:pick(['Family function','Not feeling well','Personal work','Medical appointment','Travel','Festival']), status, approvedBy:status==='APPROVED'?'admin':null, approvedAt:status==='APPROVED'?new Date():null, rejectReason:status==='REJECTED'?'Insufficient leave balance':null } });
+    await prisma.leave.create({ data:{ employeeId:emp.id, leaveType:pick(leaveTypes), startDate:new Date(targetMonth.y,targetMonth.m-1,startDay), endDate:new Date(targetMonth.y,targetMonth.m-1,startDay+days-1), days, reason:pick(['Family function','Not feeling well','Personal work','Medical appointment','Travel','Festival']), status, approvedBy:status==='APPROVED'?'admin':null, approvedAt:status==='APPROVED'?new Date():null, rejectReason:status==='REJECTED'?'Insufficient leave balance':null } });
   }
 
   // Leave Quotas
@@ -317,8 +415,8 @@ async function main() {
   }
 
   // Payroll Runs
-  for (const month of [3,4]) {
-    const run = await prisma.payrollRun.create({ data:{month,year:2026,status:'PROCESSED',processedBy:'admin',processedAt:new Date(2026,month-1,28),employeeCount:20} });
+  for (const item of last6Months) {
+    const run = await prisma.payrollRun.create({ data:{month:item.m,year:item.y,status:'PROCESSED',processedBy:'admin',processedAt:new Date(item.y,item.m-1,28),employeeCount:employees.length} });
     let total=0;
     for (const emp of employees) {
       const basic=Math.round(emp.salary*0.5); const hra=Math.round(basic*0.4); const da=Math.round(basic*0.1);
@@ -356,6 +454,451 @@ async function main() {
   for (const proj of [project1,project2]) {
     for (let i=0;i<5;i++) await prisma.projectExpense.create({data:{projectId:proj.id,description:pick(['Cloud hosting','Software licenses','Design tools','Testing services','Training']),amount:randInt(5000,50000),date:new Date(2026,pick([2,3]),randInt(1,28))}});
   }
+
+  // Seeding Recruitment & ATS Modules
+  console.log('🌱 Seeding ATS Module...');
+  const engineeringDept = depts['Engineering'];
+  const marketingDept = depts['Marketing'];
+  const financeDept = depts['Finance'];
+
+  // 1. Senior Frontend Architect
+  const job1 = await prisma.jobOpening.create({
+    data: {
+      title: 'Senior Frontend Architect',
+      departmentId: engineeringDept.id,
+      description: 'We are seeking a senior front-end technical leader to architect our next generation SaaS HR platform using React, Next.js, and TailwindCSS.',
+      requirements: '8+ years of expertise in HTML5, CSS3, modern React architecture, build pipelines, and outstanding UI/UX design taste.',
+      location: 'Remote (India)',
+      employmentType: 'FULL_TIME',
+      salaryRange: '₹18L - ₹24L',
+      status: 'OPEN',
+    }
+  });
+
+  // 2. DevOps & Site Reliability Engineer
+  const job2 = await prisma.jobOpening.create({
+    data: {
+      title: 'DevOps & Site Reliability Engineer',
+      departmentId: engineeringDept.id,
+      description: 'Responsible for setting up and managing our AWS Cloud Infrastructure, server health, auto-scaling clusters, and Docker pipelines.',
+      requirements: '4+ years managing AWS, Terraform, Docker, Kubernetes, and CI/CD pipelines.',
+      location: 'Pune Office',
+      employmentType: 'FULL_TIME',
+      salaryRange: '₹14L - ₹18L',
+      status: 'OPEN',
+    }
+  });
+
+  // 3. Creative Marketing Manager
+  const job3 = await prisma.jobOpening.create({
+    data: {
+      title: 'Creative Marketing Manager',
+      departmentId: marketingDept.id,
+      description: 'Manage brand awareness campaigns, content distribution, search engine optimization, and lead generation.',
+      requirements: 'Experience in digital advertisement, content marketing, Google Analytics, and team coordination.',
+      location: 'Mumbai Office',
+      employmentType: 'CONTRACT',
+      salaryRange: '₹8L - ₹12L',
+      status: 'OPEN',
+    }
+  });
+
+  // 4. Senior Product Manager (New Opening #4)
+  const job4 = await prisma.jobOpening.create({
+    data: {
+      title: 'Senior Product Manager',
+      departmentId: engineeringDept.id,
+      description: 'Lead SaaS feature scopes, run user experience reviews, and manage engineering delivery boundaries.',
+      requirements: '5+ years product management in B2B SaaS, analytical tools, agile planning tools.',
+      location: 'Bangalore Office',
+      employmentType: 'FULL_TIME',
+      salaryRange: '₹22L - ₹28L',
+      status: 'OPEN',
+    }
+  });
+
+  // 5. Senior Financial Analyst (New Opening #5)
+  const job5 = await prisma.jobOpening.create({
+    data: {
+      title: 'Senior Financial Analyst',
+      departmentId: financeDept.id,
+      description: 'Oversee corporate expense budgeting, payroll run audit metrics, and cash advance forecasting models.',
+      requirements: '3+ years corporate finance, advanced accounting metrics, Excel/SQL skills.',
+      location: 'Chennai Office',
+      employmentType: 'FULL_TIME',
+      salaryRange: '₹12L - ₹16L',
+      status: 'OPEN',
+    }
+  });
+
+  // Create Job Applicants for All Stages: SCREENING, INTERVIEW, OFFER, REJECTED, HIRED
+  
+  // SCREENING
+  const applicant1 = await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job1.id,
+      fullName: 'Pooja Patil',
+      email: 'pooja.patil@yahoo.com',
+      phone: '+918888777766',
+      coverLetter: 'Experienced React developer looking for standard product roles.',
+      stage: 'SCREENING',
+      rating: 4,
+      notes: 'Good front-end basics, needs to show deeper performance tuning knowledge.',
+    }
+  });
+
+  const applicant2 = await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job4.id,
+      fullName: 'Neha Sen',
+      email: 'neha.sen@gmail.com',
+      phone: '+919900881122',
+      coverLetter: 'Experienced B2B product manager specialized in analytics widgets.',
+      stage: 'SCREENING',
+      rating: 4,
+    }
+  });
+
+  // INTERVIEW
+  const applicant3 = await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job1.id,
+      fullName: 'Rohan Sharma',
+      email: 'rohan.sharma@gmail.com',
+      phone: '+919876543210',
+      coverLetter: 'I have 9 years of pure React experience and have led multiple design system migrations.',
+      stage: 'INTERVIEW',
+      rating: 5,
+      notes: 'Strong candidate, extremely articulate during architecture discussion.',
+    }
+  });
+
+  const applicant4 = await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job2.id,
+      fullName: 'Sandeep Varma',
+      email: 'sVarma@outlook.com',
+      phone: '+917766554433',
+      coverLetter: 'DevOps engineer looking to manage AWS container orchestration.',
+      stage: 'INTERVIEW',
+      rating: 4,
+    }
+  });
+
+  // OFFER
+  const applicant5 = await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job1.id,
+      fullName: 'Vikram Seth',
+      email: 'vikram.seth@outlook.com',
+      phone: '+919999888877',
+      coverLetter: 'Interested in working on standard Next.js apps.',
+      stage: 'OFFER',
+      rating: 5,
+      notes: 'Excellent performance and system design skills. Highly recommended for immediate hire.',
+    }
+  });
+
+  const applicant6 = await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job4.id,
+      fullName: 'Anita Nair',
+      email: 'anita.nair@yahoo.com',
+      phone: '+919911223344',
+      coverLetter: 'Product Lead from top SaaS startup looking for a growth role.',
+      stage: 'OFFER',
+      rating: 5,
+    }
+  });
+
+  // REJECTED
+  await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job3.id,
+      fullName: 'Sameer Dixit',
+      email: 'sdixit@company.com',
+      phone: '+918877665544',
+      coverLetter: 'Digital marketing junior specialist.',
+      stage: 'REJECTED',
+      rating: 2,
+      notes: 'Lacks core lead generation campaign strategy experience.',
+    }
+  });
+
+  // HIRED
+  const applicantHired = await prisma.jobApplicant.create({
+    data: {
+      jobOpeningId: job1.id,
+      fullName: 'Devika Roy',
+      email: 'devika.roy@gmail.com',
+      phone: '+919988776655',
+      coverLetter: 'Senior frontend developer focused on Next.js bundles.',
+      stage: 'HIRED',
+      rating: 5,
+      notes: 'Phenomenal technical skills, accepted offer and joins June 1st!',
+    }
+  });
+
+  // Create Interviews
+  await prisma.interview.create({
+    data: {
+      applicantId: applicant3.id,
+      interviewerName: 'Arvind Kumar (VP Engineering)',
+      interviewDate: new Date(2026, 5, 5, 14, 30),
+      roundName: 'System Design & React Internals',
+      status: 'SCHEDULED',
+    }
+  });
+
+  await prisma.interview.create({
+    data: {
+      applicantId: applicant5.id,
+      interviewerName: 'Sanjay Dutt (Principal Engineer)',
+      interviewDate: new Date(2026, 5, 1, 10, 0),
+      roundName: 'System Architecture & CSS Performance',
+      status: 'COMPLETED',
+      feedback: 'Vikram demonstrated phenomenal mastery over rendering optimizations and virtualized lists. Fast hire!',
+      rating: 5,
+    }
+  });
+
+  // Create Job Offer
+  await prisma.jobOffer.create({
+    data: {
+      applicantId: applicant5.id,
+      offeredSalary: 2100000,
+      joiningDate: new Date(2026, 6, 1),
+      status: 'SENT',
+    }
+  });
+
+  await prisma.jobOffer.create({
+    data: {
+      applicantId: applicantHired.id,
+      offeredSalary: 2200000,
+      joiningDate: new Date(2026, 5, 1),
+      status: 'ACCEPTED',
+    }
+  });
+
+  console.log('✅ Recruitment / ATS seeded successfully');
+
+  // Performance Management Seeds
+  console.log('🌱 Seeding Performance Module...');
+  const empRajesh = employees[0];
+  const empPriya = employees[1];
+  const empSneha = employees[3];
+
+  // Seed Goals (KRAs)
+  await prisma.kRA.create({
+    data: {
+      employeeId: empRajesh.id,
+      title: 'Architect Next.js HRMS Platform migration',
+      description: 'Upgrade the client stack to Next.js 15 and optimize bundle performance by 25%.',
+      weightage: 40.0,
+      target: '100% stable ES modules migration & React 19',
+      status: 'IN_PROGRESS',
+      year: 2026,
+    }
+  });
+
+  await prisma.kRA.create({
+    data: {
+      employeeId: empRajesh.id,
+      title: 'Establish automated CI/CD pipeline',
+      description: 'Automate containerized builds on AWS to achieve continuous delivery bounds.',
+      weightage: 30.0,
+      target: 'Deploy automated test suites in pipeline',
+      status: 'ACHIEVED',
+      year: 2026,
+    }
+  });
+
+  await prisma.kRA.create({
+    data: {
+      employeeId: empRajesh.id,
+      title: 'Build Indian Taxation Pay Calculator',
+      description: 'Design robust algorithms matching latest TDS, PF, and Professional Tax brackets.',
+      weightage: 30.0,
+      target: 'Audit approved and integrated structure',
+      status: 'ACHIEVED',
+      year: 2026,
+    }
+  });
+
+  // Seed Appraisals
+  await prisma.performanceAppraisal.create({
+    data: {
+      employeeId: empRajesh.id,
+      appraisalCycle: 'FY26 Mid-Year Appraisal',
+      startDate: new Date(2026, 0, 1),
+      endDate: new Date(2026, 5, 30),
+      selfRating: 4.5,
+      selfFeedback: 'I successfully executed both the Express 5 framework upgrades and migrated our Next.js client modules to version 15. The system performs exceptionally and operates securely.',
+      managerRating: 5.0,
+      managerFeedback: 'Rajesh has done an absolute masterpiece in architectural design, particularly in establishing robust transactional safety rules and modern promise rejection capturers.',
+      finalRating: 4.8,
+      status: 'COMPLETED',
+      approvedBy: 'admin@hrms.com',
+    }
+  });
+
+  // Seed 360 Continuous Peer Feedbacks
+  await prisma.feedback360.create({
+    data: {
+      employeeId: empRajesh.id,
+      reviewerId: empPriya.id,
+      feedback: 'Rajesh is an phenomenal technical lead. His architectural design guidance is pristine and he is always eager to unblock junior developers.',
+      rating: 5,
+      relationship: 'SUBORDINATE',
+      anonymous: false,
+    }
+  });
+
+  await prisma.feedback360.create({
+    data: {
+      employeeId: empRajesh.id,
+      reviewerId: empSneha.id,
+      feedback: 'Provides highly technical and clean reviews. Working under his mentorship has expanded my React 19 and Next.js 15 expertise enormously!',
+      rating: 5,
+      relationship: 'SUBORDINATE',
+      anonymous: true,
+    }
+  });
+
+  console.log('✅ Performance & Appraisals seeded successfully');
+
+  // Expense Claims & Travel Advances Seeds
+  console.log('🌱 Seeding Expense Claims & Travel Advances Module...');
+  
+  // Seed Expense Claims
+  await prisma.expenseClaim.create({
+    data: {
+      employeeId: empRajesh.id,
+      title: 'Next.js Dev Summit Travel tickets',
+      category: 'TRAVEL',
+      amount: 18400.00,
+      currency: 'INR',
+      description: 'Flight tickets Mumbai to Bangalore for Next.js developers tech summit.',
+      status: 'PAID',
+      managerId: employees[8].id, // Meera HR
+      managerRemarks: 'Approved for tech summit.',
+      financeRemarks: 'Reimbursed & paid in full in April payroll run.',
+    }
+  });
+
+  await prisma.expenseClaim.create({
+    data: {
+      employeeId: empRajesh.id,
+      title: 'External monitor for developers hub',
+      category: 'EQUIPMENT',
+      amount: 14500.00,
+      currency: 'INR',
+      description: '4K UltraWide coding screen for developer setup.',
+      status: 'PENDING',
+    }
+  });
+
+  await prisma.expenseClaim.create({
+    data: {
+      employeeId: empPriya.id,
+      title: 'Customer Onsite Dinner with Stakeholders',
+      category: 'MEALS',
+      amount: 4800.00,
+      currency: 'INR',
+      description: 'Dinner with NexusHR core stakeholders.',
+      status: 'APPROVED_BY_MANAGER',
+      managerId: empRajesh.id,
+      managerRemarks: 'Pre-approved business dinner expense.',
+    }
+  });
+
+  // Seed Travel Advances
+  await prisma.travelAdvance.create({
+    data: {
+      employeeId: empRajesh.id,
+      purpose: 'Bangalore Core Infrastructure audit meeting',
+      amountRequested: 20000.00,
+      amountApproved: 20000.00,
+      status: 'APPROVED',
+      advanceRemarks: 'Approved for Bangalore core audit travel.',
+    }
+  });
+
+  await prisma.travelAdvance.create({
+    data: {
+      employeeId: empPriya.id,
+      purpose: 'AWS Tech Architect Certification Travel',
+      amountRequested: 15000.00,
+      amountApproved: 15000.00,
+      status: 'SETTLED',
+      advanceRemarks: 'Approved. Settled with actual receipt details.',
+      settledAmount: 14200.00,
+      settledDate: new Date(2026, 4, 15),
+    }
+  });
+
+  console.log('✅ Expense Claims & Travel Advances seeded successfully');
+
+  // Shift Management & Rostering Seeds
+  console.log('🌱 Seeding Shift Management & Rostering Module...');
+  
+  // Seed Shift Types
+  const shiftMorning = await prisma.shiftType.create({
+    data: {
+      name: 'General Day Shift',
+      startTime: '09:00',
+      endTime: '18:00',
+      shiftAllowance: 0.00,
+    }
+  });
+
+  const shiftNight = await prisma.shiftType.create({
+    data: {
+      name: 'Premium Night Shift',
+      startTime: '21:00',
+      endTime: '06:00',
+      shiftAllowance: 350.00,
+      ipRestricted: true,
+      allowedIpRange: '192.168.1',
+      geoRestricted: true,
+      allowedLatitude: 19.0760,
+      allowedLongitude: 72.8777,
+      allowedRadiusMeters: 150.00,
+    }
+  });
+
+  const shiftCustom = await prisma.shiftType.create({
+    data: {
+      name: 'Bangalore Site Roster',
+      startTime: '10:00',
+      endTime: '19:00',
+      shiftAllowance: 150.00,
+      geoRestricted: true,
+      allowedLatitude: 12.9716,
+      allowedLongitude: 77.5946,
+      allowedRadiusMeters: 250.00,
+    }
+  });
+
+  // Seed Shift Assignments
+  await prisma.shiftAssignment.create({
+    data: {
+      employeeId: empRajesh.id,
+      shiftTypeId: shiftNight.id,
+      startDate: new Date(2026, 0, 1),
+    }
+  });
+
+  await prisma.shiftAssignment.create({
+    data: {
+      employeeId: empPriya.id,
+      shiftTypeId: shiftMorning.id,
+      startDate: new Date(2026, 0, 1),
+    }
+  });
+
+  console.log('✅ Shift Management & Rostering seeded successfully');
 
   console.log('\n🎉 Seed completed!');
   console.log('  🔐 Admin: admin@hrms.com / admin123');

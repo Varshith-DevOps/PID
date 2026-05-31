@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Payslip controller.
+ * Handles payslip retrieval, PDF generation, bulk downloads,
+ * and email distribution via SMTP (Nodemailer).
+ * @module controllers/payslipController
+ */
+
 const prisma = require('../config/database');
 const nodemailer = require('nodemailer');
 const { generatePayslipPDF, generateBulkPayslips } = require('../services/pdfService');
@@ -16,14 +23,24 @@ const transporter = nodemailer.createTransport({
 
 const getPayslipHistory = async (req, res) => {
   try {
-    const { employeeId, year } = req.query;
+    const { employeeId, year, month } = req.query;
     const where = {};
-    
-    if (employeeId) where.employeeId = employeeId;
-    if (year) {
-      const startDate = new Date(year, 0, 1);
-      const endDate = new Date(year, 11, 31);
-      where.payrollRun = { month_year: { year: parseInt(year) } };
+
+    // SEC-01 FIX: Enforce ownership — EMPLOYEE role can only view their own payslips
+    if (req.user?.role === 'EMPLOYEE') {
+      // Look up the employee record linked to this user account
+      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
+      if (!linkedEmployee) return res.status(403).json({ error: 'No employee profile linked to your account' });
+      where.employeeId = linkedEmployee.id;
+    } else if (employeeId) {
+      where.employeeId = employeeId;
+    }
+
+    if (year || month) {
+      const payrollFilter = {};
+      if (year) payrollFilter.year = parseInt(year);
+      if (month) payrollFilter.month = parseInt(month);
+      where.payrollRun = payrollFilter;
     }
 
     const records = await prisma.payrollRecord.findMany({
@@ -37,6 +54,7 @@ const getPayslipHistory = async (req, res) => {
 
     res.json(records);
   } catch (error) {
+    console.error('[GET PAYSLIP HISTORY ERROR]:', error.message);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -53,6 +71,15 @@ const getPayslip = async (req, res) => {
     });
 
     if (!record) return res.status(404).json({ error: 'Payslip not found' });
+
+    // SEC-01 FIX: Enforce ownership — EMPLOYEE can only view their own payslip
+    if (req.user?.role === 'EMPLOYEE') {
+      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
+      if (!linkedEmployee || linkedEmployee.id !== record.employeeId) {
+        return res.status(403).json({ error: 'Access denied. You can only view your own payslips.' });
+      }
+    }
+
     res.json(record);
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -71,6 +98,14 @@ const downloadPayslipPDF = async (req, res) => {
     });
 
     if (!record) return res.status(404).json({ error: 'Payslip not found' });
+
+    // SEC-01 FIX: Enforce ownership — EMPLOYEE can only download their own payslip PDF
+    if (req.user?.role === 'EMPLOYEE') {
+      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
+      if (!linkedEmployee || linkedEmployee.id !== record.employeeId) {
+        return res.status(403).json({ error: 'Access denied. You can only download your own payslips.' });
+      }
+    }
 
     const pdfBuffer = await generatePayslipPDF(record, record.employee, {});
 

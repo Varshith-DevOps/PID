@@ -75,6 +75,12 @@ export default function PayrollPage() {
   const [confirmations, setConfirmations] = useState<Record<string, boolean>>({});
   const [adjustments, setAdjustments] = useState<Record<string, { arrears?: number; incentives?: number; notes?: string }>>({});
 
+  // New States for Interactive Steps & Checklist
+  const [skipReasons, setSkipReasons] = useState<Record<string, string>>({});
+  const [activeManualStage, setActiveManualStage] = useState<string | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string>>({});
+  const [activeCheckDetail, setActiveCheckDetail] = useState<string | null>(null);
+
   useEffect(() => {
     if (!authLoading && (!user || user.role === 'EMPLOYEE')) router.push('/');
   }, [user, authLoading]);
@@ -88,6 +94,119 @@ export default function PayrollPage() {
   useEffect(() => {
     if (user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN')) loadGlobalSettings();
   }, [user]);
+
+  const downloadCSVTemplate = (type: string) => {
+    let headers = '';
+    let rows: string[] = [];
+    const empList = preflight?.employeeSummaries || [];
+    
+    if (type === 'arrears') {
+      headers = 'EmployeeID,EmployeeName,ArrearsAmount,Notes';
+      if (empList.length > 0) {
+        rows = empList.slice(0, 3).map((e: any, index: number) => 
+          `"${e.employeeId}","${e.name}",${[5000, 2500, 3000][index] || 1000},"May Performance Arrears"`
+        );
+      } else {
+        rows = ['"EMP00022","Aishwarya Sen",5000,"Q1 performance arrears"'];
+      }
+    } else if (type === 'incentives') {
+      headers = 'EmployeeID,EmployeeName,IncentiveAmount,Notes';
+      if (empList.length > 0) {
+        rows = empList.slice(0, 3).map((e: any, index: number) => 
+          `"${e.employeeId}","${e.name}",${[8000, 4500, 6000][index] || 1500},"Milestone Incentive"`
+        );
+      } else {
+        rows = ['"EMP00022","Aishwarya Sen",8000,"May milestone incentive"'];
+      }
+    } else if (type === 'tax') {
+      headers = 'EmployeeID,EmployeeName,Regime,Section80C,Section80D,HomeLoanInterest,HRAExemption';
+      if (empList.length > 0) {
+        rows = empList.slice(0, 3).map((e: any, index: number) => 
+          `"${e.employeeId}","${e.name}","${index % 2 === 0 ? 'NEW' : 'OLD'}",${index % 2 === 0 ? 0 : 150000},${index % 2 === 0 ? 0 : 25000},0,0`
+        );
+      } else {
+        rows = ['"EMP00022","Aishwarya Sen","NEW",0,0,0,0', '"EMP00003","Amit Patel","OLD",150000,25000,0,0'];
+      }
+    } else if (type === 'proofs') {
+      headers = 'EmployeeID,EmployeeName,DocumentType,AmountDeclared,AmountVerified,Remarks';
+      if (empList.length > 0) {
+        rows = empList.slice(0, 3).map((e: any, index: number) => 
+          `"${e.employeeId}","${e.name}","80C PPF Receipts",150000,150000,"Verified and approved"`
+        );
+      } else {
+        rows = ['"EMP00022","Aishwarya Sen","80C PPF Receipts",150000,150000,"Verified and approved"'];
+      }
+    }
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${type}_template.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCSVUpload = (type: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) return;
+      const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+      if (lines.length <= 1) {
+        alert('CSV file is empty or only contains headers');
+        return;
+      }
+      
+      const empList = preflight?.employeeSummaries || [];
+      let count = 0;
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        const cols: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        for (let charIndex = 0; charIndex < line.length; charIndex++) {
+          const char = line[charIndex];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            cols.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        cols.push(current.trim());
+
+        const empId = cols[0];
+        const valStr = cols[2];
+        const notesVal = cols[3] || '';
+        
+        if (!empId) continue;
+        const matchedEmp = empList.find((e: any) => e.employeeId === empId || e.id === empId);
+        if (matchedEmp) {
+          const numVal = parseFloat(valStr) || 0;
+          if (type === 'arrears' || type === 'incentives') {
+            setAdjustments((currentAdj) => ({
+              ...currentAdj,
+              [matchedEmp.id]: {
+                ...(currentAdj[matchedEmp.id] || {}),
+                [type]: numVal,
+                notes: notesVal || (currentAdj[matchedEmp.id]?.notes || ''),
+              },
+            }));
+          }
+          count++;
+        }
+      }
+      
+      setUploadedFiles(prev => ({ ...prev, [type]: file.name }));
+      alert(`Successfully imported ${type} data for ${count} employees from ${file.name}`);
+    };
+    reader.readAsText(file);
+  };
 
   const loadGlobalSettings = async () => {
     try {
@@ -366,10 +485,10 @@ export default function PayrollPage() {
         {view === 'process' && (
           <div style={{ display: 'grid', gap: '1.5rem' }}>
             <div className="glass-card" style={{ padding: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Payroll Processing Checklist</h2>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Manual statutory and payroll input stages must be completed before payroll can run.</p>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700, background: 'linear-gradient(135deg, #fff, #a5b4fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Payroll Processing Command Center</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Verify system checks, run interactive manual tasks, and prepare variable payouts before processing.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                   <select className="select-field" value={processMonth} onChange={(e) => setProcessMonth(Number(e.target.value))} style={{ width: '150px' }}>
@@ -379,45 +498,595 @@ export default function PayrollPage() {
                 </div>
               </div>
 
-              <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1rem' }}>
-                <div className="stat-card"><div className="stat-card-value text-info">{preflight?.summary?.activeEmployees || 0}</div><div className="stat-card-label">Active Employees</div></div>
-                <div className="stat-card"><div className="stat-card-value text-warning">{preflight?.summary?.lopDays || 0}</div><div className="stat-card-label">LOP Days</div></div>
-                <div className="stat-card"><div className="stat-card-value text-success">{preflight?.summary?.approvedOvertimeHours || 0}</div><div className="stat-card-label">Approved OT Hours</div></div>
-                <div className="stat-card"><div className="stat-card-value text-danger">{preflight?.summary?.pendingOvertime || 0}</div><div className="stat-card-label">Pending OT</div></div>
+              <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
+                <div className="stat-card" style={{ borderLeft: '3px solid var(--accent-blue)', background: 'rgba(59, 130, 246, 0.05)' }}><div className="stat-card-value text-info" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.3)' }}>{preflight?.summary?.activeEmployees || 0}</div><div className="stat-card-label">Active Employees</div></div>
+                <div className="stat-card" style={{ borderLeft: '3px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}><div className="stat-card-value text-warning" style={{ textShadow: '0 0 10px rgba(245, 158, 11, 0.3)' }}>{preflight?.summary?.lopDays || 0}</div><div className="stat-card-label">LOP Days</div></div>
+                <div className="stat-card" style={{ borderLeft: '3px solid var(--success)', background: 'rgba(16, 185, 129, 0.05)' }}><div className="stat-card-value text-success" style={{ textShadow: '0 0 10px rgba(16, 185, 129, 0.3)' }}>{preflight?.summary?.approvedOvertimeHours || 0}</div><div className="stat-card-label">Approved OT Hours</div></div>
+                <div className="stat-card" style={{ borderLeft: '3px solid var(--danger)', background: 'rgba(239, 68, 68, 0.05)' }}><div className="stat-card-value text-danger" style={{ textShadow: '0 0 10px rgba(239, 68, 68, 0.3)' }}>{preflight?.summary?.pendingOvertime || 0}</div><div className="stat-card-label">Pending OT</div></div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.5rem' }}>
+                {/* Left Column: System Checks */}
                 <div>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem' }}>System Checks</h3>
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    {(preflight?.automaticChecks || []).map((check: any) => (
-                      <div key={check.key} className="glass-card" style={{ padding: '0.9rem', borderLeft: `3px solid ${check.passed ? 'var(--success)' : check.blocking ? 'var(--danger)' : 'var(--warning)'}` }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-                          <strong>{check.label}</strong>
-                          <span className={`badge ${check.passed ? 'badge-success' : check.blocking ? 'badge-danger' : 'badge-warning'}`}>{check.passed ? 'OK' : check.blocking ? 'BLOCKED' : 'REVIEW'}</span>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    System Health Checks
+                  </h3>
+                  <div style={{ display: 'grid', gap: '1rem' }}>
+                    {(preflight?.automaticChecks || []).map((check: any) => {
+                      const empList = preflight?.employeeSummaries || [];
+                      let affected: any[] = [];
+                      if (check.key === 'salaryStructures') {
+                        affected = empList.filter((e: any) => !e.salaryReady);
+                      } else if (check.key === 'bankDetails') {
+                        affected = empList.filter((e: any) => !e.bankReady);
+                      } else if (check.key === 'pfDetails') {
+                        affected = empList.filter((e: any) => !e.pfReady);
+                      } else if (check.key === 'attendanceCaptured') {
+                        affected = empList.filter((e: any) => e.attendanceEntries === 0);
+                      }
+
+                      const isExpanded = activeCheckDetail === check.key;
+
+                      return (
+                        <div key={check.key} className="glass-card" style={{ 
+                          padding: '1rem', 
+                          borderLeft: `4px solid ${check.passed ? 'var(--success)' : check.blocking ? 'var(--danger)' : 'var(--warning)'}`,
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          background: 'rgba(255, 255, 255, 0.02)',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
+                            <div>
+                              <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{check.label}</strong>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{check.detail}</div>
+                            </div>
+                            <span className={`badge ${check.passed ? 'badge-success' : check.blocking ? 'badge-danger' : 'badge-warning'}`} style={{ padding: '4px 10px', fontSize: '0.75rem', fontWeight: 700 }}>
+                              {check.passed ? 'PASSED' : check.blocking ? 'BLOCKING' : 'REVIEW'}
+                            </span>
+                          </div>
+
+                          {!check.passed && (
+                            <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem' }}>
+                              {affected.length > 0 && (
+                                <div style={{ marginBottom: '0.75rem' }}>
+                                  <button 
+                                    onClick={() => setActiveCheckDetail(isExpanded ? null : check.key)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', fontSize: '0.75rem', padding: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><polyline points="9 18 15 12 9 6"/></svg>
+                                    {isExpanded ? 'Hide' : 'View'} affected employees ({affected.length})
+                                  </button>
+                                  {isExpanded && (
+                                    <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)', marginTop: '0.5rem', maxHeight: '120px', overflowY: 'auto', fontSize: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                      {affected.map(e => (
+                                        <span key={e.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
+                                          {e.name} ({e.employeeId})
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {check.key === 'salaryStructures' && (
+                                  <button 
+                                    onClick={() => {
+                                      setView('structure');
+                                      if (affected[0]) loadStructure(affected[0].id);
+                                    }}
+                                    className="btn btn-primary btn-sm" 
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                    Go Configure Salary Structures
+                                  </button>
+                                )}
+                                {check.key === 'bankDetails' && (
+                                  <button 
+                                    onClick={() => window.open('/employees', '_blank')}
+                                    className="btn btn-ghost btn-sm" 
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                    Update Bank Details (New Window)
+                                  </button>
+                                )}
+                                {check.key === 'pfDetails' && (
+                                  <button 
+                                    onClick={() => window.open('/employees', '_blank')}
+                                    className="btn btn-ghost btn-sm" 
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                    Update PF Details (New Window)
+                                  </button>
+                                )}
+                                {check.key === 'pendingOvertime' && (
+                                  <button 
+                                    onClick={() => window.open('/overtime', '_blank')}
+                                    className="btn btn-danger btn-sm" 
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    Go to Overtime Module to Approve
+                                  </button>
+                                )}
+                                {check.key === 'attendanceCaptured' && (
+                                  <button 
+                                    onClick={() => window.open('/attendance', '_blank')}
+                                    className="btn btn-ghost btn-sm" 
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    Verify Attendance (New Window)
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{check.detail}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
+                {/* Right Column: Interactive Manual Process Stages */}
                 <div>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem' }}>Manual Process Stages</h3>
-                  <div style={{ display: 'grid', gap: '0.55rem' }}>
-                    {(preflight?.manualStages || []).map((stage: PayrollStage) => (
-                      <label key={stage.key} className="glass-card" style={{ padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={!!confirmations[stage.key]} onChange={(e) => setConfirmations({ ...confirmations, [stage.key]: e.target.checked })} />
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{stage.label}</span>
-                      </label>
-                    ))}
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    Interactive Task Board
+                  </h3>
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    {(preflight?.manualStages || []).map((stage: PayrollStage) => {
+                      const isConfirmed = confirmations[stage.key] === true;
+                      const isSkipped = skipReasons[stage.key] !== undefined;
+                      const isActive = activeManualStage === stage.key;
+
+                      let statusColor = 'rgba(255,255,255,0.03)';
+                      let borderStyle = '1px solid rgba(255,255,255,0.06)';
+                      if (isConfirmed && !isSkipped) {
+                        statusColor = 'rgba(16, 185, 129, 0.05)';
+                        borderStyle = '1px solid var(--success)';
+                      } else if (isSkipped) {
+                        statusColor = 'rgba(245, 158, 11, 0.05)';
+                        borderStyle = '1px solid var(--warning)';
+                      } else if (isActive) {
+                        statusColor = 'rgba(59, 130, 246, 0.08)';
+                        borderStyle = '1px solid var(--accent-blue)';
+                      }
+
+                      return (
+                        <div key={stage.key} className="glass-card" style={{ 
+                          padding: '1rem', 
+                          background: statusColor, 
+                          border: borderStyle,
+                          transition: 'all 0.3s ease',
+                          borderRadius: 'var(--radius-md)'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={isConfirmed} 
+                                onChange={(e) => {
+                                  setConfirmations(prev => ({ ...prev, [stage.key]: e.target.checked }));
+                                  if (!e.target.checked) {
+                                    setSkipReasons(prev => {
+                                      const next = { ...prev };
+                                      delete next[stage.key];
+                                      return next;
+                                    });
+                                  }
+                                }} 
+                                style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                              />
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{stage.label}</span>
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                              {isSkipped && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>SKIPPED</span>}
+                              {isConfirmed && !isSkipped && <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>VERIFIED</span>}
+                              
+                              <button 
+                                onClick={() => setActiveManualStage(isActive ? null : stage.key)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '2px' }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isActive ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"/></svg>
+                              </button>
+                            </div>
+                          </div>
+
+                          {isActive && (
+                            <div style={{ marginTop: '0.9rem', padding: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-blue)' }}>
+                              
+                              {stage.key === 'attendanceLocked' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Locking attendance prevents modifications during payroll generation and ensures all shifts are locked.
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => window.open('/attendance', '_blank')} className="btn btn-primary btn-sm">
+                                      Open Attendance Module
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Confirm Locked
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'lopsAdded' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Verify unpaid leaves (Loss Of Pay days) in the Leave requests panel to ensure correct proportional basic calculations.
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => window.open('/leave', '_blank')} className="btn btn-primary btn-sm">
+                                      Open Leave Requests
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Confirm Leaves Verified
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'salaryRevisionUpdated' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Make sure all appraisals, salary revisions, increment policies for this month have been committed to individual salary structures.
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => setView('structure')} className="btn btn-primary btn-sm">
+                                      Open Salary Structure Console
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Confirm Revisions Checked
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'incomeTaxDeclaration' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Review and upload Employee tax declarations (Regime selection: OLD vs NEW) to update statutory TDS estimations.
+                                  </p>
+                                  
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                      <button onClick={() => downloadCSVTemplate('tax')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
+                                        Download Sample CSV Template
+                                      </button>
+                                    </div>
+                                    <input 
+                                      type="file" 
+                                      accept=".csv" 
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          handleCSVUpload('tax', file);
+                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        }
+                                      }} 
+                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
+                                    />
+                                    {uploadedFiles['tax'] && (
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
+                                        ✓ Uploaded: {uploadedFiles['tax']}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Verify Declarations
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        const reason = prompt('Reason for skipping tax declarations review this month?');
+                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'Skipped' }));
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }}
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ color: 'var(--warning)' }}
+                                    >
+                                      Skip Step
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'investmentProofs' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Validate investment declarations proofs for 80C, 80D, home loans and HRA submitted by employees.
+                                  </p>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                      <button onClick={() => downloadCSVTemplate('proofs')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
+                                        Download Sample CSV Template
+                                      </button>
+                                    </div>
+                                    <input 
+                                      type="file" 
+                                      accept=".csv" 
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          handleCSVUpload('proofs', file);
+                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        }
+                                      }} 
+                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
+                                    />
+                                    {uploadedFiles['proofs'] && (
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
+                                        ✓ Uploaded: {uploadedFiles['proofs']}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Verify Investment Proofs
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        const reason = prompt('Reason for skipping investment proofs verification?');
+                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'Skipped' }));
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }}
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ color: 'var(--warning)' }}
+                                    >
+                                      Skip Step
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'arrearsReviewed' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Bulk upload Arrears CSV file or key them in manually in the adjustments table below.
+                                  </p>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                      <button onClick={() => downloadCSVTemplate('arrears')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
+                                        Download Sample CSV Template
+                                      </button>
+                                    </div>
+                                    <input 
+                                      type="file" 
+                                      accept=".csv" 
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          handleCSVUpload('arrears', file);
+                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        }
+                                      }} 
+                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
+                                    />
+                                    {uploadedFiles['arrears'] && (
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
+                                        ✓ Uploaded: {uploadedFiles['arrears']}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Mark Verified
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        const reason = prompt('Reason for skipping arrears adjustments?');
+                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'No arrears this month' }));
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }}
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ color: 'var(--warning)' }}
+                                    >
+                                      Skip (No Arrears)
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'incentivesReviewed' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Bulk upload Incentives/Bonus details via CSV file or enter them manually in the table below.
+                                  </p>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                      <button onClick={() => downloadCSVTemplate('incentives')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
+                                        Download Sample CSV Template
+                                      </button>
+                                    </div>
+                                    <input 
+                                      type="file" 
+                                      accept=".csv" 
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          handleCSVUpload('incentives', file);
+                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        }
+                                      }} 
+                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
+                                    />
+                                    {uploadedFiles['incentives'] && (
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
+                                        ✓ Uploaded: {uploadedFiles['incentives']}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Mark Verified
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        const reason = prompt('Reason for skipping incentives?');
+                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'No incentives this month' }));
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }}
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ color: 'var(--warning)' }}
+                                    >
+                                      Skip (No Incentives)
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'overtimeApproved' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    All OT requests for the period must be marked approved or rejected in the Overtime center.
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => window.open('/overtime', '_blank')} className="btn btn-primary btn-sm">
+                                      Verify Overtime Approvals
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Mark Verified
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'statutoryComplianceReviewed' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Review configured statutory formulas: EPF contribution split, Gratuity Act eligibility, state PT slabs, ESI cycles, and TDS tax brackets.
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => setView('settings')} className="btn btn-primary btn-sm">
+                                      View Statutory Constants Settings
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Confirm Checked
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stage.key === 'bankAndPayoutVerified' && (
+                                <div>
+                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                                    Confirm that employee bank accounts, routing details and payout templates are correct.
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button onClick={() => window.open('/employees', '_blank')} className="btn btn-primary btn-sm">
+                                      Verify Employee Bank Directory
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
+                                        setActiveManualStage(null);
+                                      }} 
+                                      className="btn btn-success btn-sm"
+                                    >
+                                      Confirm Verified
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {isSkipped && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                                  Skipped Reason: "{skipReasons[stage.key]}"
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="glass-card" style={{ padding: '1.5rem', overflow: 'hidden' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem' }}>Variable Inputs: Arrears, Incentives, OT and LOP Review</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Variable Inputs: Arrears, Incentives, OT and LOP Review</h3>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => downloadCSVTemplate('arrears')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem' }}>
+                    Download Arrears CSV Template
+                  </button>
+                  <button onClick={() => downloadCSVTemplate('incentives')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem' }}>
+                    Download Incentives CSV Template
+                  </button>
+                </div>
+              </div>
               <div style={{ overflow: 'auto' }}>
                 <table className="data-table">
                   <thead><tr><th>Employee</th><th>Attendance</th><th>LOP</th><th>OT Hours</th><th>Arrears</th><th>Incentives</th><th>Notes</th></tr></thead>

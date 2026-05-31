@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Overtime management controller.
+ * Handles automatic overtime detection from timesheets,
+ * OT approval/rejection workflows, and overtime pay calculations.
+ * @module controllers/overtimeController
+ */
+
 const prisma = require('../config/database');
 
 const getSettings = async () => {
@@ -9,10 +16,11 @@ const getSettings = async () => {
 };
 
 const detectAndCreateOvertime = async (employeeId, date, hoursWorked) => {
-  if (hoursWorked <= 8) return null;
+  // Daily standard shift is 8 hours; any excess is overtime
+  const dailyStandardHours = 8;
+  if (hoursWorked <= dailyStandardHours) return null;
 
-  const settings = await getSettings();
-  const otHours = hoursWorked - settings.standardHours;
+  const otHours = hoursWorked - dailyStandardHours;
 
   if (otHours <= 0) return null;
 
@@ -43,7 +51,15 @@ const getEmployeeOvertime = async (req, res) => {
     const { employeeId, status, startDate, endDate } = req.query;
     const where = {};
 
-    if (employeeId) where.employeeId = employeeId;
+    // BOLA/IDOR Check: EMPLOYEE can only view their own overtime records
+    if (req.user?.role === 'EMPLOYEE') {
+      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
+      if (!linkedEmployee) return res.status(403).json({ error: 'No employee profile linked to your account' });
+      where.employeeId = linkedEmployee.id;
+    } else if (employeeId) {
+      where.employeeId = employeeId;
+    }
+
     if (status) where.status = status;
     if (startDate || endDate) {
       where.date = {};

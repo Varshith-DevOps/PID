@@ -40,6 +40,7 @@ model Department {
   description String?
   isActive    Boolean    @default(true)
   employees   Employee[]
+  jobOpenings JobOpening[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -59,6 +60,7 @@ model Employee {
   accountStage    String    @default("EMPLOYEE")
   address         String?
   nationality     String?
+  location        String?
 
   // Personal details
   bloodGroup      String?
@@ -112,6 +114,15 @@ model Employee {
   exitDetails     ExitDetails?
   dependents      Dependent[]
   changeHistory   ChangeHistory[]
+  kras             KRA[]
+  appraisals       PerformanceAppraisal[]
+  feedbacksReceived Feedback360[]          @relation("RecipientRelation")
+  feedbacksGiven    Feedback360[]          @relation("ReviewerRelation")
+  expenseClaims    ExpenseClaim[]
+  travelAdvances   TravelAdvance[]
+  shiftAssignments ShiftAssignment[]
+  checklistTasks   EmployeeChecklistTask[]
+  regularizations  AttendanceRegularization[]
 
   isActive        Boolean        @default(true)
   createdAt       DateTime       @default(now())
@@ -566,4 +577,286 @@ model Overtime {
   updatedAt     DateTime  @updatedAt
 
   @@map("overtime_requests")
+}
+
+model JobOpening {
+  id             String         @id @default(uuid())
+  title          String
+  department     Department     @relation(fields: [departmentId], references: [id])
+  departmentId   String
+  description    String
+  requirements   String
+  location       String
+  employmentType String         @default("FULL_TIME") // FULL_TIME, PART_TIME, CONTRACT, INTERN
+  salaryRange    String?
+  status         String         @default("OPEN") // DRAFT, OPEN, CLOSED
+  applicants     JobApplicant[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("job_openings")
+}
+
+model JobApplicant {
+  id           String      @id @default(uuid())
+  jobOpening   JobOpening  @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+  jobOpeningId String
+  fullName     String
+  email        String
+  phone        String
+  resumeUrl    String?
+  coverLetter  String?
+  stage        String      @default("APPLIED") // APPLIED, SCREENING, INTERVIEW, OFFER, REJECTED, HIRED
+  rating       Int?        // 1 to 5
+  notes        String?
+  interviews   Interview[]
+  jobOffer     JobOffer?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("job_applicants")
+}
+
+model Interview {
+  id              String       @id @default(uuid())
+  applicant       JobApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  applicantId     String
+  interviewerName String
+  interviewDate   DateTime
+  roundName       String       // Technical Round 1, System Design, HR Round
+  status          String       @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
+  feedback        String?
+  rating          Int?         // 1 to 5
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("interviews")
+}
+
+model JobOffer {
+  id            String       @id @default(uuid())
+  applicant     JobApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  applicantId   String       @unique
+  offeredSalary Float
+  joiningDate   DateTime
+  status        String       @default("SENT") // DRAFT, SENT, ACCEPTED, DECLINED
+  offerLetter   String?      // Generated PDF path
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("job_offers")
+}
+
+model KRA {
+  id           String    @id @default(uuid())
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  title        String
+  description  String?
+  weightage    Float     @default(0) // Percentage out of 100, e.g. 25.0
+  target       String?
+  status       String    @default("PENDING") // PENDING, APPROVED, IN_PROGRESS, ACHIEVED, MISSED
+  year         Int       @default(2026)
+  quarter      Int?      // 1, 2, 3, 4
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("kras")
+}
+
+model PerformanceAppraisal {
+  id              String    @id @default(uuid())
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  appraisalCycle  String    // e.g., "FY26 Mid-Year Appraisal", "Q1 2026"
+  startDate       DateTime
+  endDate         DateTime
+  selfRating      Float?    // 1.0 to 5.0
+  selfFeedback    String?
+  managerRating   Float?    // 1.0 to 5.0
+  managerFeedback String?
+  finalRating     Float?    // 1.0 to 5.0
+  status          String    @default("DRAFT") // DRAFT, SUBMITTED_SELF, SUBMITTED_MANAGER, COMPLETED
+  approvedBy      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("performance_appraisals")
+}
+
+model Feedback360 {
+  id           String    @id @default(uuid())
+  employee     Employee  @relation("RecipientRelation", fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  reviewer     Employee  @relation("ReviewerRelation", fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewerId   String
+  feedback     String
+  rating       Int?      // 1 to 5
+  relationship String    @default("PEER") // PEER, MANAGER, SUBORDINATE
+  anonymous    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("feedback_360")
+}
+
+model ExpenseClaim {
+  id              String    @id @default(uuid())
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  title           String
+  claimDate       DateTime  @default(now())
+  category        String    // TRAVEL, MEALS, ACCOMMODATION, EQUIPMENT, OTHER
+  amount          Float
+  currency        String    @default("INR")
+  receiptUrl      String?
+  description     String?
+  status          String    @default("PENDING") // PENDING, APPROVED_BY_MANAGER, APPROVED_BY_FINANCE, REJECTED, PAID
+  managerId       String?
+  managerRemarks  String?
+  financeRemarks  String?
+  payrollRecordId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("expense_claims")
+}
+
+model TravelAdvance {
+  id              String    @id @default(uuid())
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  purpose         String
+  amountRequested Float
+  amountApproved  Float?
+  claimDate       DateTime  @default(now())
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, PAID, SETTLED
+  advanceRemarks  String?
+  settledAmount   Float?
+  settledDate     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("travel_advances")
+}
+
+model ShiftType {
+  id                  String            @id @default(uuid())
+  name                String
+  code                String?
+  startTime           String            // e.g. "09:00"
+  endTime             String            // e.g. "18:00"
+  startDay            String?           @default("Monday")
+  endDay              String?           @default("Monday")
+  gracePeriod         Int?              @default(15)
+  minimumWorkHours    Float?            @default(8.0)
+  isActive            Boolean           @default(true)
+  weeklyOffs          String?           @default("Sunday")
+  shiftAllowance      Float             @default(0)
+  ipRestricted        Boolean           @default(false)
+  allowedIpRange      String?
+  geoRestricted       Boolean           @default(false)
+  allowedLatitude     Float?
+  allowedLongitude    Float?
+  allowedRadiusMeters Float?            @default(150)
+  assignments         ShiftAssignment[] @relation("NewShift")
+  prevAssignments     ShiftAssignment[] @relation("PrevShift")
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@map("shift_types")
+}
+
+model ShiftAssignment {
+  id                  String     @id @default(uuid())
+  employee            Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId          String
+  shiftType           ShiftType  @relation("NewShift", fields: [shiftTypeId], references: [id], onDelete: Cascade)
+  shiftTypeId         String
+  previousShiftType   ShiftType? @relation("PrevShift", fields: [previousShiftTypeId], references: [id], onDelete: SetNull)
+  previousShiftTypeId String?
+  startDate           DateTime
+  endDate             DateTime?
+  changeReason        String?
+  changedBy           String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  @@map("shift_assignments")
+}
+
+model AttendanceRegularization {
+  id                  String      @id @default(uuid())
+  employee            Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId          String
+  date                DateTime
+  requestType         String      // MISSING_PUNCH_IN, MISSING_PUNCH_OUT, INCORRECT_STATUS, LATE_JUSTIFICATION, EARLY_JUSTIFICATION, SHIFT_MISMATCH
+  checkInCorrection   DateTime?
+  checkOutCorrection  DateTime?
+  statusCorrection    String?
+  reason              String
+  status              String      @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedBy          String?
+  managerRemarks      String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@map("attendance_regularizations")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  userEmail   String?
+  action      String   // e.g. SHIFT_CREATE, SHIFT_UPDATE, SHIFT_ASSIGN, REGULARIZATION_ACTION
+  entity      String
+  entityId    String?
+  oldDetails  String?
+  newDetails  String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model ChecklistTemplate {
+  id          String                  @id @default(uuid())
+  name        String                  // e.g. "Standard Developer Onboarding"
+  type        String                  // "ONBOARDING" or "OFFBOARDING"
+  description String?
+  tasks       ChecklistTemplateTask[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@map("checklist_templates")
+}
+
+model ChecklistTemplateTask {
+  id          String            @id @default(uuid())
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId  String
+  title       String
+  description String?
+  order       Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("checklist_template_tasks")
+}
+
+model EmployeeChecklistTask {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  type        String    // "ONBOARDING" or "OFFBOARDING"
+  title       String
+  description String?
+  status      String    @default("PENDING") // "PENDING", "IN_PROGRESS", "COMPLETED", "SKIPPED"
+  dueDate     DateTime?
+  completedAt DateTime?
+  remarks     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("employee_checklist_tasks")
 }

@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Leave management controller.
+ * Handles leave requests, approvals, rejections, balance tracking,
+ * and leave calendar views.
+ * @module controllers/leaveController
+ */
+
 const prisma = require('../config/database');
 
 const DEFAULT_LEAVE_QUOTAS = [
@@ -160,7 +167,10 @@ const cancelLeave = async (req, res) => {
 const getMyLeaves = async (req, res) => {
   try {
     const { status } = req.query;
-    const where = { employeeId: req.user.id };
+    const employee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
+    if (!employee) return res.status(404).json({ error: 'Employee profile not found' });
+
+    const where = { employeeId: employee.id };
     if (status) where.status = status;
 
     const leaves = await prisma.leave.findMany({

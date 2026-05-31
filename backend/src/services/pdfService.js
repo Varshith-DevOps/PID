@@ -1,7 +1,22 @@
+/**
+ * @fileoverview PDF generation service.
+ * Handles the creation of high-quality payslip PDFs and bulk payslip reports.
+ * Uses the pdfkit library to construct PDF layout dynamically.
+ * @module services/pdfService
+ */
+
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Generates a detailed, single-page payslip PDF in memory.
+ *
+ * @param {Object} record - The payroll record containing earnings/deductions
+ * @param {Object} employee - The employee details
+ * @param {Object} company - Optional company configuration/metadata
+ * @returns {Promise<Buffer>} Promise resolving to a buffer of the PDF file
+ */
 const generatePayslipPDF = (record, employee, company) => {
   return new Promise((resolve, reject) => {
     try {

@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Payroll processing controller.
+ * Manages salary structures, payroll runs with preflight checks,
+ * payroll reports, exports (CSV/PDF/Excel), and payroll settings.
+ * Implements a 10-stage manual confirmation workflow before processing.
+ * @module controllers/payrollController
+ */
+
 const prisma = require('../config/database');
 const salaryCalculator = require('../services/salaryService');
 const PDFDocument = require('pdfkit');
@@ -44,11 +52,12 @@ const getSalaryStructure = async (req, res) => {
       ? (new Date() - new Date(employee.joinDate)) / (365.25 * 24 * 60 * 60 * 1000)
       : 0;
 
-    const pf = salaryCalculator.calculatePF(structure.basicSalary, structure.pfEnabled);
+    const monthlyGross = salaryCalculator.calculateGrossEarnings(structure);
+    const pf = salaryCalculator.calculatePF(structure.basicSalary, structure.da || 0, structure.pfEnabled);
     const tds = structure.tdsEnabled
-      ? salaryCalculator.calculateTDS(structure.basicSalary)
+      ? salaryCalculator.calculateTDS(monthlyGross)
       : 0;
-    const gratuity = salaryCalculator.calculateGratuity(structure.basicSalary, yearsOfService);
+    const gratuity = salaryCalculator.calculateGratuity(structure.basicSalary, structure.da || 0, yearsOfService);
 
     res.json({ ...structure, calculations: { pf, tds, gratuity, yearsOfService: yearsOfService.toFixed(1) } });
   } catch (error) {
@@ -202,7 +211,7 @@ const runPayroll = async (req, res) => {
 
     const employees = await prisma.employee.findMany({
       where: { isActive: true },
-      include: { salaryStructure: true },
+      include: { salaryStructure: true, addresses: true },
     });
     const missingSalary = employees.filter((employee) => !employee.salaryStructure);
     if (missingSalary.length > 0) {
@@ -246,16 +255,31 @@ const runPayroll = async (req, res) => {
       const daysWorked = empAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
       const unpaidLeaves = leaveDeductions.filter((l) => l.employeeId === employee.id).reduce((sum, l) => sum + l.days, 0);
       const workDays = new Date(targetYear, targetMonth, 0).getDate();
-      const payableDays = Math.max(0, Math.min(workDays, daysWorked || workDays) - unpaidLeaves);
+      const payableDays = Math.max(0, workDays - unpaidLeaves);
       const employeeAdjustments = adjustments[employee.id] || {};
       const arrears = money(employeeAdjustments.arrears);
       const incentives = money(employeeAdjustments.incentives);
       const otHours = approvedOvertime.filter((ot) => ot.employeeId === employee.id).reduce((sum, ot) => sum + ot.otHours, 0);
       const otPay = money(salaryCalculator.calculateOTPay(structure.basicSalary, otHours));
 
+      const currentAddress = employee.addresses?.find(a => a.type === 'CURRENT') || employee.addresses?.[0];
+      const stateName = currentAddress ? currentAddress.state : 'DEFAULT';
+      const permanentGross = salaryCalculator.calculateGrossEarnings(structure);
+      const esiCycleEligible = permanentGross <= 21000;
+
+      const calcOptions = {
+        tdsEnabled: structure.tdsEnabled,
+        employeePf: structure.pfEnabled,
+        state: stateName,
+        gender: employee.gender || 'Male',
+        month: targetMonth,
+        esiCycleEligible,
+        taxOptions: { regime: 'NEW' }
+      };
+
       const calc = payableDays < workDays
-        ? salaryCalculator.calculateProportionalSalary(structure, payableDays, workDays, { tdsEnabled: structure.tdsEnabled, employeePf: structure.pfEnabled })
-        : salaryCalculator.calculateNetSalary(structure, { tdsEnabled: structure.tdsEnabled, employeePf: structure.pfEnabled });
+        ? salaryCalculator.calculateProportionalSalary(structure, payableDays, workDays, calcOptions)
+        : salaryCalculator.calculateNetSalary(structure, calcOptions);
       calc.grossEarnings = money(calc.grossEarnings + arrears + incentives + otPay);
       calc.netSalary = money(calc.netSalary + arrears + incentives + otPay);
       calc.breakdowns.earnings.otherAllowance = money(calc.breakdowns.earnings.otherAllowance + arrears + incentives + otPay);
@@ -301,7 +325,7 @@ const runPayroll = async (req, res) => {
       totalTds += calc.breakdowns.deductions.tds;
       if (employee.joinDate) {
         const years = (new Date() - new Date(employee.joinDate)) / (365.25 * 24 * 60 * 60 * 1000);
-        totalGratuity += salaryCalculator.calculateGratuity(structure.basicSalary, years);
+        totalGratuity += salaryCalculator.calculateGratuity(structure.basicSalary, structure.da || 0, years);
       }
       records.push(record);
     }
@@ -448,7 +472,7 @@ const calculateEmployeeSalary = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { joinDate: true },
+      include: { addresses: true },
     });
 
     const targetMonth = parseInt(month) || new Date().getMonth() + 1;
@@ -461,11 +485,26 @@ const calculateEmployeeSalary = async (req, res) => {
     });
 
     const daysWorked = attendances.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
-    const workDays = 20;
+    const workDays = new Date(targetYear, targetMonth, 0).getDate();
+
+    const currentAddress = employee?.addresses?.find(a => a.type === 'CURRENT') || employee?.addresses?.[0];
+    const stateName = currentAddress ? currentAddress.state : 'DEFAULT';
+    const permanentGross = salaryCalculator.calculateGrossEarnings(structure);
+    const esiCycleEligible = permanentGross <= 21000;
+
+    const calcOptions = {
+      tdsEnabled: structure.tdsEnabled,
+      employeePf: structure.pfEnabled,
+      state: stateName,
+      gender: employee?.gender || 'Male',
+      month: targetMonth,
+      esiCycleEligible,
+      taxOptions: { regime: 'NEW' }
+    };
 
     const calc = daysWorked < workDays
-      ? salaryCalculator.calculateProportionalSalary(structure, daysWorked, workDays, { tdsEnabled: structure.tdsEnabled, employeePf: structure.pfEnabled })
-      : salaryCalculator.calculateNetSalary(structure, { tdsEnabled: structure.tdsEnabled, employeePf: structure.pfEnabled });
+      ? salaryCalculator.calculateProportionalSalary(structure, daysWorked, workDays, calcOptions)
+      : salaryCalculator.calculateNetSalary(structure, calcOptions);
 
     const yearsOfService = employee?.joinDate
       ? (new Date() - new Date(employee.joinDate)) / (365.25 * 24 * 60 * 60 * 1000)

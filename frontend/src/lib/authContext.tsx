@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * @fileoverview React Context for Authentication & Permissions.
+ * Manages user state, login/logout operations, and role-based / permission checks.
+ * Integrates with cookies and localstorage to persist authentication tokens.
+ * @module lib/authContext
+ */
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getProfile } from './api';
 

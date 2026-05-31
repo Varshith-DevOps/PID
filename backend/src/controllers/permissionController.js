@@ -1,20 +1,73 @@
-const prisma = require('../config/database');
+/**
+ * @fileoverview Permission management controller.
+ * Manages role-based and user-level RBAC permissions.
+ * Provides defaults per role and allows granular overrides.
+ * @module controllers/permissionController
+ */
 
-const MODULES = ['USERS', 'EMPLOYEES', 'ATTENDANCE', 'LEAVE', 'PAYROLL', 'REPORTS', 'SETTINGS'];
+const prisma = require('../config/database');
+const fs = require('fs');
+const path = require('path');
+const OVERRIDES_FILE = path.join(__dirname, '../config/rolePermissions.json');
+const CUSTOM_MODULES_FILE = path.join(__dirname, '../config/customModules.json');
+
+const MODULES = [
+  'USERS',
+  'EMPLOYEES',
+  'ATTENDANCE',
+  'LEAVE',
+  'PAYROLL',
+  'REPORTS',
+  'SETTINGS',
+  'RECRUITMENT',
+  'ONBOARDING',
+  'ACCOUNTS',
+  'PERFORMANCE',
+  'PROJECTS'
+];
+
+const getModulesList = () => {
+  try {
+    if (fs.existsSync(CUSTOM_MODULES_FILE)) {
+      const custom = JSON.parse(fs.readFileSync(CUSTOM_MODULES_FILE, 'utf8'));
+      if (Array.isArray(custom)) {
+        return [...new Set([...MODULES, ...custom])];
+      }
+    }
+  } catch (err) {
+    console.error('Failed to read custom modules:', err.message);
+  }
+  return MODULES;
+};
+
 const ACTIONS = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'];
-const ACCESS_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE'];
+const ACCESS_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE', 'RECRUITER', 'ONBOARDING', 'ACCOUNTS'];
 
 const ROLE_LABELS = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin',
   MANAGER: 'Manager',
   EMPLOYEE: 'Employee',
+  RECRUITER: 'Recruiter',
+  ONBOARDING: 'Onboarding Specialist',
+  ACCOUNTS: 'Accounts Officer',
 };
 
 const getDefaultPermissions = (role) => {
+  try {
+    if (fs.existsSync(OVERRIDES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8'));
+      if (data[role]) {
+        return data[role];
+      }
+    }
+  } catch (error) {
+    console.error('Error reading role permissions overrides:', error.message);
+  }
+
   const defaults = {
-    SUPER_ADMIN: MODULES.flatMap((m) => ACTIONS.map((a) => ({ module: m, action: a, isGranted: true }))),
-    ADMIN: MODULES.flatMap((m) => [
+    SUPER_ADMIN: getModulesList().flatMap((m) => ACTIONS.map((a) => ({ module: m, action: a, isGranted: true }))),
+    ADMIN: getModulesList().flatMap((m) => [
       { module: m, action: 'VIEW', isGranted: true },
       { module: m, action: 'CREATE', isGranted: true },
       { module: m, action: 'EDIT', isGranted: true },
@@ -32,6 +85,11 @@ const getDefaultPermissions = (role) => {
       { module: 'LEAVE', action: 'EDIT', isGranted: true },
       { module: 'REPORTS', action: 'VIEW', isGranted: true },
       { module: 'REPORTS', action: 'EXPORT', isGranted: true },
+      { module: 'PROJECTS', action: 'VIEW', isGranted: true },
+      { module: 'PROJECTS', action: 'CREATE', isGranted: true },
+      { module: 'PROJECTS', action: 'EDIT', isGranted: true },
+      { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
+      { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
     ],
     EMPLOYEE: [
       { module: 'EMPLOYEES', action: 'VIEW', isGranted: false },
@@ -39,6 +97,42 @@ const getDefaultPermissions = (role) => {
       { module: 'ATTENDANCE', action: 'CREATE', isGranted: true },
       { module: 'LEAVE', action: 'VIEW', isGranted: true },
       { module: 'LEAVE', action: 'CREATE', isGranted: true },
+      { module: 'ACCOUNTS', action: 'VIEW', isGranted: true },
+      { module: 'ACCOUNTS', action: 'CREATE', isGranted: true },
+    ],
+    RECRUITER: [
+      { module: 'RECRUITMENT', action: 'VIEW', isGranted: true },
+      { module: 'RECRUITMENT', action: 'CREATE', isGranted: true },
+      { module: 'RECRUITMENT', action: 'EDIT', isGranted: true },
+      { module: 'RECRUITMENT', action: 'DELETE', isGranted: true },
+      { module: 'RECRUITMENT', action: 'EXPORT', isGranted: true },
+      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
+      { module: 'PROJECTS', action: 'VIEW', isGranted: true },
+    ],
+    ONBOARDING: [
+      { module: 'ONBOARDING', action: 'VIEW', isGranted: true },
+      { module: 'ONBOARDING', action: 'CREATE', isGranted: true },
+      { module: 'ONBOARDING', action: 'EDIT', isGranted: true },
+      { module: 'ONBOARDING', action: 'DELETE', isGranted: true },
+      { module: 'ONBOARDING', action: 'EXPORT', isGranted: true },
+      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
+      { module: 'EMPLOYEES', action: 'CREATE', isGranted: true },
+      { module: 'EMPLOYEES', action: 'EDIT', isGranted: true },
+    ],
+    ACCOUNTS: [
+      { module: 'ACCOUNTS', action: 'VIEW', isGranted: true },
+      { module: 'ACCOUNTS', action: 'CREATE', isGranted: true },
+      { module: 'ACCOUNTS', action: 'EDIT', isGranted: true },
+      { module: 'ACCOUNTS', action: 'DELETE', isGranted: true },
+      { module: 'ACCOUNTS', action: 'EXPORT', isGranted: true },
+      { module: 'PAYROLL', action: 'VIEW', isGranted: true },
+      { module: 'PAYROLL', action: 'CREATE', isGranted: true },
+      { module: 'PAYROLL', action: 'EDIT', isGranted: true },
+      { module: 'PAYROLL', action: 'EXPORT', isGranted: true },
+      { module: 'REPORTS', action: 'VIEW', isGranted: true },
+      { module: 'REPORTS', action: 'EXPORT', isGranted: true },
+      { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
+      { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
     ],
   };
   return defaults[role] || [];
@@ -93,7 +187,7 @@ const buildRolePermission = async (role) => {
 const getRolePermissions = async (req, res) => {
   try {
     const roles = await Promise.all(ACCESS_ROLES.map(buildRolePermission));
-    res.json({ roles, modules: MODULES, actions: ACTIONS });
+    res.json({ roles, modules: getModulesList(), actions: ACTIONS });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -107,11 +201,32 @@ const updateRolePermissions = async (req, res) => {
     if (!ACCESS_ROLES.includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
     }
-    if (req.user.role === 'ADMIN' && role === 'SUPER_ADMIN') {
-      return res.status(403).json({ error: 'Cannot modify Super Admin permissions' });
+    if (req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only Super Admin can modify role permissions' });
     }
     if (!Array.isArray(permissions)) {
       return res.status(400).json({ error: 'Permissions must be an array' });
+    }
+
+    // Save to local overrides JSON
+    try {
+      let overrides = {};
+      if (fs.existsSync(OVERRIDES_FILE)) {
+        overrides = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8'));
+      }
+      overrides[role] = permissions.map((p) => ({
+        module: p.module,
+        action: p.action,
+        isGranted: p.isGranted,
+      }));
+
+      const dir = path.dirname(OVERRIDES_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(OVERRIDES_FILE, JSON.stringify(overrides, null, 2), 'utf8');
+    } catch (err) {
+      console.error('Failed to write role permissions overrides:', err.message);
     }
 
     const users = await prisma.user.findMany({
@@ -152,12 +267,8 @@ const updateUserPermissions = async (req, res) => {
     const targetUser = await prisma.user.findUnique({ where: { id: userId } });
     if (!targetUser) return res.status(404).json({ error: 'User not found' });
 
-    if (req.user.role === 'EMPLOYEE') return res.status(403).json({ error: 'Access denied' });
-    if (req.user.role === 'MANAGER' && targetUser.role === 'SUPER_ADMIN') {
-      return res.status(403).json({ error: 'Cannot modify Super Admin permissions' });
-    }
-    if (req.user.role === 'ADMIN' && targetUser.role === 'SUPER_ADMIN') {
-      return res.status(403).json({ error: 'Cannot modify Super Admin permissions' });
+    if (req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only Super Admin can modify user permissions' });
     }
 
     await prisma.permission.deleteMany({ where: { userId } });
@@ -218,6 +329,19 @@ const resetRoleToDefault = async (req, res) => {
       return res.status(403).json({ error: 'Only Super Admin can reset permissions' });
     }
 
+    // Delete override from local overrides JSON if it exists
+    try {
+      if (fs.existsSync(OVERRIDES_FILE)) {
+        const overrides = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8'));
+        if (overrides[role]) {
+          delete overrides[role];
+          fs.writeFileSync(OVERRIDES_FILE, JSON.stringify(overrides, null, 2), 'utf8');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update overrides file during reset:', err.message);
+    }
+
     const users = await prisma.user.findMany({
       where: { role },
       select: { id: true },
@@ -239,6 +363,51 @@ const resetRoleToDefault = async (req, res) => {
   }
 };
 
+const addCustomModule = async (req, res) => {
+  try {
+    if (req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only Super Admin can add custom modules' });
+    }
+    const { module: newModule } = req.body;
+    if (!newModule || typeof newModule !== 'string') {
+      return res.status(400).json({ error: 'Module name is required' });
+    }
+    const sanitizedModule = newModule.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    if (!sanitizedModule) {
+      return res.status(400).json({ error: 'Invalid module name' });
+    }
+
+    const currentModules = getModulesList();
+    if (currentModules.includes(sanitizedModule)) {
+      return res.status(400).json({ error: 'Module already exists' });
+    }
+
+    // Save to customModules.json
+    try {
+      let custom = [];
+      if (fs.existsSync(CUSTOM_MODULES_FILE)) {
+        custom = JSON.parse(fs.readFileSync(CUSTOM_MODULES_FILE, 'utf8'));
+      }
+      if (!custom.includes(sanitizedModule)) {
+        custom.push(sanitizedModule);
+        const dir = path.dirname(CUSTOM_MODULES_FILE);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(CUSTOM_MODULES_FILE, JSON.stringify(custom, null, 2), 'utf8');
+      }
+    } catch (err) {
+      console.error('Failed to save custom module:', err.message);
+      return res.status(500).json({ error: 'Failed to persist module' });
+    }
+
+    res.json({ success: true, module: sanitizedModule, modules: getModulesList() });
+  } catch (error) {
+    console.error('[ADD DYNAMIC MODULE ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   getUserPermissions,
   getAllPermissions,
@@ -248,6 +417,7 @@ module.exports = {
   resetToDefault,
   resetRoleToDefault,
   getDefaultPermissions,
+  addCustomModule,
   MODULES,
   ACTIONS,
   ACCESS_ROLES,

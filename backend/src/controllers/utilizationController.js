@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Utilization and dashboard controller.
+ * Provides employee utilization metrics, resource allocation tracking,
+ * and role-specific dashboards (admin, manager, employee, project).
+ * @module controllers/utilizationController
+ */
+
 const prisma = require('../config/database');
 
 const getEmployeeUtilization = async (req, res) => {
