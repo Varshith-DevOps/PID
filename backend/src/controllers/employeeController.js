@@ -10,6 +10,7 @@
 const prisma = require('../config/database');
 const path = require('path');
 const fs = require('fs');
+const { validatePAN, validateIFSC, validateAadhaar, validateUAN, validateBankAccount } = require('../services/validators');
 
 /**
  * Log a field-level change to the ChangeHistory audit trail.
@@ -151,6 +152,13 @@ const createEmployee = async (req, res) => {
       return res.status(400).json({ error: 'Required fields missing' });
     }
 
+    if (panNumber && !validatePAN(panNumber)) {
+      return res.status(400).json({ error: 'Invalid PAN Number format (must be 5 uppercase letters, 4 digits, 1 uppercase letter)' });
+    }
+    if (aadharNumber && !validateAadhaar(aadharNumber)) {
+      return res.status(400).json({ error: 'Invalid Aadhaar Number (must be 12 digits matching Verhoeff checksum and cannot start with 0 or 1)' });
+    }
+
     const existing = await prisma.employee.findUnique({ where: { email } });
     if (existing) return res.status(400).json({ error: 'Email already exists' });
 
@@ -247,6 +255,13 @@ const updateEmployee = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+
+    if (panNumber && !validatePAN(panNumber)) {
+      return res.status(400).json({ error: 'Invalid PAN Number format (must be 5 uppercase letters, 4 digits, 1 uppercase letter)' });
+    }
+    if (aadharNumber && !validateAadhaar(aadharNumber)) {
+      return res.status(400).json({ error: 'Invalid Aadhaar Number (must be 12 digits matching Verhoeff checksum and cannot start with 0 or 1)' });
+    }
 
     const updated = await prisma.employee.update({
       where: { id },
@@ -483,6 +498,13 @@ const upsertBankDetails = async (req, res) => {
       return res.status(400).json({ error: 'Bank name, account number, and IFSC code are required' });
     }
 
+    if (!validateBankAccount(accountNumber)) {
+      return res.status(400).json({ error: 'Invalid Bank Account Number (must be between 9 and 18 digits)' });
+    }
+    if (!validateIFSC(ifscCode)) {
+      return res.status(400).json({ error: 'Invalid IFSC Code (must be 4 letters, a zero, and 6 alphanumeric characters)' });
+    }
+
     const existing = await prisma.bankDetails.findUnique({ where: { employeeId: id } });
     let result;
     if (existing) {
@@ -511,6 +533,10 @@ const upsertPFDetails = async (req, res) => {
   try {
     const { id } = req.params;
     const { pfNumber, uanNumber, epsNumber, pfJoinDate, voluntaryPF, vpfPercentage, changeReason } = req.body;
+
+    if (uanNumber && !validateUAN(uanNumber)) {
+      return res.status(400).json({ error: 'Invalid UAN Number (must be a 12-digit number not starting with 0)' });
+    }
 
     const existing = await prisma.pFDetails.findUnique({ where: { employeeId: id } });
     let result;
@@ -689,18 +715,50 @@ const addSalaryRevision = async (req, res) => {
     // 3. Update salary structure if exists (Payroll sync)
     const struct = await prisma.salaryStructure.findUnique({ where: { employeeId: id } });
     if (struct) {
-      // Basic salary is typically 40-50% of monthly salary, but for simplicity we will just update standard allowances proportionally if needed.
-      // Assuming a simple 40% basic, 20% HRA, etc.
       const s = parseFloat(revisedSalary);
-      await prisma.salaryStructure.update({
-        where: { employeeId: id },
-        data: {
-          basicSalary: s * 0.4,
-          hra: s * 0.2,
-          specialAllowance: s * 0.4, // Simplified
-          effectiveFrom: new Date(effectiveDate)
+      const money = (val) => Math.round((Number(val) || 0) * 100) / 100;
+
+      if (struct.usePercentSettings) {
+        let settings = await prisma.payrollSettings.findFirst();
+        if (!settings) {
+          settings = await prisma.payrollSettings.create({ data: {} });
         }
-      });
+
+        const hraPercent = settings.hraPercent ?? 40.0;
+        const daPercent = settings.daPercent ?? 20.0;
+        const conveyancePercent = settings.conveyancePercent ?? 10.0;
+        const medicalPercent = settings.medicalPercent ?? 5.0;
+        const specialAllowancePercent = settings.specialAllowancePercent ?? 15.0;
+        const insurancePercent = settings.insurancePercent ?? 5.0;
+
+        // Gross = Basic * (1 + HRA% + DA% + Conveyance% + Medical% + Special%)
+        const multiplier = 1 + (hraPercent + daPercent + conveyancePercent + medicalPercent + specialAllowancePercent) / 100;
+        const basic = money(s / multiplier);
+
+        await prisma.salaryStructure.update({
+          where: { employeeId: id },
+          data: {
+            basicSalary: basic,
+            hra: money(basic * hraPercent / 100),
+            da: money(basic * daPercent / 100),
+            conveyance: money(basic * conveyancePercent / 100),
+            medical: money(basic * medicalPercent / 100),
+            specialAllowance: money(basic * specialAllowancePercent / 100),
+            insurance: money(basic * insurancePercent / 100),
+            effectiveFrom: new Date(effectiveDate)
+          }
+        });
+      } else {
+        await prisma.salaryStructure.update({
+          where: { employeeId: id },
+          data: {
+            basicSalary: s * 0.4,
+            hra: s * 0.2,
+            specialAllowance: s * 0.4,
+            effectiveFrom: new Date(effectiveDate)
+          }
+        });
+      }
     }
 
     res.json({ message: 'Salary revised successfully', employee: updatedEmp });

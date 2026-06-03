@@ -9,6 +9,7 @@ const submitRegularization = async (req, res) => {
       checkOutCorrection,
       statusCorrection,
       reason,
+      superAdminOverrideReason,
     } = req.body;
 
     if (!date || !requestType || !reason) {
@@ -22,6 +23,21 @@ const submitRegularization = async (req, res) => {
 
     const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
+
+    // Safeguard: Check payroll period lock status
+    const targetMonth = targetDate.getMonth() + 1;
+    const targetYear = targetDate.getFullYear();
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: { month: targetMonth, year: targetYear }
+    });
+
+    if (payrollRun && ['PROCESSED', 'LOCKED', 'FINALIZED'].includes(payrollRun.status)) {
+      if (req.user?.role === 'SUPER_ADMIN' && superAdminOverrideReason) {
+        console.log(`[SUPER_ADMIN OVERRIDE]: Bypassed payroll lock for date ${date}. Reason: ${superAdminOverrideReason}`);
+      } else {
+        return res.status(400).json({ error: 'Payroll period locked. Regularization not permitted for this period.' });
+      }
+    }
 
     const regularization = await prisma.attendanceRegularization.create({
       data: {
@@ -102,7 +118,7 @@ const getRegularizations = async (req, res) => {
 const actionRegularization = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, managerRemarks } = req.body; // 'APPROVED' or 'REJECTED'
+    const { status, managerRemarks, superAdminOverrideReason } = req.body; // 'APPROVED' or 'REJECTED'
 
     if (!status || !['APPROVED', 'REJECTED'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status. Must be APPROVED or REJECTED.' });
@@ -129,9 +145,24 @@ const actionRegularization = async (req, res) => {
       }
     }
 
-    // If APPROVED, update/recalculate Attendance record
+    // Safeguard: Check payroll period lock status
+    const targetDate = new Date(request.date);
+    const targetMonth = targetDate.getMonth() + 1;
+    const targetYear = targetDate.getFullYear();
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: { month: targetMonth, year: targetYear }
+    });
+
+    if (payrollRun && ['PROCESSED', 'LOCKED', 'FINALIZED'].includes(payrollRun.status)) {
+      if (req.user?.role === 'SUPER_ADMIN' && superAdminOverrideReason) {
+        console.log(`[SUPER_ADMIN OVERRIDE]: Bypassed payroll lock for actioning regularization. Reason: ${superAdminOverrideReason}`);
+      } else {
+        return res.status(400).json({ error: 'Payroll period locked. Regularization not permitted for this period.' });
+      }
+    }
+
+    // If APPROVED, update/recalculate Attendance record and preserve original punches
     if (status === 'APPROVED') {
-      const targetDate = new Date(request.date);
       targetDate.setHours(0, 0, 0, 0);
 
       // Find or create attendance record
@@ -153,7 +184,6 @@ const actionRegularization = async (req, res) => {
 
       // Late minutes recalculation
       let lateMinutes = 0;
-      // Get the shift for that date
       const activeAssignment = await prisma.shiftAssignment.findFirst({
         where: {
           employeeId: request.employeeId,
@@ -176,6 +206,10 @@ const actionRegularization = async (req, res) => {
       }
 
       if (attendance) {
+        // Preserve original checkIn / checkOut if they have not been preserved already
+        const origCheckIn = attendance.originalCheckIn ? attendance.originalCheckIn : attendance.checkIn;
+        const origCheckOut = attendance.originalCheckOut ? attendance.originalCheckOut : attendance.checkOut;
+
         await prisma.attendance.update({
           where: { id: attendance.id },
           data: {
@@ -184,6 +218,11 @@ const actionRegularization = async (req, res) => {
             workHours: workHours || undefined,
             status: attStatus,
             lateMinutes,
+            originalCheckIn: origCheckIn,
+            originalCheckOut: origCheckOut,
+            regularizedBy: req.user?.email || req.user?.id || 'SYSTEM',
+            regularizedAt: new Date(),
+            regularizationReason: request.reason,
           },
         });
       } else {
@@ -197,6 +236,11 @@ const actionRegularization = async (req, res) => {
             status: attStatus,
             lateMinutes,
             markedBy: req.user?.id,
+            originalCheckIn: null, // No original punch was on file
+            originalCheckOut: null,
+            regularizedBy: req.user?.email || req.user?.id || 'SYSTEM',
+            regularizedAt: new Date(),
+            regularizationReason: request.reason,
           },
         });
       }

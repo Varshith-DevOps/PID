@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/database');
 const { getDefaultPermissions } = require('./permissionController');
+const { validatePassword } = require('../services/validators');
 
 // ──── Login ────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,10 @@ const register = async (req, res) => {
 
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password and name required' });
+    }
+
+    if (!validatePassword(password)) {
+      return res.status(400).json({ error: 'Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character.' });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -182,8 +187,8 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ error: 'Current password and new password are required' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    if (!validatePassword(newPassword)) {
+      return res.status(400).json({ error: 'Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character.' });
     }
 
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });

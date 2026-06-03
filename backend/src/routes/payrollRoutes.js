@@ -13,6 +13,11 @@ const {
   calculateEmployeeSalary,
   getPayrollSettings,
   updatePayrollSettings,
+  reviewPayroll,
+  approvePayroll,
+  processPayroll,
+  rejectPayroll,
+  reversePayroll
 } = require('../controllers/payrollController');
 
 router.get('/settings', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getPayrollSettings);
@@ -29,4 +34,14 @@ router.get('/calculate/:employeeId', authenticate, rbacMiddleware('PAYROLL', 'VI
 
 router.post('/run', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), runPayroll);
 
+// Maker-Checker Approval Workflow
+router.post('/runs/review/:runId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'PAYROLL_REVIEWER'), reviewPayroll);
+router.post('/runs/approve/:runId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'PAYROLL_APPROVER'), approvePayroll);
+router.post('/runs/process/:runId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), processPayroll);
+router.post('/runs/reject/:runId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'PAYROLL_REVIEWER', 'PAYROLL_APPROVER'), rejectPayroll);
+
+// Reversal/Rollback
+router.post('/runs/reverse/:runId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), reversePayroll);
+
 module.exports = router;
+

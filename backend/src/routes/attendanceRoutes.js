@@ -16,8 +16,12 @@ const {
 router.get('/settings', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getSettingsHandler);
 router.put('/settings', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateSettings);
 
-router.post('/check-in', authenticate, checkIn);
-router.post('/check-out', authenticate, checkOut);
+const { validateAttendancePunch } = require('../middleware/attendanceValidation');
+const { syncBiometricPunches } = require('../controllers/attendanceSyncController');
+
+router.post('/check-in', authenticate, validateAttendancePunch, checkIn);
+router.post('/check-out', authenticate, validateAttendancePunch, checkOut);
+router.post('/sync', authenticate, syncBiometricPunches);
 
 router.get('/today', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getTodayAttendance);
 router.get('/employee/:employeeId', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getEmployeeAttendance);

@@ -3,3 +3,8 @@ build/
 dist/
 .env
 *.log
+.next/
+*.db-journal
+*.db-wal
+*.db-shm
+

@@ -64,7 +64,7 @@ export default function PayrollPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [structure, setStructure] = useState<any>(null);
-  const [form, setForm] = useState({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, esiEnabled: true, professionalTaxEnabled: true, insurance: 0, otherDeduction: 0 });
+  const [form, setForm] = useState({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, esiEnabled: true, professionalTaxEnabled: true, insurance: 0, otherDeduction: 0, usePercentSettings: true });
   const [processing, setProcessing] = useState(false);
   const [globalSettings, setGlobalSettings] = useState<any>(null);
   const previousMonth = new Date();
@@ -284,6 +284,55 @@ export default function PayrollPage() {
     }));
   };
 
+  const handleBasicSalaryChange = (basic: number) => {
+    if (form.usePercentSettings && globalSettings) {
+      const hra = Number((basic * (globalSettings.hraPercent ?? 40.0) / 100).toFixed(2));
+      const da = Number((basic * (globalSettings.daPercent ?? 20.0) / 100).toFixed(2));
+      const conveyance = Number((basic * (globalSettings.conveyancePercent ?? 10.0) / 100).toFixed(2));
+      const medical = Number((basic * (globalSettings.medicalPercent ?? 5.0) / 100).toFixed(2));
+      const specialAllowance = Number((basic * (globalSettings.specialAllowancePercent ?? 15.0) / 100).toFixed(2));
+      const insurance = Number((basic * (globalSettings.insurancePercent ?? 5.0) / 100).toFixed(2));
+
+      setForm({
+        ...form,
+        basicSalary: basic,
+        hra,
+        da,
+        conveyance,
+        medical,
+        specialAllowance,
+        insurance,
+      });
+    } else {
+      setForm({ ...form, basicSalary: basic });
+    }
+  };
+
+  const handleUsePercentToggle = (checked: boolean) => {
+    if (checked && globalSettings) {
+      const basic = form.basicSalary || 0;
+      const hra = Number((basic * (globalSettings.hraPercent ?? 40.0) / 100).toFixed(2));
+      const da = Number((basic * (globalSettings.daPercent ?? 20.0) / 100).toFixed(2));
+      const conveyance = Number((basic * (globalSettings.conveyancePercent ?? 10.0) / 100).toFixed(2));
+      const medical = Number((basic * (globalSettings.medicalPercent ?? 5.0) / 100).toFixed(2));
+      const specialAllowance = Number((basic * (globalSettings.specialAllowancePercent ?? 15.0) / 100).toFixed(2));
+      const insurance = Number((basic * (globalSettings.insurancePercent ?? 5.0) / 100).toFixed(2));
+
+      setForm({
+        ...form,
+        usePercentSettings: true,
+        hra,
+        da,
+        conveyance,
+        medical,
+        specialAllowance,
+        insurance,
+      });
+    } else {
+      setForm({ ...form, usePercentSettings: false });
+    }
+  };
+
   const loadStructure = async (empId: string) => {
     try {
       const data = await getSalaryStructure(empId);
@@ -305,10 +354,11 @@ export default function PayrollPage() {
           professionalTaxEnabled: data.professionalTaxEnabled !== false,
           insurance: data.insurance,
           otherDeduction: data.otherDeduction,
+          usePercentSettings: data.usePercentSettings !== false,
         });
       } else {
         setStructure(null);
-        setForm({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, esiEnabled: true, professionalTaxEnabled: true, insurance: 0, otherDeduction: 0 });
+        setForm({ basicSalary: 0, hra: 0, da: 0, conveyance: 0, medical: 0, specialAllowance: 0, otherAllowance: 0, pfEnabled: true, tdsEnabled: true, esiEnabled: true, professionalTaxEnabled: true, insurance: 0, otherDeduction: 0, usePercentSettings: true });
       }
     } catch (err) { console.error(err); }
   };
@@ -1133,19 +1183,46 @@ export default function PayrollPage() {
                 <>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Salary Structure — {selectedEmployee.firstName} {selectedEmployee.lastName}</h3>
                   <div className="form-grid">
-                    <div className="form-group"><label className="form-label">Basic Salary *</label><input type="number" value={form.basicSalary} onChange={(e) => setForm({ ...form, basicSalary: parseFloat(e.target.value) })} className="input-field" /></div>
-                    <div className="form-group"><label className="form-label">HRA</label><input type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: parseFloat(e.target.value) })} className="input-field" /></div>
-                    <div className="form-group"><label className="form-label">DA</label><input type="number" value={form.da} onChange={(e) => setForm({ ...form, da: parseFloat(e.target.value) })} className="input-field" /></div>
-                    <div className="form-group"><label className="form-label">Conveyance</label><input type="number" value={form.conveyance} onChange={(e) => setForm({ ...form, conveyance: parseFloat(e.target.value) })} className="input-field" /></div>
-                    <div className="form-group"><label className="form-label">Medical</label><input type="number" value={form.medical} onChange={(e) => setForm({ ...form, medical: parseFloat(e.target.value) })} className="input-field" /></div>
-                    <div className="form-group"><label className="form-label">Special Allowance</label><input type="number" value={form.specialAllowance} onChange={(e) => setForm({ ...form, specialAllowance: parseFloat(e.target.value) })} className="input-field" /></div>
-                    <div className="form-group"><label className="form-label">Insurance Deduction</label><input type="number" value={form.insurance} onChange={(e) => setForm({ ...form, insurance: parseFloat(e.target.value) })} className="input-field" /></div>
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                      <label className="checkbox-label" style={{ fontWeight: 600, color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input type="checkbox" checked={form.usePercentSettings} onChange={(e) => handleUsePercentToggle(e.target.checked)} />
+                        Auto-calculate allowances using Payroll Settings percentage
+                      </label>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Basic Salary *</label>
+                      <input type="number" value={form.basicSalary} onChange={(e) => handleBasicSalaryChange(parseFloat(e.target.value) || 0)} className="input-field" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">HRA {form.usePercentSettings && `(${globalSettings?.hraPercent ?? 40}%)`}</label>
+                      <input type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">DA {form.usePercentSettings && `(${globalSettings?.daPercent ?? 20}%)`}</label>
+                      <input type="number" value={form.da} onChange={(e) => setForm({ ...form, da: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Conveyance {form.usePercentSettings && `(${globalSettings?.conveyancePercent ?? 10}%)`}</label>
+                      <input type="number" value={form.conveyance} onChange={(e) => setForm({ ...form, conveyance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Medical {form.usePercentSettings && `(${globalSettings?.medicalPercent ?? 5}%)`}</label>
+                      <input type="number" value={form.medical} onChange={(e) => setForm({ ...form, medical: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Special Allowance {form.usePercentSettings && `(${globalSettings?.specialAllowancePercent ?? 15}%)`}</label>
+                      <input type="number" value={form.specialAllowance} onChange={(e) => setForm({ ...form, specialAllowance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Insurance Deduction {form.usePercentSettings && `(${globalSettings?.insurancePercent ?? 5}%)`}</label>
+                      <input type="number" value={form.insurance} onChange={(e) => setForm({ ...form, insurance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                    </div>
                     <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.pfEnabled} onChange={(e) => setForm({ ...form, pfEnabled: e.target.checked })} /> Enable EPF (12%)</label></div>
                     <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.esiEnabled} onChange={(e) => setForm({ ...form, esiEnabled: e.target.checked })} /> Enable ESI (0.75%)</label></div>
                     <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.professionalTaxEnabled} onChange={(e) => setForm({ ...form, professionalTaxEnabled: e.target.checked })} /> Enable Professional Tax (PT)</label></div>
                     <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.tdsEnabled} onChange={(e) => setForm({ ...form, tdsEnabled: e.target.checked })} /> Enable TDS (New Regime)</label></div>
                   </div>
-
+ 
                   {preview && (
                     <div className="glass-card mt-2" style={{ padding: '1.25rem' }}>
                       <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Monthly Calculation Preview (Indian Compliance)</h4>
@@ -1169,7 +1246,7 @@ export default function PayrollPage() {
                       </div>
                     </div>
                   )}
-
+ 
                   <button onClick={handleSaveStructure} className="btn btn-primary mt-2">Save Structure</button>
                 </>
               ) : (
@@ -1180,27 +1257,80 @@ export default function PayrollPage() {
         )}
 
         {view === 'settings' && globalSettings && (
-          <div className="glass-card" style={{ padding: '2rem', maxWidth: '600px' }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem' }}>Payroll Settings (PF, TDS, Gratuity)</h2>
-            <div style={{ display: 'grid', gap: '1rem' }}>
-              {[
-                { label: 'PF Rate', desc: 'Employee provident fund percentage', value: `${(globalSettings.pfRate * 100).toFixed(0)}%` },
-                { label: 'Max PF', desc: 'Maximum PF deduction per month', value: `$${globalSettings.maxPf}` },
-                { label: 'Gratuity Rate', desc: 'Gratuity calculation rate', value: `${(globalSettings.gratuityRate * 100).toFixed(2)}%` },
-                { label: 'TDS Enabled', desc: 'Tax deducted at source', value: globalSettings.tdsEnabled ? 'Yes' : 'No' },
-                { label: 'EPF Enabled', desc: 'Employee provident fund', value: globalSettings.epfEnabled ? 'Yes' : 'No' },
-              ].map((item) => (
-                <div key={item.label} className="glass-card" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <strong style={{ color: 'var(--text-primary)' }}>{item.label}</strong>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{item.desc}</div>
-                  </div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--accent-blue)' }}>{item.value}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', maxWidth: '1200px' }}>
+            <div className="glass-card" style={{ padding: '2rem' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Statutory Rates & Thresholds</h2>
+              <div style={{ display: 'grid', gap: '1.25rem' }}>
+                <div className="form-group">
+                  <label className="form-label">EPF Contribution Rate (Employee)</label>
+                  <input type="number" step="0.01" value={globalSettings.pfRate} onChange={(e) => setGlobalSettings({ ...globalSettings, pfRate: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>e.g. 0.12 for 12%</span>
                 </div>
-              ))}
+                <div className="form-group">
+                  <label className="form-label">Maximum Monthly EPF (₹)</label>
+                  <input type="number" value={globalSettings.maxPf} onChange={(e) => setGlobalSettings({ ...globalSettings, maxPf: parseFloat(e.target.value) || 0 })} className="input-field" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Gratuity Formula Rate</label>
+                  <input type="number" step="0.0001" value={globalSettings.gratuityRate} onChange={(e) => setGlobalSettings({ ...globalSettings, gratuityRate: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>e.g. 0.0481 (15/26 days per year of service)</span>
+                </div>
+                <div className="form-group" style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem' }}>
+                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={globalSettings.tdsEnabled} onChange={(e) => setGlobalSettings({ ...globalSettings, tdsEnabled: e.target.checked })} /> Enable TDS Projection
+                  </label>
+                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={globalSettings.epfEnabled} onChange={(e) => setGlobalSettings({ ...globalSettings, epfEnabled: e.target.checked })} /> Enable EPF Deduction
+                  </label>
+                </div>
+              </div>
             </div>
 
-            <div className="glass-card mt-2" style={{ padding: '1rem', borderLeft: '3px solid var(--warning)' }}>
+            <div className="glass-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Salary Component Allocations (% of Basic)</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label className="form-label">HRA %</label>
+                    <input type="number" value={globalSettings.hraPercent ?? 40} onChange={(e) => setGlobalSettings({ ...globalSettings, hraPercent: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">DA %</label>
+                    <input type="number" value={globalSettings.daPercent ?? 20} onChange={(e) => setGlobalSettings({ ...globalSettings, daPercent: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Conveyance %</label>
+                    <input type="number" value={globalSettings.conveyancePercent ?? 10} onChange={(e) => setGlobalSettings({ ...globalSettings, conveyancePercent: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Medical %</label>
+                    <input type="number" value={globalSettings.medicalPercent ?? 5} onChange={(e) => setGlobalSettings({ ...globalSettings, medicalPercent: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Special Allowance %</label>
+                    <input type="number" value={globalSettings.specialAllowancePercent ?? 15} onChange={(e) => setGlobalSettings({ ...globalSettings, specialAllowancePercent: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Insurance Deduction %</label>
+                    <input type="number" value={globalSettings.insurancePercent ?? 5} onChange={(e) => setGlobalSettings({ ...globalSettings, insurancePercent: parseFloat(e.target.value) || 0 })} className="input-field" />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                <button onClick={async () => {
+                  try {
+                    await updatePayrollSettings(globalSettings);
+                    alert('Payroll settings and component percentages updated successfully.');
+                    loadGlobalSettings();
+                  } catch (err) {
+                    alert('Failed to update settings');
+                  }
+                }} className="btn btn-primary">Save Settings</button>
+              </div>
+            </div>
+
+            <div className="glass-card" style={{ padding: '1rem', gridColumn: 'span 2', borderLeft: '3px solid var(--warning)' }}>
               <h4 style={{ marginBottom: '0.5rem', color: 'var(--warning)', fontSize: '0.9rem', fontWeight: 700 }}>Indian New Tax Slabs (Budget 2024-25 / 2026)</h4>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
                 <div>₹0 - ₹3.0L: Nil</div>

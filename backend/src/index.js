@@ -29,16 +29,25 @@ const shiftRoutes = require('./routes/shiftRoutes');
 const regularizationRoutes = require('./routes/regularizationRoutes');
 const checklistRoutes = require('./routes/checklistRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const taxRoutes = require('./routes/taxRoutes');
+const complianceRoutes = require('./routes/complianceRoutes');
+const fnfRoutes = require('./routes/fnfRoutes');
+const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
 
 const app = express();
 
 // ──── Global Middleware ────────────────────────────────────────────────────
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-/** Serve uploaded files as static assets */
+/** Serve uploaded and generated files as static assets */
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/public', express.static(path.join(__dirname, '../public')));
+app.use(auditPayrollMiddleware);
 
 // ──── API Routes ───────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
@@ -60,6 +69,9 @@ app.use('/api/shifts', shiftRoutes);
 app.use('/api/regularizations', regularizationRoutes);
 app.use('/api/checklists', checklistRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/tax', taxRoutes);
+app.use('/api/compliance', complianceRoutes);
+app.use('/api/fnf', fnfRoutes);
 
 /** Health check endpoint for monitoring and load balancers */
 app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));

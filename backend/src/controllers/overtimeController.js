@@ -16,13 +16,52 @@ const getSettings = async () => {
 };
 
 const detectAndCreateOvertime = async (employeeId, date, hoursWorked) => {
-  // Daily standard shift is 8 hours; any excess is overtime
-  const dailyStandardHours = 8;
+  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!employee) return null;
+
+  const activeAssignment = await prisma.shiftAssignment.findFirst({
+    where: {
+      employeeId,
+      startDate: { lte: new Date(date) },
+      OR: [{ endDate: null }, { endDate: { gte: new Date(date) } }]
+    },
+    include: { shiftType: true }
+  });
+
+  const dailyStandardHours = activeAssignment?.shiftType?.minimumWorkHours || 8;
   if (hoursWorked <= dailyStandardHours) return null;
 
   const otHours = hoursWorked - dailyStandardHours;
 
-  if (otHours <= 0) return null;
+  // Indian Factories Act Section 59 daily work hour warning (> 12 hours)
+  if (hoursWorked > 12) {
+    console.warn(`[Statutory warning]: Employee ${employeeId} worked ${hoursWorked} hours, exceeding the daily 12-hour limit under the Factories Act.`);
+  }
+
+  // Quarterly legal cap check (75 hours limit under state amendments)
+  const quarterStart = new Date(date);
+  const currentMonth = quarterStart.getMonth();
+  const quarterStartMonth = Math.floor(currentMonth / 3) * 3;
+  quarterStart.setMonth(quarterStartMonth, 1);
+  quarterStart.setHours(0, 0, 0, 0);
+
+  const quarterEnd = new Date(quarterStart);
+  quarterEnd.setMonth(quarterStartMonth + 3, 0);
+  quarterEnd.setHours(23, 59, 59, 999);
+
+  const totalQuarterOT = await prisma.overtime.aggregate({
+    where: {
+      employeeId,
+      status: 'APPROVED',
+      date: { gte: quarterStart, lte: quarterEnd }
+    },
+    _sum: { otHours: true }
+  });
+
+  const currentQuarterHours = totalQuarterOT._sum.otHours || 0;
+  if (currentQuarterHours + otHours > 75) {
+    console.warn(`[Statutory cap limit]: Employee ${employeeId} quarterly overtime is reaching ${currentQuarterHours + otHours} hours (legal limit: 75 hours).`);
+  }
 
   const existingOt = await prisma.overtime.findFirst({
     where: { employeeId, date: { gte: new Date(date).setHours(0, 0, 0, 0) } },
@@ -39,7 +78,7 @@ const detectAndCreateOvertime = async (employeeId, date, hoursWorked) => {
     data: {
       employeeId,
       date: new Date(date),
-      regularHours: 8,
+      regularHours: dailyStandardHours,
       otHours,
       status: 'PENDING',
     },
@@ -129,9 +168,15 @@ const rejectOvertime = async (req, res) => {
   }
 };
 
-const calculateOTPay = (basicSalary, otHours, settings) => {
-  const hourlyRate = basicSalary / (settings.standardHours || 176);
-  const otRate = hourlyRate * (settings.otMultiplier || 1.5);
+const calculateOTPay = (basicSalary, otHours, settings, employee) => {
+  const isIndia = !employee || !employee.timezone || employee.timezone === 'Asia/Kolkata';
+  const defaultMultiplier = isIndia ? 2.0 : 1.5;
+  const multiplier = settings?.otMultiplier !== undefined && settings.otMultiplier !== 1.5
+    ? settings.otMultiplier
+    : defaultMultiplier;
+
+  const hourlyRate = basicSalary / (settings?.standardHours || 176);
+  const otRate = hourlyRate * multiplier;
   return otHours * otRate;
 };
 
@@ -158,7 +203,7 @@ const getOTSummary = async (req, res) => {
 
     for (const ot of approvedOvertime) {
       const basicSalary = ot.employee.salaryStructure?.basicSalary || 0;
-      const otPay = calculateOTPay(basicSalary, ot.otHours, settings);
+      const otPay = calculateOTPay(basicSalary, ot.otHours, settings, ot.employee);
       totalOTPay += otPay;
 
       summary.push({

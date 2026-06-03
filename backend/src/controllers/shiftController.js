@@ -280,7 +280,17 @@ const getShiftAssignments = async (req, res) => {
 
 const createShiftAssignment = async (req, res) => {
   try {
-    const { employeeId, shiftTypeId, startDate, endDate, changeReason } = req.body;
+    const {
+      employeeId,
+      shiftTypeId,
+      startDate,
+      endDate,
+      changeReason,
+      womenSafetyConfirmed,
+      transportAssigned,
+      escortVendor,
+      approvalReference
+    } = req.body;
 
     if (!employeeId || !startDate) {
       return res.status(400).json({ error: 'Required fields missing (employeeId, startDate)' });
@@ -301,6 +311,18 @@ const createShiftAssignment = async (req, res) => {
 
     const startDateTime = new Date(startDate);
     startDateTime.setHours(0, 0, 0, 0);
+
+    const endDateTime = endDate ? new Date(endDate) : null;
+    if (endDateTime) {
+      endDateTime.setHours(23, 59, 59, 999);
+    }
+
+    const existing = await prisma.shiftAssignment.findFirst({
+      where: {
+        employeeId,
+        startDate: startDateTime,
+      },
+    });
 
     // Get previous shift type id
     const activeAssignment = await prisma.shiftAssignment.findFirst({
@@ -331,21 +353,95 @@ const createShiftAssignment = async (req, res) => {
           entityId: employeeId,
           oldDetails: previousShiftTypeId,
           newDetails: 'GENERAL',
-          ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+          ipAddress: req.ip || req.headers?.['x-forwarded-for'] || '127.0.0.1',
         }
       });
 
       return res.json({ message: 'Shift successfully reset to standard General Shift.' });
     }
 
-    // 3. Upsert Roster Assignment for that employee and startDate
-    const existing = await prisma.shiftAssignment.findFirst({
+    const targetShift = await prisma.shiftType.findUnique({ where: { id: shiftTypeId } });
+    if (!targetShift) return res.status(404).json({ error: 'Shift type not found' });
+
+    const targetEmp = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!targetEmp) return res.status(404).json({ error: 'Employee not found' });
+
+    // 3. Women Night Shift Safety Compliance (7 PM to 6 AM)
+    const isNightHour = (timeStr) => {
+      const [h] = timeStr.split(':').map(Number);
+      return h >= 19 || h < 6;
+    };
+    const isNightShift = isNightHour(targetShift.startTime) || isNightHour(targetShift.endTime);
+
+    if (targetEmp.gender?.toUpperCase() === 'FEMALE' && isNightShift) {
+      if (!womenSafetyConfirmed || !transportAssigned || !escortVendor) {
+        return res.status(400).json({
+          error: 'Women Night Shift Safety Violation: Night shifts for women require safety confirmation, transport assigned, and escort details.'
+        });
+      }
+      if (!targetEmp.emergencyContactPhone || !targetEmp.emergencyContactName) {
+        return res.status(400).json({
+          error: 'Women Night Shift Safety Violation: Emergency contact info missing on employee profile.'
+        });
+      }
+    }
+
+    // 4. Overlap Check
+    const overlapping = await prisma.shiftAssignment.findMany({
       where: {
         employeeId,
-        startDate: startDateTime,
-      },
+        id: existing ? { not: existing.id } : undefined,
+        OR: [
+          {
+            startDate: { lte: endDateTime || new Date('9999-12-31T23:59:59') },
+            endDate: { gte: startDateTime }
+          },
+          {
+            startDate: { lte: endDateTime || new Date('9999-12-31T23:59:59') },
+            endDate: null
+          }
+        ]
+      }
     });
 
+    if (overlapping.length > 0) {
+      return res.status(400).json({ error: 'Roster Overlap: Employee already has an active shift assignment during this period.' });
+    }
+
+    // 5. 11-Hour Minimum Rest Period Check between consecutive days
+    const prevDay = new Date(startDateTime);
+    prevDay.setDate(prevDay.getDate() - 1);
+    const nextDay = new Date(startDateTime);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const adjacentAssignments = await prisma.shiftAssignment.findMany({
+      where: {
+        employeeId,
+        startDate: { in: [prevDay, nextDay] }
+      },
+      include: { shiftType: true }
+    });
+
+    for (const adj of adjacentAssignments) {
+      const isPrev = adj.startDate.getTime() === prevDay.getTime();
+      const shift1 = isPrev ? adj.shiftType : targetShift;
+      const shift2 = isPrev ? targetShift : adj.shiftType;
+
+      const [h1, m1] = shift1.endTime.split(':').map(Number);
+      const [h2, m2] = shift2.startTime.split(':').map(Number);
+
+      const s1EndMin = h1 * 60 + m1 + (h1 < 12 ? 24 * 60 : 0);
+      const s2StartMin = 24 * 60 + h2 * 60 + m2;
+      const restMinutes = s2StartMin - s1EndMin;
+
+      if (restMinutes < 11 * 60) {
+        return res.status(400).json({
+          error: `Rest Period Violation: Minimum 11 hours of rest required between shifts. Currently: ${Math.round(restMinutes / 60)} hours.`
+        });
+      }
+    }
+
+    // 6. Upsert Assignment
     let assignment;
     if (existing) {
       assignment = await prisma.shiftAssignment.update({
@@ -355,7 +451,11 @@ const createShiftAssignment = async (req, res) => {
           previousShiftTypeId,
           changeReason: changeReason || null,
           changedBy: req.user?.email || req.user?.role || 'SYSTEM',
-          endDate: endDate ? new Date(endDate) : null,
+          endDate: endDateTime,
+          womenSafetyConfirmed: womenSafetyConfirmed || false,
+          transportAssigned: transportAssigned || false,
+          escortVendor: escortVendor || null,
+          approvalReference: approvalReference || null
         },
       });
     } else {
@@ -367,7 +467,11 @@ const createShiftAssignment = async (req, res) => {
           changeReason: changeReason || null,
           changedBy: req.user?.email || req.user?.role || 'SYSTEM',
           startDate: startDateTime,
-          endDate: endDate ? new Date(endDate) : null,
+          endDate: endDateTime,
+          womenSafetyConfirmed: womenSafetyConfirmed || false,
+          transportAssigned: transportAssigned || false,
+          escortVendor: escortVendor || null,
+          approvalReference: approvalReference || null
         },
       });
     }
@@ -382,7 +486,7 @@ const createShiftAssignment = async (req, res) => {
         entityId: employeeId,
         oldDetails: previousShiftTypeId,
         newDetails: shiftTypeId,
-        ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+        ipAddress: req.ip || req.headers?.['x-forwarded-for'] || '127.0.0.1',
       }
     });
 
