@@ -777,10 +777,13 @@ const uploadEmployeePhoto = async (req, res) => {
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
 
-    // Delete old photo if exists
+    // Delete old photo if exists (with path traversal protection)
     if (employee.photoUrl) {
+      const uploadsDir = path.resolve(__dirname, '../../uploads');
       const oldPath = path.resolve(employee.photoUrl);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      if (oldPath.startsWith(uploadsDir) && fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
+      }
     }
 
     const updated = await prisma.employee.update({

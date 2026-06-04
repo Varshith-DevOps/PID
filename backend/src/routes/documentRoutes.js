@@ -39,8 +39,38 @@ const storage = multer.diskStorage({
   },
 });
 
-/** File upload handler with 10MB size limit */
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+/** File upload handler with 10MB size limit and safe file type validation */
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedExtensions = /pdf|doc|docx|xls|xlsx|png|jpg|jpeg|gif|webp|csv|txt/;
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/webp',
+      'text/csv',
+      'text/plain'
+    ];
+
+    const ext = path.extname(file.originalname).toLowerCase();
+    const isValidExt = allowedExtensions.test(ext);
+    const isValidMime = allowedMimeTypes.includes(file.mimetype.toLowerCase());
+
+    if (isValidExt && isValidMime) {
+      return cb(null, true);
+    }
+    const err = new Error('Only safe document files (PDF, Word, Excel, CSV, TXT) and images are allowed.');
+    err.status = 400;
+    cb(err);
+  }
+});
 
 // ──── Routes ───────────────────────────────────────────────────────────────
 

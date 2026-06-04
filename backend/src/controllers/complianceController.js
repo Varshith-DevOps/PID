@@ -220,7 +220,7 @@ const bulkGenerateForm16Controller = async (req, res) => {
       include: { pfDetails: true, addresses: true }
     });
 
-    const outputDir = path.join(__dirname, '../../public/compliance/form16');
+    const outputDir = path.join(__dirname, '../../private/compliance/form16');
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -251,7 +251,7 @@ const bulkGenerateForm16Controller = async (req, res) => {
           employeeId: employee.employeeId,
           name: `${employee.firstName} ${employee.lastName}`,
           status: 'SUCCESS',
-          url: `/public/compliance/form16/${fileName}`
+          url: `/api/compliance/form16/download/${fileName}`
         });
       } catch (err) {
         results.push({
@@ -289,9 +289,53 @@ const bulkGenerateForm16Controller = async (req, res) => {
   }
 };
 
+const downloadForm16File = async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    // Validate filename to prevent path traversal
+    if (!/^[a-zA-Z0-9_-]+\.pdf$/.test(filename)) {
+      return res.status(400).json({ error: 'Invalid file format' });
+    }
+
+    const filePath = path.join(__dirname, '../../private/compliance/form16', filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Role-based or ownership check
+    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'ADMIN') {
+      // For standard employees, verify that the Form 16 matches their employee record
+      const parts = filename.split('_');
+      const employeeId = parts[1]; // Extract EMPXXXXX
+
+      if (!employeeId) {
+        return res.status(400).json({ error: 'Invalid filename structure' });
+      }
+
+      const employee = await prisma.employee.findUnique({
+        where: { employeeId },
+        select: { userId: true }
+      });
+
+      if (!employee || employee.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Access denied. You can only download your own Form 16.' });
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('DOWNLOAD FORM 16 ERROR:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   getPF_ECR,
   getESICReport: getESICReportController,
   getForm16: getForm16Controller,
-  bulkGenerateForm16: bulkGenerateForm16Controller
+  bulkGenerateForm16: bulkGenerateForm16Controller,
+  downloadForm16: downloadForm16File
 };

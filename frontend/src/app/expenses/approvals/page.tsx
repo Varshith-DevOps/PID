@@ -10,7 +10,7 @@ import {
   rejectClaim,
   getTravelAdvances,
   approveTravelAdvance,
-  settleAdvance,
+  settleTravelAdvance as settleAdvance,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 

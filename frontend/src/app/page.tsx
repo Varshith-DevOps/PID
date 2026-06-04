@@ -97,11 +97,13 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Footer hint */}
-        <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2rem' }}>
-          <strong>Admin:</strong> admin@hrms.com / admin123<br/>
-          <strong>Employees:</strong> &lt;name&gt;@company.com / employee123
-        </p>
+        {/* Footer hint - Development only */}
+        {process.env.NODE_ENV === 'development' && (
+          <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2rem' }}>
+            <strong>Admin:</strong> admin@hrms.com / admin123<br/>
+            <strong>Employees:</strong> &lt;name&gt;@company.com / employee123
+          </p>
+        )}
       </div>
     </div>
   );

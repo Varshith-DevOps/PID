@@ -27,6 +27,11 @@ interface ShiftType {
   allowedLatitude?: number;
   allowedLongitude?: number;
   allowedRadiusMeters?: number;
+  weeklyOffs?: string;
+  gracePeriod?: number;
+  minimumWorkHours?: number;
+  startDay?: string;
+  endDay?: string;
 }
 
 interface ShiftAssignment {
@@ -52,6 +57,9 @@ interface ShiftAssignment {
     endTime: string;
     shiftAllowance: number;
   };
+  changeReason?: string;
+  changedBy?: string;
+  createdAt?: string;
 }
 
 export default function ShiftsDashboard() {

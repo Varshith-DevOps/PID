@@ -430,7 +430,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               {selectedApplicant.coverLetter && (
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>Cover Letter & Introduction</label>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px', lineGap: 4 }}>{selectedApplicant.coverLetter}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px' }}>{selectedApplicant.coverLetter}</p>
                 </div>
               )}
 

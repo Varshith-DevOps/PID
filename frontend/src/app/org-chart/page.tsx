@@ -118,10 +118,11 @@ export default function OrgChartPage() {
   const isMatchOrHasMatchingChild = (node: OrgNode, query: string): boolean => {
     if (!query) return false;
     const q = query.toLowerCase();
-    const isCurrentMatch = 
+    const isCurrentMatch = !!(
       node.name.toLowerCase().includes(q) || 
       node.title.toLowerCase().includes(q) || 
-      node.department?.toLowerCase().includes(q);
+      node.department?.toLowerCase().includes(q)
+    );
       
     if (isCurrentMatch) return true;
     
@@ -136,7 +137,7 @@ export default function OrgChartPage() {
   const isExactMatch = (node: OrgNode, query: string): boolean => {
     if (!query) return false;
     const q = query.toLowerCase();
-    return (
+    return !!(
       node.name.toLowerCase().includes(q) || 
       node.title.toLowerCase().includes(q) || 
       node.department?.toLowerCase().includes(q)

@@ -70,7 +70,7 @@ export const resetPermissions = async (userId: string) => {
   return data;
 };
 
-export const getEmployees = async (params?: { departmentId?: string; search?: string; page?: number; limit?: number }) => {
+export const getEmployees = async (params?: { departmentId?: string; search?: string; page?: number; limit?: number; gender?: string; location?: string }) => {
   const { data } = await api.get('/employees', { params });
   return data;
 };
@@ -856,6 +856,44 @@ export const actionRegularization = async (id: string, payload: { status: 'APPRO
 export const getExecutiveSummary = async () => {
   const { data } = await api.get('/dashboard/summary');
   return data;
+};
+
+// ──── HRMS Reports & Analytics Module API Callers ────
+export const getStatutoryReport = async (type: string) => {
+  const { data } = await api.get(`/reports/statutory/${type}`);
+  return data;
+};
+
+export const getReportsPayroll = async (type: string) => {
+  const { data } = await api.get(`/reports/payroll/${type}`);
+  return data;
+};
+
+export const getAnalyticsReport = async (type: string) => {
+  const { data } = await api.get(`/reports/analytics/${type}`);
+  return data;
+};
+
+export const getDashboardData = async (role: string) => {
+  const { data } = await api.get(`/reports/dashboards/${role}`);
+  return data;
+};
+
+export const queryEmployeesReport = async (payload: { columns?: string[]; filters?: any[]; limit?: number; page?: number }) => {
+  const { data } = await api.post('/reports/query', payload);
+  return data;
+};
+
+export const downloadReportExport = async (payload: { reportType: string; filters?: any }) => {
+  const response = await api.post('/reports/export', payload, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `report-${Date.now()}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 };
 
 export default api;

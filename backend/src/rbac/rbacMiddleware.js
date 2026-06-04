@@ -66,7 +66,12 @@ const rbacMiddleware = (module, action) => {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-      const user = await prisma.user.findUnique({ where: { id: userId } });
+      // Consolidate user status check and permission lookup in one database query
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { permissions: true }
+      });
+
       if (!user || !user.isActive) {
         return res.status(403).json({ error: 'Access denied. Account inactive.' });
       }
@@ -78,8 +83,10 @@ const rbacMiddleware = (module, action) => {
 
       // Check specific module+action permission
       if (module && action) {
-        const hasPermission = await checkModulePermission(userId, module, action);
-        if (!hasPermission) {
+        const permission = user.permissions.find(
+          (p) => p.module === module && p.action === action
+        );
+        if (permission?.isGranted !== true) {
           return res.status(403).json({
             error: `Permission denied for ${module}.${action}`,
           });

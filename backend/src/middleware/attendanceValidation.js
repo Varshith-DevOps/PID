@@ -56,6 +56,13 @@ const validateAttendancePunch = async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden: Employee profile is inactive.' });
     }
 
+    // Verify ownership: Non-admin/non-manager roles can only punch for themselves
+    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'ADMIN' && req.user?.role !== 'MANAGER') {
+      if (employee.userId !== req.user.id) {
+        return res.status(403).json({ error: 'Forbidden: You cannot punch attendance for another employee.' });
+      }
+    }
+
     // 2. Replay attack prevention: Timestamp nonce validation (within 2 minutes)
     if (!timestamp) {
       return res.status(400).json({ error: 'Security: Missing request timestamp.' });

@@ -6,6 +6,7 @@
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const prisma = require('../config/database');
 const { getDefaultPermissions } = require('./permissionController');
 const { validatePassword } = require('../services/validators');
@@ -55,6 +56,13 @@ const login = async (req, res) => {
     // Find linked employee record for employee-specific features
     const employee = await prisma.employee.findFirst({ where: { userId: user.id } });
 
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    });
+
     res.json({
       token,
       user: {
@@ -100,7 +108,12 @@ const register = async (req, res) => {
 
     // Hash password with bcrypt (10 salt rounds)
     const hashedPassword = await bcrypt.hash(password, 10);
+    const validRoles = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE', 'RECRUITER', 'ONBOARDING', 'ACCOUNTS'];
     const userRole = role || 'EMPLOYEE';
+
+    if (!validRoles.includes(userRole)) {
+      return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+    }
 
     const user = await prisma.user.create({
       data: {
@@ -120,6 +133,13 @@ const register = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    });
 
     res.status(201).json({
       token,
@@ -224,11 +244,16 @@ const resetPasswordForUser = async (req, res) => {
     const { userId } = req.params;
     const { newPassword } = req.body;
 
+    // Defense-in-depth authorization check
+    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Access denied. Only administrators can reset passwords.' });
+    }
+
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Generate a temporary password if none provided
-    const tempPassword = newPassword || Math.random().toString(36).slice(-8) + 'A1!';
+    // Generate a secure temporary password if none provided
+    const tempPassword = newPassword || crypto.randomBytes(6).toString('hex') + 'A1!';
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     await prisma.user.update({

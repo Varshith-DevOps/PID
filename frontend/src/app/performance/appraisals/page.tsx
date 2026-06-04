@@ -22,6 +22,7 @@ interface Appraisal {
   managerRating?: number;
   managerFeedback?: string;
   finalRating?: number;
+  approvedBy?: string;
   status: string;
   employee: {
     id: string;

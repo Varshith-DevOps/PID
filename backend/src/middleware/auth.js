@@ -18,12 +18,17 @@ const jwt = require('jsonwebtoken');
  */
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
+  let token;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required. No token provided.' });
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required. No token provided.' });
+  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);

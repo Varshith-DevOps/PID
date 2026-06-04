@@ -8,6 +8,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 
 // ──── Route Imports ────────────────────────────────────────────────────────
 const authRoutes = require('./routes/authRoutes');
@@ -32,6 +33,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const taxRoutes = require('./routes/taxRoutes');
 const complianceRoutes = require('./routes/complianceRoutes');
 const fnfRoutes = require('./routes/fnfRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
 
 const app = express();
@@ -41,12 +43,12 @@ app.use(cors({
   origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : 'http://localhost:3000',
   credentials: true
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 /** Serve uploaded and generated files as static assets */
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-app.use('/public', express.static(path.join(__dirname, '../public')));
 app.use(auditPayrollMiddleware);
 
 // ──── API Routes ───────────────────────────────────────────────────────────
@@ -72,6 +74,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/tax', taxRoutes);
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/fnf', fnfRoutes);
+app.use('/api/reports', reportRoutes);
 
 /** Health check endpoint for monitoring and load balancers */
 app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
@@ -101,9 +104,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ──── Start Server ─────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`✅ HRMS Backend running on http://localhost:${PORT}`);
-  console.log(`📋 Health check: http://localhost:${PORT}/health`);
-});
+// Export app for testing
+module.exports = app;
+
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`✅ HRMS Backend running on http://localhost:${PORT}`);
+    console.log(`📋 Health check: http://localhost:${PORT}/health`);
+  });
+}
