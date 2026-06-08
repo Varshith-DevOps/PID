@@ -47,8 +47,7 @@ const STATUTORY_CONSTANTS = {
         { min: 10000, max: Infinity, rate: 200, gender: 'ALL', febRate: 300 } // February anomaly
       ],
       KARNATAKA: [
-        { min: 0, max: 15000, rate: 0, gender: 'ALL' },
-        { min: 15000, max: 25000, rate: 150, gender: 'ALL' },
+        { min: 0, max: 25000, rate: 0, gender: 'ALL' },
         { min: 25000, max: Infinity, rate: 200, gender: 'ALL' }
       ],
       TELANGANA: [

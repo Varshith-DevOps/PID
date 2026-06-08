@@ -70,7 +70,19 @@ const createLeaveRequest = async (req, res) => {
 
     const start = new Date(startDate);
     const end = new Date(endDate);
+    if (end < start) {
+      return res.status(400).json({ error: 'End date cannot be before start date' });
+    }
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    if (leaveType !== 'UNPAID') {
+      const year = start.getFullYear();
+      const balances = await buildLeaveBalance(employeeId, year);
+      const quota = balances.find(b => b.leaveType === leaveType);
+      if (quota && quota.remaining < days) {
+        return res.status(400).json({ error: `Insufficient leave balance. Remaining: ${quota.remaining} days, Requested: ${days} days.` });
+      }
+    }
 
     const leave = await prisma.leave.create({
       data: { employeeId, leaveType, startDate: start, endDate: end, days, reason },
@@ -111,6 +123,16 @@ const approveLeave = async (req, res) => {
     const { id } = req.params;
     const leave = await prisma.leave.findUnique({ where: { id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
+    if (leave.status !== 'PENDING') return res.status(400).json({ error: 'Leave request is already processed' });
+
+    if (leave.leaveType !== 'UNPAID') {
+      const year = new Date(leave.startDate).getFullYear();
+      const balances = await buildLeaveBalance(leave.employeeId, year);
+      const quota = balances.find(b => b.leaveType === leave.leaveType);
+      if (quota && quota.remaining < leave.days) {
+        return res.status(400).json({ error: `Insufficient leave balance. Remaining: ${quota.remaining} days, Requested: ${leave.days} days.` });
+      }
+    }
 
     const updated = await prisma.leave.update({
       where: { id },

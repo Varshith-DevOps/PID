@@ -66,9 +66,10 @@ const calculateFNFSettlement = async (employeeId) => {
   );
 
   // 2. Leave Encashment
-  // Query total active unused leave balance
+  // Query total active unused leave balance (restricted to ANNUAL leaves only)
   const activeQuotas = employee.leaveQuotas || [];
-  const unusedLeaves = activeQuotas.reduce((sum, quota) => sum + Math.max(0, quota.quota - quota.used), 0);
+  const annualQuotas = activeQuotas.filter(quota => quota.leaveType === 'ANNUAL');
+  const unusedLeaves = annualQuotas.reduce((sum, quota) => sum + Math.max(0, quota.quota - quota.used), 0);
   const dailyWagesRate = monthlyWages / 30; // standard 30 day divisor for encashment
   const leaveEncashmentPay = Math.round(unusedLeaves * dailyWagesRate * 100) / 100;
 
@@ -91,7 +92,13 @@ const calculateFNFSettlement = async (employeeId) => {
   );
 
   // 4. Notice Period Recovery / Shortfall
-  const noticeDaysShortfall = exit.noticePeriodDays ? Math.max(0, exit.noticePeriodDays - finalMonthDaysWorked) : 0;
+  let noticeDaysServed = 0;
+  if (exit.resignationDate && exit.lastWorkingDate) {
+    const resignation = new Date(exit.resignationDate);
+    const lwdDate = new Date(exit.lastWorkingDate);
+    noticeDaysServed = Math.max(0, Math.floor((lwdDate - resignation) / (24 * 60 * 60 * 1000)));
+  }
+  const noticeDaysShortfall = exit.noticePeriodDays ? Math.max(0, exit.noticePeriodDays - noticeDaysServed) : 0;
   const noticeRecoveryAmount = Math.round(noticeDaysShortfall * dailyWagesRate * 100) / 100;
 
   // 5. Total Gross F&F Earnings (before final tax)
@@ -100,8 +107,8 @@ const calculateFNFSettlement = async (employeeId) => {
 
   // 6. Final TDS balancing
   // Calculate final TDS on total FY income including F&F gross (less gratuity, which is exempt up to ₹25L)
-  // Gratuity is exempt u/s 10(10), so it is excluded from taxable gross
-  const fnfTaxableGrossComponent = finalMonthGross + leaveEncashmentPay;
+  // Gratuity is exempt u/s 10(10), so it is excluded from taxable gross. Notice recovery is deducted.
+  const fnfTaxableGrossComponent = Math.max(0, finalMonthGross + leaveEncashmentPay - noticeRecoveryAmount);
   
   const finalTdsResult = await projectTDS(
     employeeId,

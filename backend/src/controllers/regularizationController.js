@@ -195,10 +195,13 @@ const actionRegularization = async (req, res) => {
       const shift = (activeAssignment && activeAssignment.shiftType) ? activeAssignment.shiftType : { startTime: '09:00', gracePeriod: 15 };
 
       if (checkIn) {
-        const [hour, minute] = shift.startTime.split(':').map(Number);
-        const scheduledTime = new Date(checkIn);
-        scheduledTime.setHours(hour, minute, 0, 0);
-        lateMinutes = Math.max(0, Math.round((new Date(checkIn) - scheduledTime) / 60000));
+        const { toZonedTime, fromZonedTime, format } = require('date-fns-tz');
+        const timezone = request.employee.timezone || 'Asia/Kolkata';
+        const zonedCheckIn = toZonedTime(new Date(checkIn), timezone);
+        const localDayString = format(zonedCheckIn, 'yyyy-MM-dd', { timeZone: timezone });
+        const scheduledLocalStr = `${localDayString}T${shift.startTime}:00`;
+        const scheduledUtc = fromZonedTime(scheduledLocalStr, timezone);
+        lateMinutes = Math.max(0, Math.round((new Date(checkIn) - scheduledUtc) / 60000));
         const grace = shift.gracePeriod !== undefined ? shift.gracePeriod : 15;
         if (lateMinutes > grace && attStatus === 'PRESENT') {
           attStatus = 'LATE';

@@ -315,6 +315,9 @@ const createShiftAssignment = async (req, res) => {
     const endDateTime = endDate ? new Date(endDate) : null;
     if (endDateTime) {
       endDateTime.setHours(23, 59, 59, 999);
+      if (endDateTime < startDateTime) {
+        return res.status(400).json({ error: 'End date cannot be before start date' });
+      }
     }
 
     const existing = await prisma.shiftAssignment.findFirst({

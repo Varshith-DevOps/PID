@@ -7,18 +7,156 @@
 
 import axios from 'axios';
 
+type Listener<T> = (data: T) => void;
+
+class ApiEventEmitter {
+  private listeners: { [key: string]: Listener<any>[] } = {};
+
+  on<T>(event: string, callback: Listener<T>) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(callback);
+    return () => {
+      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+    };
+  }
+
+  emit<T>(event: string, data: T) {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach(cb => cb(data));
+    }
+  }
+}
+
+export const apiEvents = new ApiEventEmitter();
+
+function getFriendlySuccessMessage(method: string, url: string): string | null {
+  if (method !== 'post' && method !== 'put' && method !== 'delete') {
+    return null;
+  }
+  if (!url) return null;
+  const lowercaseUrl = url.toLowerCase();
+  
+  if (lowercaseUrl.includes('/auth/login')) {
+    return 'Logged in successfully';
+  }
+  if (lowercaseUrl.includes('/auth/change-password')) {
+    return 'Password changed successfully';
+  }
+  if (lowercaseUrl.includes('/auth/reset-password')) {
+    return 'Password reset successfully';
+  }
+  if (lowercaseUrl.includes('/leave')) {
+    if (method === 'post') return 'Leave applied successfully';
+    if (lowercaseUrl.includes('/approve')) return 'Leave request approved';
+    if (lowercaseUrl.includes('/reject')) return 'Leave request rejected';
+    if (lowercaseUrl.includes('/cancel')) return 'Leave request cancelled';
+    return 'Leave updated successfully';
+  }
+  if (lowercaseUrl.includes('/attendance/check-in')) {
+    return 'Checked in successfully';
+  }
+  if (lowercaseUrl.includes('/attendance/check-out')) {
+    return 'Checked out successfully';
+  }
+  if (lowercaseUrl.includes('/attendance/mark')) {
+    return 'Attendance marked successfully';
+  }
+  if (lowercaseUrl.includes('/payroll/run')) {
+    return 'Payroll run processed successfully';
+  }
+  if (lowercaseUrl.includes('/recruitment/offers')) {
+    return 'Job offer created successfully';
+  }
+  if (lowercaseUrl.includes('/projects/tasks')) {
+    if (method === 'post') return 'Task created successfully';
+    if (method === 'delete') return 'Task deleted successfully';
+    return 'Task updated successfully';
+  }
+  if (lowercaseUrl.includes('/projects')) {
+    if (method === 'post') return 'Project created successfully';
+    if (method === 'delete') return 'Project deleted successfully';
+    return 'Project updated successfully';
+  }
+  if (lowercaseUrl.includes('/employees')) {
+    if (method === 'post') return 'Employee profile created';
+    if (method === 'delete') return 'Employee profile deleted';
+    return 'Employee profile updated';
+  }
+  if (lowercaseUrl.includes('/expenses/claims')) {
+    if (method === 'post') return 'Expense claim submitted successfully';
+    if (lowercaseUrl.includes('/approve')) return 'Expense claim approved';
+    if (lowercaseUrl.includes('/reject')) return 'Expense claim rejected';
+    return 'Expense claim updated';
+  }
+  if (lowercaseUrl.includes('/shifts/assignments')) {
+    if (method === 'post') return 'Shift assigned successfully';
+    if (method === 'delete') return 'Shift assignment removed';
+    return 'Shift assignment updated';
+  }
+
+  if (method === 'post') return 'Record created successfully';
+  if (method === 'put') return 'Record updated successfully';
+  if (method === 'delete') return 'Record deleted successfully';
+  return null;
+}
+
+function getFriendlyErrorMessage(method: string, url: string, errorResponse: any): string | null {
+  if (method !== 'post' && method !== 'put' && method !== 'delete') {
+    return null;
+  }
+  if (!url) return 'An error occurred';
+  const lowercaseUrl = url.toLowerCase();
+  
+  if (lowercaseUrl.includes('/auth/login')) {
+    return 'Login error';
+  }
+  
+  const serverMsg = errorResponse?.data?.error || errorResponse?.data?.message;
+  if (serverMsg) return serverMsg;
+  
+  return 'Action failed';
+}
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+api.interceptors.request.use(
+  (config) => {
+    apiEvents.emit('request-start', config.url || '');
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    apiEvents.emit('request-end', error.config?.url || '');
+    return Promise.reject(error);
   }
-  return config;
-});
+);
+
+api.interceptors.response.use(
+  (response) => {
+    apiEvents.emit('request-end', response.config.url || '');
+    const method = response.config.method?.toLowerCase() || '';
+    const successMsg = getFriendlySuccessMessage(method, response.config.url || '');
+    if (successMsg) {
+      apiEvents.emit('toast-success', successMsg);
+    }
+    return response;
+  },
+  (error) => {
+    apiEvents.emit('request-end', error.config?.url || '');
+    const method = error.config?.method?.toLowerCase() || '';
+    const errorMsg = getFriendlyErrorMessage(method, error.config?.url || '', error.response);
+    if (errorMsg) {
+      apiEvents.emit('toast-error', errorMsg);
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const login = async (email: string, password: string) => {
   const { data } = await api.post('/auth/login', { email, password });

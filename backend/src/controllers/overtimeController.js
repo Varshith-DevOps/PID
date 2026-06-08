@@ -59,18 +59,24 @@ const detectAndCreateOvertime = async (employeeId, date, hoursWorked) => {
   });
 
   const currentQuarterHours = totalQuarterOT._sum.otHours || 0;
-  if (currentQuarterHours + otHours > 75) {
+  const exceedsLimit = currentQuarterHours + otHours > 75;
+  if (exceedsLimit) {
     console.warn(`[Statutory cap limit]: Employee ${employeeId} quarterly overtime is reaching ${currentQuarterHours + otHours} hours (legal limit: 75 hours).`);
   }
 
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
   const existingOt = await prisma.overtime.findFirst({
-    where: { employeeId, date: { gte: new Date(date).setHours(0, 0, 0, 0) } },
+    where: { employeeId, date: { gte: startOfDay, lte: endOfDay } },
   });
 
   if (existingOt) {
     return await prisma.overtime.update({
       where: { id: existingOt.id },
-      data: { otHours, updatedAt: new Date() },
+      data: { otHours, exceedsLimit, updatedAt: new Date() },
     });
   }
 
@@ -81,6 +87,7 @@ const detectAndCreateOvertime = async (employeeId, date, hoursWorked) => {
       regularHours: dailyStandardHours,
       otHours,
       status: 'PENDING',
+      exceedsLimit,
     },
   });
 };
@@ -168,16 +175,26 @@ const rejectOvertime = async (req, res) => {
   }
 };
 
-const calculateOTPay = (basicSalary, otHours, settings, employee) => {
+const calculateOTPay = (structureOrBasic, otHours, settings, employee) => {
   const isIndia = !employee || !employee.timezone || employee.timezone === 'Asia/Kolkata';
   const defaultMultiplier = isIndia ? 2.0 : 1.5;
   const multiplier = settings?.otMultiplier !== undefined && settings.otMultiplier !== 1.5
     ? settings.otMultiplier
     : defaultMultiplier;
 
-  const hourlyRate = basicSalary / (settings?.standardHours || 176);
+  let ordinaryWages = 0;
+  if (typeof structureOrBasic === 'object' && structureOrBasic !== null) {
+    const basic = structureOrBasic.basicSalary || 0;
+    const da = structureOrBasic.da || 0;
+    const allowances = (structureOrBasic.hra || 0) + (structureOrBasic.conveyance || 0) + (structureOrBasic.medical || 0) + (structureOrBasic.specialAllowance || 0) + (structureOrBasic.otherAllowance || 0);
+    ordinaryWages = basic + da + allowances;
+  } else {
+    ordinaryWages = Number(structureOrBasic) || 0;
+  }
+
+  const hourlyRate = ordinaryWages / (settings?.standardHours || 176);
   const otRate = hourlyRate * multiplier;
-  return otHours * otRate;
+  return Math.round(otHours * otRate * 100) / 100;
 };
 
 const getOTSummary = async (req, res) => {
@@ -203,7 +220,7 @@ const getOTSummary = async (req, res) => {
 
     for (const ot of approvedOvertime) {
       const basicSalary = ot.employee.salaryStructure?.basicSalary || 0;
-      const otPay = calculateOTPay(basicSalary, ot.otHours, settings, ot.employee);
+      const otPay = calculateOTPay(ot.employee.salaryStructure || basicSalary, ot.otHours, settings, ot.employee);
       totalOTPay += otPay;
 
       summary.push({

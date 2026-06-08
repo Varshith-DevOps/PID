@@ -254,6 +254,7 @@ model PFDetails {
   pfJoinDate    DateTime?
   voluntaryPF   Boolean   @default(false)
   vpfPercentage Float?
+  esiNumber     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -273,6 +274,7 @@ model ExitDetails {
   rehireEligible    Boolean   @default(true)
   fnfStatus         String    @default("PENDING")
   fnfAmount         Float?
+  remarks           String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -605,6 +607,7 @@ model Overtime {
   otHours       Float
   reason        String?
   status        String    @default("PENDING")
+  exceedsLimit  Boolean   @default(false)
   
   approvedBy    String?
   approvedAt    DateTime?

@@ -123,23 +123,73 @@ const getStatutoryReport = async (req, res) => {
     const { type } = req.params;
     const userRole = req.user?.role;
 
+    const month = req.query.month ? parseInt(req.query.month) : new Date().getMonth() + 1;
+    const year = req.query.year ? parseInt(req.query.year) : new Date().getFullYear();
+
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: {
+        month,
+        year,
+        status: { in: ['APPROVED', 'COMPLETED', 'PAID'] }
+      },
+      include: {
+        records: {
+          include: {
+            employee: {
+              include: {
+                pfDetails: true,
+                addresses: true
+              }
+            }
+          }
+        }
+      }
+    });
+
     if (type === 'epf') {
+      if (payrollRun) {
+        const data = payrollRun.records.map(rec => {
+          const emp = rec.employee;
+          const pfWages = Math.min(rec.basicSalary + rec.da, 15000);
+          const epsWages = Math.min(pfWages, 15000);
+          const employerEps = Math.round(epsWages * 0.0833 * 100) / 100;
+          const employerEpf = Math.max(0, rec.pf - employerEps);
+
+          return {
+            employeeId: emp.employeeId,
+            name: `${emp.firstName} ${emp.lastName}`,
+            uan: emp.pfDetails?.uanNumber || 'N/A',
+            pfWages: maskSalary(userRole, pfWages),
+            employeePf: maskSalary(userRole, rec.pf),
+            employerPf: maskSalary(userRole, employerEpf),
+            employerEps: maskSalary(userRole, employerEps),
+            location: emp.location || 'N/A'
+          };
+        });
+        return res.json({ data });
+      }
+
       const employees = await prisma.employee.findMany({
         where: { isActive: true },
         include: { pfDetails: true, salaryStructure: true }
       });
 
+      const salaryCalculator = require('../services/salaryService');
       const data = employees.map(emp => {
-        const pfWages = emp.salaryStructure?.basicSalary || (emp.salary * 0.5);
-        const cappedPF = Math.min(pfWages, 15000);
+        const struct = emp.salaryStructure;
+        const pfEnabled = struct?.pfEnabled !== false;
+        const basic = struct?.basicSalary || emp.salary * 0.5;
+        const da = struct?.da || 0;
+        const pf = salaryCalculator.calculatePF(basic, da, pfEnabled, struct?.vpfPercentage || 0);
+
         return {
           employeeId: emp.employeeId,
           name: `${emp.firstName} ${emp.lastName}`,
           uan: emp.pfDetails?.uanNumber || 'N/A',
-          pfWages: maskSalary(userRole, cappedPF),
-          employeePf: maskSalary(userRole, Math.round(cappedPF * 0.12)),
-          employerPf: maskSalary(userRole, Math.round(cappedPF * 0.0367)),
-          employerEps: maskSalary(userRole, Math.round(cappedPF * 0.0833)),
+          pfWages: maskSalary(userRole, Math.min(basic + da, 15000)),
+          employeePf: maskSalary(userRole, pf.employeePf),
+          employerPf: maskSalary(userRole, pf.employerEpf),
+          employerEps: maskSalary(userRole, pf.employerEps),
           location: emp.location || 'N/A'
         };
       });
@@ -147,51 +197,147 @@ const getStatutoryReport = async (req, res) => {
     }
 
     if (type === 'esi') {
+      if (payrollRun) {
+        const data = payrollRun.records
+          .filter(rec => rec.esi > 0)
+          .map(rec => {
+            const emp = rec.employee;
+            const employerContribution = Math.round(rec.grossEarnings * 0.0325 * 100) / 100;
+            return {
+              employeeId: emp.employeeId,
+              name: `${emp.firstName} ${emp.lastName}`,
+              esiWages: maskSalary(userRole, rec.grossEarnings),
+              employeeContribution: maskSalary(userRole, rec.esi),
+              employerContribution: maskSalary(userRole, employerContribution)
+            };
+          });
+        return res.json({ data });
+      }
+
       const employees = await prisma.employee.findMany({
-        where: { isActive: true, salary: { lte: 21000 } }
+        where: { isActive: true },
+        include: { salaryStructure: true }
       });
 
-      const data = employees.map(emp => {
-        const esiWages = emp.salary;
-        return {
-          employeeId: emp.employeeId,
-          name: `${emp.firstName} ${emp.lastName}`,
-          esiWages: maskSalary(userRole, esiWages),
-          employeeContribution: maskSalary(userRole, Math.round(esiWages * 0.0075 * 100) / 100),
-          employerContribution: maskSalary(userRole, Math.round(esiWages * 0.0325 * 100) / 100)
-        };
-      });
+      const salaryCalculator = require('../services/salaryService');
+      const data = [];
+      for (const emp of employees) {
+        const struct = emp.salaryStructure;
+        if (!struct) continue;
+        const gross = salaryCalculator.calculateGrossEarnings(struct);
+        if (gross > 21000) continue;
+
+        const esiEnabled = struct.esiEnabled !== false;
+        const esi = salaryCalculator.calculateESI(gross, esiEnabled);
+        if (esi.employeeEsi > 0) {
+          data.push({
+            employeeId: emp.employeeId,
+            name: `${emp.firstName} ${emp.lastName}`,
+            esiWages: maskSalary(userRole, gross),
+            employeeContribution: maskSalary(userRole, esi.employeeEsi),
+            employerContribution: maskSalary(userRole, esi.employerEsi)
+          });
+        }
+      }
       return res.json({ data });
     }
 
     if (type === 'pt') {
-      const employees = await prisma.employee.findMany({ where: { isActive: true } });
-      const data = employees.map(emp => {
-        const gross = emp.salary;
-        let pt = 0;
-        if (gross > 10000) pt = 200;
-        else if (gross > 7500) pt = 175;
+      if (payrollRun) {
+        const data = payrollRun.records.map(rec => {
+          const emp = rec.employee;
+          return {
+            employeeId: emp.employeeId,
+            name: `${emp.firstName} ${emp.lastName}`,
+            location: emp.location || 'N/A',
+            grossWages: maskSalary(userRole, rec.grossEarnings),
+            ptDeducted: maskSalary(userRole, rec.professionalTax)
+          };
+        });
+        return res.json({ data });
+      }
 
-        return {
+      const employees = await prisma.employee.findMany({
+        where: { isActive: true },
+        include: { salaryStructure: true, addresses: true }
+      });
+
+      const salaryCalculator = require('../services/salaryService');
+      const data = [];
+      for (const emp of employees) {
+        const struct = emp.salaryStructure;
+        if (!struct) continue;
+        const gross = salaryCalculator.calculateGrossEarnings(struct);
+        const currentAddress = emp.addresses?.find(a => a.type === 'CURRENT') || emp.addresses?.[0];
+        const stateName = currentAddress ? currentAddress.state : 'DEFAULT';
+
+        const pt = salaryCalculator.calculatePT(
+          gross,
+          struct.professionalTaxEnabled !== false,
+          stateName,
+          emp.gender || 'Male',
+          month
+        );
+
+        data.push({
           employeeId: emp.employeeId,
           name: `${emp.firstName} ${emp.lastName}`,
           location: emp.location || 'N/A',
           grossWages: maskSalary(userRole, gross),
           ptDeducted: maskSalary(userRole, pt)
-        };
-      });
+        });
+      }
       return res.json({ data });
     }
 
     if (type === 'lwf') {
-      const employees = await prisma.employee.findMany({ where: { isActive: true } });
-      const data = employees.map(emp => ({
-        employeeId: emp.employeeId,
-        name: `${emp.firstName} ${emp.lastName}`,
-        employeeContribution: 12,
-        employerContribution: 36,
-        totalContribution: 48
-      }));
+      if (payrollRun) {
+        const data = payrollRun.records
+          .filter(rec => rec.lwfEmployee > 0 || rec.lwfEmployer > 0)
+          .map(rec => {
+            const emp = rec.employee;
+            return {
+              employeeId: emp.employeeId,
+              name: `${emp.firstName} ${emp.lastName}`,
+              employeeContribution: rec.lwfEmployee,
+              employerContribution: rec.lwfEmployer,
+              totalContribution: rec.lwfEmployee + rec.lwfEmployer
+            };
+          });
+        return res.json({ data });
+      }
+
+      const employees = await prisma.employee.findMany({
+        where: { isActive: true },
+        include: { salaryStructure: true, addresses: true }
+      });
+
+      const salaryCalculator = require('../services/salaryService');
+      const data = [];
+      for (const emp of employees) {
+        const struct = emp.salaryStructure;
+        if (!struct) continue;
+        const gross = salaryCalculator.calculateGrossEarnings(struct);
+        const currentAddress = emp.addresses?.find(a => a.type === 'CURRENT') || emp.addresses?.[0];
+        const stateName = currentAddress ? currentAddress.state : 'DEFAULT';
+
+        const lwf = salaryCalculator.calculateLWF(
+          gross,
+          struct.lwfEnabled !== false,
+          stateName,
+          month
+        );
+
+        if (lwf.employeeLwf > 0 || lwf.employerLwf > 0) {
+          data.push({
+            employeeId: emp.employeeId,
+            name: `${emp.firstName} ${emp.lastName}`,
+            employeeContribution: lwf.employeeLwf,
+            employerContribution: lwf.employerLwf,
+            totalContribution: lwf.employeeLwf + lwf.employerLwf
+          });
+        }
+      }
       return res.json({ data });
     }
 

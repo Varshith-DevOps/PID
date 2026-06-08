@@ -437,11 +437,18 @@ const createJobOffer = async (req, res) => {
       return res.status(400).json({ error: 'Required offer details missing' });
     }
 
+    const joinDateTime = new Date(joiningDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (joinDateTime < today) {
+      return res.status(400).json({ error: 'Offered joining date cannot be in the past.' });
+    }
+
     const offer = await prisma.jobOffer.create({
       data: {
         applicantId,
         offeredSalary: parseFloat(offeredSalary),
-        joiningDate: new Date(joiningDate),
+        joiningDate: joinDateTime,
         status: 'SENT',
       },
     });

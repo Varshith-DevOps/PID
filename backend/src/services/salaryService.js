@@ -56,10 +56,27 @@ class SalaryCalculator {
     if (settings.restrictPfToCeiling !== undefined) this.restrictPfToCeiling = Boolean(settings.restrictPfToCeiling);
   }
 
-  calculateOTPay(basicSalary, otHours) {
-    const hourlyRate = basicSalary / this.standardHours;
-    const otRate = hourlyRate * this.otMultiplier;
-    return Math.round(otHours * otRate * 100) / 100;
+  calculateOTPay(basicSalary, daOrOtHours = 0, allowances = 0, otHours = null, settings = {}) {
+    let da = 0;
+    let otHrs = 0;
+    let otMult = this.otMultiplier;
+    let stdHrs = this.standardHours;
+
+    if (otHours === null) {
+      // Called with old signature: calculateOTPay(basicSalary, otHours)
+      otHrs = Number(daOrOtHours);
+    } else {
+      // Called with new signature: calculateOTPay(basicSalary, da, allowances, otHours, settings)
+      da = Number(daOrOtHours);
+      otHrs = Number(otHours);
+      if (settings?.otMultiplier !== undefined) otMult = Number(settings.otMultiplier);
+      if (settings?.standardHours !== undefined) stdHrs = Number(settings.standardHours);
+    }
+
+    const ordinaryWages = basicSalary + da + allowances;
+    const hourlyRate = ordinaryWages / stdHrs;
+    const otRate = hourlyRate * otMult;
+    return Math.round(otHrs * otRate * 100) / 100;
   }
 
   /**
@@ -94,9 +111,10 @@ class SalaryCalculator {
     const employerEpf = (pfWages * this.pfRate) - employerEps;
     const employerPf = employerEps + employerEpf;
 
-    // Admin charges (0.5% of PF wages) & EDLI (0.5% of PF wages)
+    // Admin charges (0.5% of PF wages) & EDLI (0.5% of PF wages capped at statutory ₹15,000 ceiling)
     const adminCharges = Math.round(pfWages * STATUTORY_CONSTANTS.PF.ADMIN_CHARGES_RATE * 100) / 100;
-    const edliCharges = Math.round(pfWages * STATUTORY_CONSTANTS.PF.EDLI_RATE * 100) / 100;
+    const edliWages = Math.min(basicSalary + da, STATUTORY_CONSTANTS.PF.WAGE_CEILING);
+    const edliCharges = Math.round(edliWages * STATUTORY_CONSTANTS.PF.EDLI_RATE * 100) / 100;
 
     return {
       employeePf: Math.round(employeePf * 100) / 100,
@@ -144,6 +162,9 @@ class SalaryCalculator {
     const slabs = STATUTORY_CONSTANTS.PT.SLABS[stateKey] || STATUTORY_CONSTANTS.PT.SLABS[state] || null;
 
     if (!slabs) {
+      if (state && state !== 'DEFAULT') {
+        return 0; // State explicitly set to a state without PT (e.g. Delhi, Haryana)
+      }
       // Fallback default
       return grossEarnings <= 25000 ? 0 : this.ptRate;
     }
@@ -158,10 +179,16 @@ class SalaryCalculator {
           continue;
         }
         // February anomaly handling
+        let rate = slab.rate;
         if (currentMonth === 2 && slab.febRate !== undefined) {
-          return slab.febRate;
+          rate = slab.febRate;
         }
-        return slab.rate;
+
+        // Tamil Nadu semi-annual rate pro-rating (divided by 6)
+        if (stateKey === 'TAMIL_NADU') {
+          return Math.round((rate / 6) * 100) / 100;
+        }
+        return rate;
       }
     }
 
@@ -238,7 +265,8 @@ class SalaryCalculator {
 
     if (!isEligible) return 0;
 
-    const completedYears = Math.min(Math.floor(yearsOfService), 30);
+    const frac = yearsOfService - Math.floor(yearsOfService);
+    const completedYears = frac > 0.5 ? Math.ceil(yearsOfService) : Math.floor(yearsOfService);
     const monthlyWages = basicSalary + da;
     const gratuity = (monthlyWages * STATUTORY_CONSTANTS.GRATUITY.FORMULA_MULTIPLIER) * completedYears;
 
@@ -516,8 +544,13 @@ class SalaryCalculator {
     const deductions = await this.calculateTotalDeductions(
       {
         ...structure,
-        basicSalary: baseSalary,
-        da: daSalary
+        basicSalary: earnings.basicSalary,
+        hra: earnings.hra,
+        da: earnings.da,
+        conveyance: earnings.conveyance,
+        medical: earnings.medical,
+        specialAllowance: earnings.specialAllowance,
+        otherAllowance: earnings.otherAllowance
       },
       options
     );

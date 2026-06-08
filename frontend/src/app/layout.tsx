@@ -1,4 +1,5 @@
 import { AuthProvider } from '@/lib/authContext';
+import { ToastProvider } from '@/lib/toastContext';
 import './globals.css';
 
 export const metadata = {
@@ -15,7 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#0a0e1a" />
       </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ToastProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -303,159 +303,179 @@ const runPayroll = async (req, res) => {
     const settings = await prisma.payrollSettings.findFirst();
     if (settings) salaryCalculator.updateSettings(settings);
 
-    // Delete reversed run if it was there to allow overwrite or upsert
-    if (existing && existing.status === 'REVERSED') {
-      await prisma.payrollRecord.deleteMany({ where: { payrollRunId: existing.id } });
-      await prisma.payrollRun.delete({ where: { id: existing.id } });
-    }
-
-    const payrollRun = await prisma.payrollRun.create({
-      data: {
-        month: targetMonth,
-        year: targetYear,
-        status: 'DRAFT',
-        processedBy: req.user?.email || 'admin@nexushr.com',
-        processedAt: new Date()
-      },
-    });
-
-    let totalAmount = 0;
-    let totalPf = 0;
-    let totalTds = 0;
-    let totalGratuity = 0;
-    const records = [];
-
-    for (const employee of employees) {
-      if (!employee.salaryStructure) continue;
-
-      const structure = employee.salaryStructure;
-      const empAttendance = attendances.filter((a) => a.employeeId === employee.id);
-      const daysWorked = empAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
-      const unpaidLeaves = leaveDeductions.filter((l) => l.employeeId === employee.id).reduce((sum, l) => sum + l.days, 0);
-      const workDays = new Date(targetYear, targetMonth, 0).getDate();
-      const payableDays = Math.max(0, workDays - unpaidLeaves);
-      const employeeAdjustments = adjustments[employee.id] || {};
-      let arrears = 0;
-      if (employeeAdjustments.arrears !== undefined) {
-        arrears = money(employeeAdjustments.arrears);
-      } else {
-        const arrearsResult = await calculateArrears(employee.id, targetMonth, targetYear);
-        arrears = arrearsResult.netArrears;
+    // Run the entire generation within an atomic transaction block
+    const transactionResult = await prisma.$transaction(async (tx) => {
+      // Delete reversed run if it was there to allow overwrite or upsert
+      if (existing && existing.status === 'REVERSED') {
+        await tx.payrollRecord.deleteMany({ where: { payrollRunId: existing.id } });
+        await tx.payrollRun.delete({ where: { id: existing.id } });
       }
-      const incentives = money(employeeAdjustments.incentives);
-      const otHours = approvedOvertime.filter((ot) => ot.employeeId === employee.id).reduce((sum, ot) => sum + ot.otHours, 0);
-      const otPay = money(salaryCalculator.calculateOTPay(structure.basicSalary, otHours));
 
-      const currentAddress = employee.addresses?.find(a => a.type === 'CURRENT') || employee.addresses?.[0];
-      const stateName = currentAddress ? currentAddress.state : 'DEFAULT';
-      const permanentGross = salaryCalculator.calculateGrossEarnings(structure);
-      const esiCycleEligible = permanentGross <= 21000;
-
-      const calcOptions = {
-        employeeId: employee.id,
-        tdsEnabled: structure.tdsEnabled,
-        employeePf: structure.pfEnabled,
-        state: stateName,
-        gender: employee.gender || 'Male',
-        month: targetMonth,
-        year: targetYear,
-        esiCycleEligible,
-        vpfPercentage: employee.pfDetails?.vpfPercentage || 0,
-        taxOptions: { regime: 'NEW' }
-      };
-
-      const calc = payableDays < workDays
-        ? await salaryCalculator.calculateProportionalSalary(structure, payableDays, workDays, calcOptions)
-        : await salaryCalculator.calculateNetSalary(structure, calcOptions);
-      
-      calc.grossEarnings = money(calc.grossEarnings + arrears + incentives + otPay);
-      calc.netSalary = money(calc.netSalary + arrears + incentives + otPay);
-      calc.breakdowns.earnings.otherAllowance = money(calc.breakdowns.earnings.otherAllowance + arrears + incentives + otPay);
-
-      const record = await prisma.payrollRecord.create({
+      const payrollRun = await tx.payrollRun.create({
         data: {
-          payrollRunId: payrollRun.id,
-          employeeId: employee.id,
-          basicSalary: calc.breakdowns.earnings.basicSalary,
-          hra: calc.breakdowns.earnings.hra,
-          da: calc.breakdowns.earnings.da,
-          conveyance: calc.breakdowns.earnings.conveyance,
-          medical: calc.breakdowns.earnings.medical,
-          specialAllowance: calc.breakdowns.earnings.specialAllowance,
-          otherAllowance: calc.breakdowns.earnings.otherAllowance,
-          grossEarnings: calc.grossEarnings,
-          pf: calc.breakdowns.deductions.employeePf,
-          vpfAmount: calc.breakdowns.deductions.vpfAmount || 0.0,
-          lwfEmployee: calc.breakdowns.deductions.employeeLwf || 0.0,
-          lwfEmployer: calc.breakdowns.deductions.employerLwf || 0.0,
-          npsEmployee: calc.breakdowns.deductions.employeeNps || 0.0,
-          npsEmployer: calc.breakdowns.deductions.employerNps || 0.0,
-          tax: calc.breakdowns.deductions.tds,
-          esi: calc.breakdowns.deductions.employeeEsi || 0,
-          professionalTax: calc.breakdowns.deductions.professionalTax || 0,
-          insurance: calc.breakdowns.deductions.insurance,
-          otherDeductions: calc.breakdowns.deductions.otherDeductions,
-          totalDeductions: calc.totalDeductions,
-          netSalary: calc.netSalary,
-          workDays,
-          daysWorked: payableDays,
-          leaves: unpaidLeaves,
-          deductions: unpaidLeaves * (structure.basicSalary / workDays),
-          lopDays: unpaidLeaves,
-          lopDeduction: money(unpaidLeaves * (structure.basicSalary / workDays)),
-          overtimeHours: otHours,
-          overtimePay: otPay,
-          arrears,
-          incentives,
-          incomeTaxDeclaration: confirmations.incomeTaxDeclaration === true,
-          investmentProofs: confirmations.investmentProofs === true,
-          complianceNotes: employeeAdjustments.notes || '',
-          status: 'PROCESSED'
+          month: targetMonth,
+          year: targetYear,
+          status: 'DRAFT',
+          processedBy: req.user?.email || 'admin@nexushr.com',
+          processedAt: new Date()
         },
       });
 
-      totalAmount += calc.netSalary;
-      totalPf += calc.breakdowns.deductions.employerPf;
-      totalTds += calc.breakdowns.deductions.tds;
-      if (employee.joinDate) {
-        const years = (new Date() - new Date(employee.joinDate)) / (365.25 * 24 * 60 * 60 * 1000);
-        totalGratuity += salaryCalculator.calculateGratuity(structure.basicSalary, structure.da || 0, years);
-      }
-      records.push(record);
-    }
+      let totalAmount = 0;
+      let totalPf = 0;
+      let totalTds = 0;
+      let totalGratuity = 0;
+      const records = [];
 
-    const updated = await prisma.payrollRun.update({
-      where: { id: payrollRun.id },
-      data: {
-        totalAmount,
-        employeeCount: records.length,
-        totalPf,
-        totalTds,
-        totalGratuity,
-      },
-    });
+      for (const employee of employees) {
+        if (!employee.salaryStructure) continue;
 
-    // Maker-checker approval logs
-    await prisma.payrollApproval.create({
-      data: {
-        payrollRunId: payrollRun.id,
-        action: 'DRAFT',
-        actorId: req.user?.id || 'admin-id',
-        actorEmail: req.user?.email || 'admin@nexushr.com',
-        comments: 'Payroll run generated as DRAFT.'
+        const structure = employee.salaryStructure;
+        const empAttendance = attendances.filter((a) => a.employeeId === employee.id);
+        const daysWorked = empAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
+        const unpaidLeavesRaw = leaveDeductions.filter((l) => l.employeeId === employee.id).reduce((sum, l) => sum + l.days, 0);
+        const workDays = new Date(targetYear, targetMonth, 0).getDate();
+        const unpaidLeaves = Math.min(workDays, unpaidLeavesRaw); // Cap LOP days at maximum calendar days in the month
+        const payableDays = Math.max(0, workDays - unpaidLeaves);
+        const employeeAdjustments = adjustments[employee.id] || {};
+        let arrears = 0;
+        if (employeeAdjustments.arrears !== undefined) {
+          arrears = money(employeeAdjustments.arrears);
+        } else {
+          const arrearsResult = await calculateArrears(employee.id, targetMonth, targetYear);
+          arrears = arrearsResult.netArrears;
+        }
+        const incentives = money(employeeAdjustments.incentives);
+        const otHours = approvedOvertime.filter((ot) => ot.employeeId === employee.id).reduce((sum, ot) => sum + ot.otHours, 0);
+        const otPay = money(salaryCalculator.calculateOTPay(
+          structure.basicSalary,
+          structure.da || 0,
+          (structure.hra || 0) + (structure.conveyance || 0) + (structure.medical || 0) + (structure.specialAllowance || 0) + (structure.otherAllowance || 0),
+          otHours,
+          settings
+        ));
+
+        const currentAddress = employee.addresses?.find(a => a.type === 'CURRENT') || employee.addresses?.[0];
+        const stateName = currentAddress ? currentAddress.state : 'DEFAULT';
+        const permanentGross = salaryCalculator.calculateGrossEarnings(structure);
+        const esiCycleEligible = permanentGross <= 21000;
+
+        const calcOptions = {
+          employeeId: employee.id,
+          tdsEnabled: structure.tdsEnabled,
+          employeePf: structure.pfEnabled,
+          state: stateName,
+          gender: employee.gender || 'Male',
+          month: targetMonth,
+          year: targetYear,
+          esiCycleEligible,
+          vpfPercentage: employee.pfDetails?.vpfPercentage || 0,
+          taxOptions: { regime: 'NEW' }
+        };
+
+        const calc = payableDays < workDays
+          ? await salaryCalculator.calculateProportionalSalary(structure, payableDays, workDays, calcOptions)
+          : await salaryCalculator.calculateNetSalary(structure, calcOptions);
+        
+        calc.grossEarnings = money(calc.grossEarnings + arrears + incentives + otPay);
+        calc.netSalary = money(calc.netSalary + arrears + incentives + otPay);
+        calc.breakdowns.earnings.otherAllowance = money(calc.breakdowns.earnings.otherAllowance + arrears + incentives + otPay);
+
+        const record = await tx.payrollRecord.create({
+          data: {
+            payrollRunId: payrollRun.id,
+            employeeId: employee.id,
+            basicSalary: calc.breakdowns.earnings.basicSalary,
+            hra: calc.breakdowns.earnings.hra,
+            da: calc.breakdowns.earnings.da,
+            conveyance: calc.breakdowns.earnings.conveyance,
+            medical: calc.breakdowns.earnings.medical,
+            specialAllowance: calc.breakdowns.earnings.specialAllowance,
+            otherAllowance: calc.breakdowns.earnings.otherAllowance,
+            grossEarnings: calc.grossEarnings,
+            pf: calc.breakdowns.deductions.employeePf,
+            vpfAmount: calc.breakdowns.deductions.vpfAmount || 0.0,
+            lwfEmployee: calc.breakdowns.deductions.employeeLwf || 0.0,
+            lwfEmployer: calc.breakdowns.deductions.employerLwf || 0.0,
+            npsEmployee: calc.breakdowns.deductions.employeeNps || 0.0,
+            npsEmployer: calc.breakdowns.deductions.employerNps || 0.0,
+            tax: calc.breakdowns.deductions.tds,
+            esi: calc.breakdowns.deductions.employeeEsi || 0,
+            professionalTax: calc.breakdowns.deductions.professionalTax || 0,
+            insurance: calc.breakdowns.deductions.insurance,
+            otherDeductions: calc.breakdowns.deductions.otherDeductions,
+            totalDeductions: calc.totalDeductions,
+            netSalary: calc.netSalary,
+            workDays,
+            daysWorked: payableDays,
+            leaves: unpaidLeaves,
+            deductions: unpaidLeaves * (structure.basicSalary / workDays),
+            lopDays: unpaidLeaves,
+            lopDeduction: money(unpaidLeaves * (structure.basicSalary / workDays)),
+            overtimeHours: otHours,
+            overtimePay: otPay,
+            arrears,
+            incentives,
+            incomeTaxDeclaration: confirmations.incomeTaxDeclaration === true,
+            investmentProofs: confirmations.investmentProofs === true,
+            complianceNotes: employeeAdjustments.notes || '',
+            status: 'PROCESSED'
+          },
+        });
+
+        totalAmount += calc.netSalary;
+        totalPf += calc.breakdowns.deductions.employerPf;
+        totalTds += calc.breakdowns.deductions.tds;
+        if (employee.joinDate) {
+          const years = (new Date() - new Date(employee.joinDate)) / (365.25 * 24 * 60 * 60 * 1000);
+          totalGratuity += salaryCalculator.calculateGratuity(structure.basicSalary, structure.da || 0, years);
+        }
+        records.push(record);
       }
+
+      const updated = await tx.payrollRun.update({
+        where: { id: payrollRun.id },
+        data: {
+          totalAmount,
+          employeeCount: records.length,
+          totalPf,
+          totalTds,
+          totalGratuity,
+        },
+      });
+
+      // Maker-checker approval logs
+      await tx.payrollApproval.create({
+        data: {
+          payrollRunId: payrollRun.id,
+          action: 'DRAFT',
+          actorId: req.user?.id || 'admin-id',
+          actorEmail: req.user?.email || 'admin@nexushr.com',
+          comments: 'Payroll run generated as DRAFT.'
+        }
+      });
+
+      return { updated, records, totalPf, totalTds, totalGratuity };
     });
 
     await logPayrollEvent({
       userEmail: req.user?.email || 'admin@nexushr.com',
       action: 'PAYROLL_DRAFT_CREATED',
       entity: 'PayrollRun',
-      entityId: payrollRun.id,
-      newDetails: updated,
+      entityId: transactionResult.updated.id,
+      newDetails: transactionResult.updated,
       ipAddress: req.ip
     });
 
-    res.json({ payrollRun: updated, records, summary: { totalPf, totalTds, totalGratuity } });
+    res.json({
+      payrollRun: transactionResult.updated,
+      records: transactionResult.records,
+      summary: {
+        totalPf: transactionResult.totalPf,
+        totalTds: transactionResult.totalTds,
+        totalGratuity: transactionResult.totalGratuity
+      }
+    });
   } catch (error) {
     console.error('RUN PAYROLL ERROR:', error);
     res.status(500).json({ error: 'Server error' });

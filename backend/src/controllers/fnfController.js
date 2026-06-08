@@ -45,7 +45,7 @@ const finalizeFNFSettlement = async (req, res) => {
       await tx.exitDetails.update({
         where: { employeeId },
         data: {
-          status: 'COMPLETED',
+          fnfStatus: 'COMPLETED',
           remarks: remarks || 'F&F Finalized successfully.'
         }
       });
