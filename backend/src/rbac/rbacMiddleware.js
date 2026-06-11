@@ -10,6 +10,7 @@
  */
 
 const prisma = require('../config/database');
+const { getDefaultPermissions } = require('../controllers/permissionController');
 
 /** Roles that bypass all permission checks */
 const SUPER_ADMIN_ROLES = ['SUPER_ADMIN'];
@@ -46,7 +47,12 @@ const checkModulePermission = async (userId, module, action) => {
   const permission = user.permissions.find(
     (p) => p.module === module && p.action === action
   );
-  return permission?.isGranted === true;
+  if (permission) return permission.isGranted === true;
+
+  const defaultPermission = getDefaultPermissions(user.role).find(
+    (p) => p.module === module && p.action === action
+  );
+  return defaultPermission?.isGranted === true;
 };
 
 /**
@@ -86,7 +92,12 @@ const rbacMiddleware = (module, action) => {
         const permission = user.permissions.find(
           (p) => p.module === module && p.action === action
         );
-        if (permission?.isGranted !== true) {
+        const defaultPermission = permission ? null : getDefaultPermissions(user.role).find(
+          (p) => p.module === module && p.action === action
+        );
+        const isGranted = permission ? permission.isGranted === true : defaultPermission?.isGranted === true;
+
+        if (!isGranted) {
           return res.status(403).json({
             error: `Permission denied for ${module}.${action}`,
           });

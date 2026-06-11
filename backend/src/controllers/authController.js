@@ -108,7 +108,19 @@ const register = async (req, res) => {
 
     // Hash password with bcrypt (10 salt rounds)
     const hashedPassword = await bcrypt.hash(password, 10);
-    const validRoles = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE', 'RECRUITER', 'ONBOARDING', 'ACCOUNTS'];
+    const validRoles = [
+      'SUPER_ADMIN',
+      'ADMIN',
+      'HR',
+      'MANAGER',
+      'EMPLOYEE',
+      'RECRUITER',
+      'ONBOARDING',
+      'ACCOUNTS',
+      'FINANCE',
+      'PAYROLL_REVIEWER',
+      'PAYROLL_APPROVER',
+    ];
     const userRole = role || 'EMPLOYEE';
 
     if (!validRoles.includes(userRole)) {

@@ -5,6 +5,7 @@
  */
 
 const jwt = require('jsonwebtoken');
+const prisma = require('../config/database');
 
 /**
  * Middleware to authenticate requests via JWT Bearer token.
@@ -16,7 +17,7 @@ const jwt = require('jsonwebtoken');
  * @param {import('express').NextFunction} next - Express next function
  * @returns {void}
  */
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   let token;
 
@@ -32,7 +33,21 @@ const authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      include: { employee: { select: { id: true, employeeId: true } } },
+    });
+
+    if (!user || !user.isActive) {
+      return res.status(403).json({ error: 'Access denied. Account inactive.' });
+    }
+
+    req.user = {
+      ...decoded,
+      role: user.role,
+      employeeId: user.employee?.id || null,
+      employeeCode: user.employee?.employeeId || null,
+    };
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Invalid or expired token' });

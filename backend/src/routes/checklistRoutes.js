@@ -7,6 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
+const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
 const {
   getTemplates,
   createTemplate,
@@ -24,19 +25,19 @@ const {
 router.use(authenticate);
 
 // ──── Templates CRUD ────────────────────────────────────────────────────────
-router.get('/templates', getTemplates);
-router.post('/templates', createTemplate);
-router.put('/templates/:id', updateTemplate);
-router.delete('/templates/:id', deleteTemplate);
+router.get('/templates', rbacMiddleware('ONBOARDING', 'VIEW'), getTemplates);
+router.post('/templates', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'ONBOARDING'), rbacMiddleware('ONBOARDING', 'CREATE'), createTemplate);
+router.put('/templates/:id', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'ONBOARDING'), rbacMiddleware('ONBOARDING', 'EDIT'), updateTemplate);
+router.delete('/templates/:id', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'ONBOARDING'), rbacMiddleware('ONBOARDING', 'DELETE'), deleteTemplate);
 
 // ──── Instantiated Employee Tasks ───────────────────────────────────────────
-router.get('/employee/:employeeId', getEmployeeChecklistTasks);
-router.post('/employee/:employeeId/instantiate', instantiateEmployeeChecklist);
-router.put('/tasks/:taskId', updateEmployeeChecklistTask);
-router.post('/tasks', createCustomChecklistTask);
+router.get('/employee/:employeeId', rbacMiddleware('ONBOARDING', 'VIEW'), getEmployeeChecklistTasks);
+router.post('/employee/:employeeId/instantiate', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'ONBOARDING'), rbacMiddleware('ONBOARDING', 'CREATE'), instantiateEmployeeChecklist);
+router.put('/tasks/:taskId', rbacMiddleware('ONBOARDING', 'EDIT'), updateEmployeeChecklistTask);
+router.post('/tasks', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'ONBOARDING'), rbacMiddleware('ONBOARDING', 'CREATE'), createCustomChecklistTask);
 
 // ──── Stage Transition Automations ──────────────────────────────────────────
-router.post('/employee/:employeeId/complete-onboarding', completeOnboarding);
-router.post('/employee/:employeeId/complete-offboarding', completeOffboarding);
+router.post('/employee/:employeeId/complete-onboarding', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'ONBOARDING'), rbacMiddleware('ONBOARDING', 'EDIT'), completeOnboarding);
+router.post('/employee/:employeeId/complete-offboarding', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'ONBOARDING'), rbacMiddleware('ONBOARDING', 'EDIT'), completeOffboarding);
 
 module.exports = router;

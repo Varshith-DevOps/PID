@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
+const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
 const {
   getKras,
   createKra,
@@ -23,19 +24,19 @@ const {
 router.use(authenticate);
 
 // ──── KRAs / Goals Endpoints ──────────────────────────────────────────────
-router.get('/kras', getKras);
-router.post('/kras', createKra);
-router.put('/kras/:id', updateKra);
-router.delete('/kras/:id', deleteKra);
+router.get('/kras', rbacMiddleware('PERFORMANCE', 'VIEW'), getKras);
+router.post('/kras', rbacMiddleware('PERFORMANCE', 'CREATE'), createKra);
+router.put('/kras/:id', rbacMiddleware('PERFORMANCE', 'EDIT'), updateKra);
+router.delete('/kras/:id', requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), rbacMiddleware('PERFORMANCE', 'DELETE'), deleteKra);
 
 // ──── Appraisals Endpoints ──────────────────────────────────────────────────
-router.get('/appraisals', getAppraisals);
-router.post('/appraisals', createAppraisal);
-router.put('/appraisals/:id/self', submitSelfEvaluation);
-router.put('/appraisals/:id/manager', submitManagerEvaluation);
+router.get('/appraisals', rbacMiddleware('PERFORMANCE', 'VIEW'), getAppraisals);
+router.post('/appraisals', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('PERFORMANCE', 'CREATE'), createAppraisal);
+router.put('/appraisals/:id/self', rbacMiddleware('PERFORMANCE', 'EDIT'), submitSelfEvaluation);
+router.put('/appraisals/:id/manager', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('PERFORMANCE', 'EDIT'), submitManagerEvaluation);
 
 // ──── 360 continuous Feedback Endpoints ─────────────────────────────────────
-router.get('/feedback360', getFeedback360);
-router.post('/feedback360', submitFeedback360);
+router.get('/feedback360', rbacMiddleware('PERFORMANCE', 'VIEW'), getFeedback360);
+router.post('/feedback360', rbacMiddleware('PERFORMANCE', 'CREATE'), submitFeedback360);
 
 module.exports = router;

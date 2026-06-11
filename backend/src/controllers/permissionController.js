@@ -17,13 +17,20 @@ const MODULES = [
   'ATTENDANCE',
   'LEAVE',
   'PAYROLL',
+  'COMPLIANCE',
   'REPORTS',
   'SETTINGS',
   'RECRUITMENT',
   'ONBOARDING',
   'ACCOUNTS',
+  'EXPENSES',
   'PERFORMANCE',
-  'PROJECTS'
+  'PROJECTS',
+  'ASSETS',
+  'LEARNING',
+  'HELPDESK',
+  'WORKFLOWS',
+  'NOTIFICATIONS'
 ];
 
 const getModulesList = () => {
@@ -41,16 +48,32 @@ const getModulesList = () => {
 };
 
 const ACTIONS = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'];
-const ACCESS_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE', 'RECRUITER', 'ONBOARDING', 'ACCOUNTS'];
+const ACCESS_ROLES = [
+  'SUPER_ADMIN',
+  'ADMIN',
+  'HR',
+  'MANAGER',
+  'EMPLOYEE',
+  'RECRUITER',
+  'ONBOARDING',
+  'ACCOUNTS',
+  'FINANCE',
+  'PAYROLL_REVIEWER',
+  'PAYROLL_APPROVER'
+];
 
 const ROLE_LABELS = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin',
+  HR: 'HR Admin',
   MANAGER: 'Manager',
   EMPLOYEE: 'Employee',
   RECRUITER: 'Recruiter',
   ONBOARDING: 'Onboarding Specialist',
   ACCOUNTS: 'Accounts Officer',
+  FINANCE: 'Finance Officer',
+  PAYROLL_REVIEWER: 'Payroll Reviewer',
+  PAYROLL_APPROVER: 'Payroll Approver',
 };
 
 const getDefaultPermissions = (role) => {
@@ -76,8 +99,6 @@ const getDefaultPermissions = (role) => {
     ]),
     MANAGER: [
       { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
-      { module: 'EMPLOYEES', action: 'CREATE', isGranted: true },
-      { module: 'EMPLOYEES', action: 'EDIT', isGranted: true },
       { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
       { module: 'ATTENDANCE', action: 'EDIT', isGranted: true },
       { module: 'LEAVE', action: 'VIEW', isGranted: true },
@@ -88,6 +109,8 @@ const getDefaultPermissions = (role) => {
       { module: 'PROJECTS', action: 'VIEW', isGranted: true },
       { module: 'PROJECTS', action: 'CREATE', isGranted: true },
       { module: 'PROJECTS', action: 'EDIT', isGranted: true },
+      { module: 'EXPENSES', action: 'VIEW', isGranted: true },
+      { module: 'EXPENSES', action: 'EDIT', isGranted: true },
       { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
       { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
     ],
@@ -97,6 +120,14 @@ const getDefaultPermissions = (role) => {
       { module: 'ATTENDANCE', action: 'CREATE', isGranted: true },
       { module: 'LEAVE', action: 'VIEW', isGranted: true },
       { module: 'LEAVE', action: 'CREATE', isGranted: true },
+      { module: 'EXPENSES', action: 'VIEW', isGranted: true },
+      { module: 'EXPENSES', action: 'CREATE', isGranted: true },
+      { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
+      { module: 'PERFORMANCE', action: 'CREATE', isGranted: true },
+      { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
+      { module: 'HELPDESK', action: 'VIEW', isGranted: true },
+      { module: 'HELPDESK', action: 'CREATE', isGranted: true },
+      { module: 'NOTIFICATIONS', action: 'VIEW', isGranted: true },
       { module: 'ACCOUNTS', action: 'VIEW', isGranted: true },
       { module: 'ACCOUNTS', action: 'CREATE', isGranted: true },
     ],
@@ -133,6 +164,55 @@ const getDefaultPermissions = (role) => {
       { module: 'REPORTS', action: 'EXPORT', isGranted: true },
       { module: 'EMPLOYEES', action: 'VIEW', isGranted: true },
       { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
+    ],
+    HR: [
+      'EMPLOYEES',
+      'ATTENDANCE',
+      'LEAVE',
+      'RECRUITMENT',
+      'ONBOARDING',
+      'PERFORMANCE',
+      'REPORTS',
+      'HELPDESK',
+      'WORKFLOWS',
+      'NOTIFICATIONS'
+    ].flatMap((m) => [
+      { module: m, action: 'VIEW', isGranted: true },
+      { module: m, action: 'CREATE', isGranted: true },
+      { module: m, action: 'EDIT', isGranted: true },
+      { module: m, action: 'DELETE', isGranted: false },
+      { module: m, action: 'EXPORT', isGranted: true },
+    ]),
+    FINANCE: [
+      'PAYROLL',
+      'COMPLIANCE',
+      'EXPENSES',
+      'ACCOUNTS',
+      'REPORTS',
+      'EMPLOYEES'
+    ].flatMap((m) => [
+      { module: m, action: 'VIEW', isGranted: true },
+      { module: m, action: 'CREATE', isGranted: m !== 'EMPLOYEES' },
+      { module: m, action: 'EDIT', isGranted: m !== 'EMPLOYEES' },
+      { module: m, action: 'DELETE', isGranted: false },
+      { module: m, action: 'EXPORT', isGranted: true },
+    ]),
+    PAYROLL_REVIEWER: [
+      { module: 'PAYROLL', action: 'VIEW', isGranted: true },
+      { module: 'PAYROLL', action: 'EDIT', isGranted: true },
+      { module: 'PAYROLL', action: 'EXPORT', isGranted: true },
+      { module: 'COMPLIANCE', action: 'VIEW', isGranted: true },
+      { module: 'REPORTS', action: 'VIEW', isGranted: true },
+      { module: 'REPORTS', action: 'EXPORT', isGranted: true },
+    ],
+    PAYROLL_APPROVER: [
+      { module: 'PAYROLL', action: 'VIEW', isGranted: true },
+      { module: 'PAYROLL', action: 'EDIT', isGranted: true },
+      { module: 'PAYROLL', action: 'EXPORT', isGranted: true },
+      { module: 'COMPLIANCE', action: 'VIEW', isGranted: true },
+      { module: 'COMPLIANCE', action: 'EXPORT', isGranted: true },
+      { module: 'REPORTS', action: 'VIEW', isGranted: true },
+      { module: 'REPORTS', action: 'EXPORT', isGranted: true },
     ],
   };
   return defaults[role] || [];

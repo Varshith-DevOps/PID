@@ -36,6 +36,6 @@ router.get('/analytics/:type', getAnalyticsReport);
 router.get('/dashboards/:role', getDashboardData);
 
 /** POST /api/reports/export — Stream excel document downloads */
-router.post('/export', exportReport);
+router.post('/export', rbacMiddleware('REPORTS', 'EXPORT'), exportReport);
 
 module.exports = router;

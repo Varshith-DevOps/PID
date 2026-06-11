@@ -25,6 +25,12 @@ const MANUAL_PAYROLL_STAGES = [
   { key: 'bankAndPayoutVerified', label: 'Bank details and payout file inputs verified', required: true },
 ];
 
+const isValidPAN = (pan) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(String(pan || '').toUpperCase());
+const isValidIFSC = (ifsc) => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(ifsc || '').toUpperCase());
+const isValidUAN = (uan) => /^[0-9]{12}$/.test(String(uan || '').replace(/\s/g, ''));
+const isEsiEnabledForPayroll = (employee) => employee.salaryStructure?.esiEnabled !== false
+  && salaryCalculator.calculateGrossEarnings(employee.salaryStructure) <= 21000;
+
 const money = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
 const getPeriod = (month, year) => {
@@ -186,6 +192,7 @@ const getPayrollPreflight = async (req, res) => {
         salaryStructure: true,
         bankDetails: true,
         pfDetails: true,
+        addresses: true,
         salaryRevisions: { where: { effectiveDate: { lte: endDate } }, orderBy: { effectiveDate: 'desc' } },
       },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
@@ -200,6 +207,14 @@ const getPayrollPreflight = async (req, res) => {
     const missingSalary = employees.filter((e) => !e.salaryStructure);
     const missingBank = employees.filter((e) => !e.bankDetails);
     const missingPf = employees.filter((e) => !e.pfDetails);
+    const invalidPan = employees.filter((e) => e.salaryStructure?.tdsEnabled !== false && !isValidPAN(e.panNumber));
+    const invalidBank = employees.filter((e) => !e.bankDetails || !isValidIFSC(e.bankDetails.ifscCode) || !e.bankDetails.accountNumber);
+    const missingUan = employees.filter((e) => e.salaryStructure?.pfEnabled !== false && !isValidUAN(e.pfDetails?.uanNumber));
+    const missingEsiNumber = employees.filter((e) => isEsiEnabledForPayroll(e) && !e.pfDetails?.esiNumber);
+    const missingWorkState = employees.filter((e) => {
+      const currentAddress = e.addresses?.find((a) => a.type === 'CURRENT') || e.addresses?.[0];
+      return !currentAddress?.state;
+    });
     const employeeSummaries = await Promise.all(employees.map(async (employee) => {
       const empAttendance = attendances.filter((a) => a.employeeId === employee.id);
       const lopDays = unpaidLeaves.filter((l) => l.employeeId === employee.id).reduce((sum, leave) => sum + leave.days, 0);
@@ -212,6 +227,10 @@ const getPayrollPreflight = async (req, res) => {
         salaryReady: Boolean(employee.salaryStructure),
         bankReady: Boolean(employee.bankDetails),
         pfReady: Boolean(employee.pfDetails),
+        statutoryReady: isValidPAN(employee.panNumber)
+          && (!employee.salaryStructure?.pfEnabled || isValidUAN(employee.pfDetails?.uanNumber))
+          && (!isEsiEnabledForPayroll(employee) || Boolean(employee.pfDetails?.esiNumber)),
+        workStateReady: Boolean((employee.addresses?.find((a) => a.type === 'CURRENT') || employee.addresses?.[0])?.state),
         attendanceEntries: empAttendance.length,
         lopDays,
         overtimeHours: otHours,
@@ -224,6 +243,11 @@ const getPayrollPreflight = async (req, res) => {
       { key: 'notAlreadyRun', label: 'Payroll not already processed for this period', passed: !existing || existing.status === 'REVERSED', blocking: true, detail: existing && existing.status !== 'REVERSED' ? 'Payroll already exists for this month.' : 'No active payroll run exists for this period.' },
       { key: 'salaryStructures', label: 'Salary structures configured for active employees', passed: missingSalary.length === 0, blocking: true, detail: `${missingSalary.length} employee(s) missing salary structure.` },
       { key: 'pendingOvertime', label: 'No pending overtime approvals', passed: pendingOvertime === 0, blocking: true, detail: `${pendingOvertime} pending overtime request(s).` },
+      { key: 'panReady', label: 'PAN available and valid for TDS employees', passed: invalidPan.length === 0, blocking: true, detail: `${invalidPan.length} employee(s) missing valid PAN.` },
+      { key: 'bankIfscReady', label: 'Bank account and IFSC ready for salary transfer', passed: invalidBank.length === 0, blocking: true, detail: `${invalidBank.length} employee(s) missing bank account or valid IFSC.` },
+      { key: 'uanReady', label: 'UAN available for PF-enabled employees', passed: missingUan.length === 0, blocking: true, detail: `${missingUan.length} PF-enabled employee(s) missing valid UAN.` },
+      { key: 'esiReady', label: 'ESIC IP number available for ESI-eligible employees', passed: missingEsiNumber.length === 0, blocking: true, detail: `${missingEsiNumber.length} ESI-eligible employee(s) missing ESIC IP number.` },
+      { key: 'workStateReady', label: 'Work state available for PT/LWF calculation', passed: missingWorkState.length === 0, blocking: true, detail: `${missingWorkState.length} employee(s) missing current work state.` },
       { key: 'attendanceCaptured', label: 'Attendance entries available for the payroll month', passed: attendances.length > 0, blocking: false, detail: `${attendances.length} attendance record(s) found.` },
       { key: 'bankDetails', label: 'Bank details available', passed: missingBank.length === 0, blocking: false, detail: `${missingBank.length} employee(s) missing bank details.` },
       { key: 'pfDetails', label: 'PF details available where applicable', passed: missingPf.length === 0, blocking: false, detail: `${missingPf.length} employee(s) missing PF details.` },
@@ -240,7 +264,8 @@ const getPayrollPreflight = async (req, res) => {
         lopDays: unpaidLeaves.reduce((sum, leave) => sum + leave.days, 0),
         approvedOvertimeHours: approvedOvertime.reduce((sum, ot) => sum + ot.otHours, 0),
         pendingOvertime,
-        totalPendingArrears: employeeSummaries.reduce((sum, s) => sum + s.pendingArrears, 0)
+        totalPendingArrears: employeeSummaries.reduce((sum, s) => sum + s.pendingArrears, 0),
+        statutoryIssues: invalidPan.length + invalidBank.length + missingUan.length + missingEsiNumber.length + missingWorkState.length
       },
       canRun: automaticChecks.every((check) => !check.blocking || check.passed),
     });

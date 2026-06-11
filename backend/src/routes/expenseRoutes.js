@@ -9,6 +9,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
+const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
 const {
   getClaims,
   createClaim,
@@ -58,17 +59,17 @@ const uploadReceipt = multer({
 });
 
 // ──── Expense Claims Endpoints ─────────────────────────────────────────────
-router.get('/claims', getClaims);
-router.post('/claims', uploadReceipt.single('receipt'), createClaim);
-router.put('/claims/:id', uploadReceipt.single('receipt'), updateClaim);
-router.put('/claims/:id/manager-approve', managerApproveClaim);
-router.put('/claims/:id/finance-approve', financeApproveClaim);
-router.put('/claims/:id/reject', rejectClaim);
+router.get('/claims', rbacMiddleware('EXPENSES', 'VIEW'), getClaims);
+router.post('/claims', rbacMiddleware('EXPENSES', 'CREATE'), uploadReceipt.single('receipt'), createClaim);
+router.put('/claims/:id', rbacMiddleware('EXPENSES', 'EDIT'), uploadReceipt.single('receipt'), updateClaim);
+router.put('/claims/:id/manager-approve', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('EXPENSES', 'EDIT'), managerApproveClaim);
+router.put('/claims/:id/finance-approve', requireRole('SUPER_ADMIN', 'ADMIN', 'FINANCE', 'ACCOUNTS'), rbacMiddleware('EXPENSES', 'EDIT'), financeApproveClaim);
+router.put('/claims/:id/reject', rbacMiddleware('EXPENSES', 'EDIT'), rejectClaim);
 
 // ──── Travel Advances Endpoints ────────────────────────────────────────────
-router.get('/advances', getAdvances);
-router.post('/advances', createAdvance);
-router.put('/advances/:id/approve', approveAdvance);
-router.put('/advances/:id/settle', settleAdvance);
+router.get('/advances', rbacMiddleware('EXPENSES', 'VIEW'), getAdvances);
+router.post('/advances', rbacMiddleware('EXPENSES', 'CREATE'), createAdvance);
+router.put('/advances/:id/approve', requireRole('SUPER_ADMIN', 'ADMIN', 'FINANCE', 'ACCOUNTS'), rbacMiddleware('EXPENSES', 'EDIT'), approveAdvance);
+router.put('/advances/:id/settle', requireRole('SUPER_ADMIN', 'ADMIN', 'FINANCE', 'ACCOUNTS'), rbacMiddleware('EXPENSES', 'EDIT'), settleAdvance);
 
 module.exports = router;
