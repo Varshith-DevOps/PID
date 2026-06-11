@@ -11,6 +11,7 @@ const { generateESICReport } = require('../services/esicReportGenerator');
 const { generateForm16 } = require('../services/form16Generator');
 const { projectTDS } = require('../services/tdsEngine');
 const { logPayrollEvent } = require('../services/auditService');
+const { canAccessEmployee, isPayroll } = require('../services/accessControl');
 
 /**
  * Helper to get records for a period
@@ -164,6 +165,9 @@ const getForm16Controller = async (req, res) => {
     });
 
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await canAccessEmployee(req.user, employee.id))) {
+      return res.status(403).json({ error: 'Access denied. You can only access authorized Form 16 records.' });
+    }
 
     // Calculate/Fetch Tax projection data for details
     const structure = await prisma.salaryStructure.findUnique({ where: { employeeId } });
@@ -304,7 +308,7 @@ const downloadForm16File = async (req, res) => {
     }
 
     // Role-based or ownership check
-    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'ADMIN') {
+    if (!isPayroll(req.user)) {
       // For standard employees, verify that the Form 16 matches their employee record
       const parts = filename.split('_');
       const employeeId = parts[1]; // Extract EMPXXXXX

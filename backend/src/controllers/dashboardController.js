@@ -163,19 +163,19 @@ const getExecutiveSummary = async (req, res) => {
     });
     const overdueTasks = await prisma.task.count({
       where: {
-        status: { not: 'DONE' },
+        status: { not: 'COMPLETED' },
         deadline: { lt: today },
       },
     });
     const totalTasks = await prisma.task.count();
-    const completedTasks = await prisma.task.count({ where: { status: 'DONE' } });
+    const completedTasks = await prisma.task.count({ where: { status: 'COMPLETED' } });
 
     // ──── 6. Pending Expense Claims ────
     let pendingExpenses = 0;
     let pendingExpenseAmount = 0;
     try {
       const expClaims = await prisma.expenseClaim.findMany({
-        where: { status: 'SUBMITTED' },
+        where: { status: 'PENDING' },
         select: { amount: true },
       });
       pendingExpenses = expClaims.length;

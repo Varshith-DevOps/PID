@@ -15,17 +15,17 @@ const {
   deleteTask,
 } = require('../controllers/projectController');
 
-router.get('/', authenticate, rbacMiddleware('PAYROLL', 'VIEW'), getProjects);
-router.get('/:id', authenticate, getProjectById);
-router.post('/', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), createProject);
-router.put('/:id', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), updateProject);
-router.delete('/:id', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), deleteTask);
+router.get('/tasks/all', authenticate, rbacMiddleware('PROJECTS', 'VIEW'), getTasks);
+router.post('/tasks', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), rbacMiddleware('PROJECTS', 'CREATE'), createTask);
+router.put('/tasks/:id', authenticate, rbacMiddleware('PROJECTS', 'EDIT'), updateTask);
+router.delete('/tasks/:id', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), rbacMiddleware('PROJECTS', 'DELETE'), deleteTask);
 
-router.post('/:projectId/expenses', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), addExpense);
+router.get('/', authenticate, rbacMiddleware('PROJECTS', 'VIEW'), getProjects);
+router.get('/:id', authenticate, rbacMiddleware('PROJECTS', 'VIEW'), getProjectById);
+router.post('/', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), rbacMiddleware('PROJECTS', 'CREATE'), createProject);
+router.put('/:id', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), rbacMiddleware('PROJECTS', 'EDIT'), updateProject);
+router.delete('/:id', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), rbacMiddleware('PROJECTS', 'DELETE'), deleteProject);
 
-router.get('/tasks/all', authenticate, getTasks);
-router.post('/tasks', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), createTask);
-router.put('/tasks/:id', authenticate, updateTask);
-router.delete('/tasks/:id', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), deleteTask);
+router.post('/:projectId/expenses', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), rbacMiddleware('PROJECTS', 'EDIT'), addExpense);
 
 module.exports = router;

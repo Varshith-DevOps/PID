@@ -6,6 +6,7 @@
  */
 
 const prisma = require('../config/database');
+const { canAccessEmployee, getEmployeeScopeIds, isManagerOrAdmin, isPayroll } = require('../services/accessControl');
 
 // ==========================================
 // 1. Expense Claims Management
@@ -19,19 +20,23 @@ const prisma = require('../config/database');
  */
 const getClaims = async (req, res) => {
   try {
-    const employeeId = req.query.employeeId || req.user.employeeId;
+    const employeeId = req.query.employeeId;
     const filter = {};
 
-    // RBAC: Admins & Finance & HR can view all claims.
-    if (req.user.role === 'ADMIN' || req.user.role === 'HR' || req.user.role === 'FINANCE') {
+    if (isPayroll(req.user)) {
       if (req.query.all === 'true') {
-        // No filter, fetch everything in the org
+        // Payroll/HR roles can fetch all claims for audit and settlement.
       } else if (employeeId) {
         filter.employeeId = employeeId;
       }
+    } else if (employeeId) {
+      if (!(await canAccessEmployee(req.user, employeeId))) {
+        return res.status(403).json({ error: 'Access denied for requested expense claims' });
+      }
+      filter.employeeId = employeeId;
     } else {
-      // Regular employees can only view their own claims
-      filter.employeeId = req.user.employeeId;
+      const employeeIds = await getEmployeeScopeIds(req.user);
+      filter.employeeId = { in: employeeIds.length ? employeeIds : ['__no_employee_scope__'] };
     }
 
     if (req.query.status) {
@@ -73,8 +78,12 @@ const createClaim = async (req, res) => {
     const { title, category, amount, description, currency } = req.body;
     const employeeId = req.user.employeeId;
 
+    const parsedAmount = Number(amount);
     if (!title || !category || amount === undefined) {
       return res.status(400).json({ error: 'Required fields missing (title, category, amount)' });
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: 'Expense amount must be greater than 0' });
     }
 
     let receiptUrl = null;
@@ -87,7 +96,7 @@ const createClaim = async (req, res) => {
         employeeId,
         title,
         category,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         currency: currency || 'INR',
         receiptUrl,
         description,
@@ -117,9 +126,18 @@ const updateClaim = async (req, res) => {
     if (!existingClaim) {
       return res.status(404).json({ error: 'Claim not found' });
     }
+    if (!(await canAccessEmployee(req.user, existingClaim.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only update authorized claims.' });
+    }
 
     if (existingClaim.status !== 'PENDING') {
       return res.status(400).json({ error: 'Only pending claims can be updated' });
+    }
+    if (amount !== undefined) {
+      const parsedAmount = Number(amount);
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: 'Expense amount must be greater than 0' });
+      }
     }
 
     let receiptUrl = existingClaim.receiptUrl;
@@ -161,6 +179,9 @@ const managerApproveClaim = async (req, res) => {
     if (!claim) {
       return res.status(404).json({ error: 'Expense claim not found' });
     }
+    if (!isManagerOrAdmin(req.user)) {
+      return res.status(403).json({ error: 'Only managers or admins can approve claims at manager level' });
+    }
 
     const updated = await prisma.expenseClaim.update({
       where: { id },
@@ -193,6 +214,9 @@ const financeApproveClaim = async (req, res) => {
     if (!claim) {
       return res.status(404).json({ error: 'Expense claim not found' });
     }
+    if (!isPayroll(req.user)) {
+      return res.status(403).json({ error: 'Only finance/payroll roles can approve claims at finance level' });
+    }
 
     const updated = await prisma.expenseClaim.update({
       where: { id },
@@ -223,6 +247,12 @@ const rejectClaim = async (req, res) => {
     const claim = await prisma.expenseClaim.findUnique({ where: { id } });
     if (!claim) {
       return res.status(404).json({ error: 'Expense claim not found' });
+    }
+    if (level === 'finance' && !isPayroll(req.user)) {
+      return res.status(403).json({ error: 'Only finance/payroll roles can reject at finance level' });
+    }
+    if (level !== 'finance' && !isManagerOrAdmin(req.user) && !(await canAccessEmployee(req.user, claim.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You cannot reject this claim.' });
     }
 
     const updateData = { status: 'REJECTED' };
@@ -257,17 +287,23 @@ const rejectClaim = async (req, res) => {
  */
 const getAdvances = async (req, res) => {
   try {
-    const employeeId = req.query.employeeId || req.user.employeeId;
+    const employeeId = req.query.employeeId;
     const filter = {};
 
-    if (req.user.role === 'ADMIN' || req.user.role === 'HR' || req.user.role === 'FINANCE') {
+    if (isPayroll(req.user)) {
       if (req.query.all === 'true') {
-        // Retrieve all advances
+        // Payroll/HR roles can fetch all advances.
       } else if (employeeId) {
         filter.employeeId = employeeId;
       }
+    } else if (employeeId) {
+      if (!(await canAccessEmployee(req.user, employeeId))) {
+        return res.status(403).json({ error: 'Access denied for requested travel advances' });
+      }
+      filter.employeeId = employeeId;
     } else {
-      filter.employeeId = req.user.employeeId;
+      const employeeIds = await getEmployeeScopeIds(req.user);
+      filter.employeeId = { in: employeeIds.length ? employeeIds : ['__no_employee_scope__'] };
     }
 
     const advances = await prisma.travelAdvance.findMany({
@@ -305,15 +341,19 @@ const createAdvance = async (req, res) => {
     const { purpose, amountRequested } = req.body;
     const employeeId = req.user.employeeId;
 
+    const requested = Number(amountRequested);
     if (!purpose || amountRequested === undefined) {
       return res.status(400).json({ error: 'Required fields missing (purpose, amountRequested)' });
+    }
+    if (!Number.isFinite(requested) || requested <= 0) {
+      return res.status(400).json({ error: 'Requested advance amount must be greater than 0' });
     }
 
     const advance = await prisma.travelAdvance.create({
       data: {
         employeeId,
         purpose,
-        amountRequested: parseFloat(amountRequested),
+        amountRequested: requested,
         status: 'PENDING',
       },
     });
@@ -340,11 +380,18 @@ const approveAdvance = async (req, res) => {
     if (!advance) {
       return res.status(404).json({ error: 'Travel advance not found' });
     }
+    if (!isPayroll(req.user)) {
+      return res.status(403).json({ error: 'Only finance/payroll roles can approve travel advances' });
+    }
+    const approved = amountApproved !== undefined ? Number(amountApproved) : advance.amountRequested;
+    if (!Number.isFinite(approved) || approved <= 0) {
+      return res.status(400).json({ error: 'Approved amount must be greater than 0' });
+    }
 
     const updated = await prisma.travelAdvance.update({
       where: { id },
       data: {
-        amountApproved: amountApproved !== undefined ? parseFloat(amountApproved) : advance.amountRequested,
+        amountApproved: approved,
         advanceRemarks: remarks || 'Approved by Finance / HR',
         status: status || 'APPROVED',
       },
@@ -371,16 +418,23 @@ const settleAdvance = async (req, res) => {
     if (settledAmount === undefined) {
       return res.status(400).json({ error: 'Actual settled amount parameter is required' });
     }
+    const settled = Number(settledAmount);
+    if (!Number.isFinite(settled) || settled < 0) {
+      return res.status(400).json({ error: 'Settled amount cannot be negative' });
+    }
 
     const advance = await prisma.travelAdvance.findUnique({ where: { id } });
     if (!advance) {
       return res.status(404).json({ error: 'Travel advance not found' });
     }
+    if (!isPayroll(req.user)) {
+      return res.status(403).json({ error: 'Only finance/payroll roles can settle travel advances' });
+    }
 
     const updated = await prisma.travelAdvance.update({
       where: { id },
       data: {
-        settledAmount: parseFloat(settledAmount),
+        settledAmount: settled,
         settledDate: new Date(),
         advanceRemarks: remarks || 'Settle travel advance expenses',
         status: 'SETTLED',

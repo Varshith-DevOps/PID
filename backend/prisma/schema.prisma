@@ -126,6 +126,10 @@ model Employee {
   previousEmployerIncomes PreviousEmployerIncome[]
   taxDeclarations       EmployeeTaxDeclaration[]
   tdsLedgerEntries      TDSLedger[]
+  assetAssignments      Asset[]
+  learningEnrollments   LearningEnrollment[]
+  helpdeskTickets       HelpdeskTicket[]
+  notifications         Notification[]
 
   isActive        Boolean        @default(true)
   timezone        String         @default("Asia/Kolkata")
@@ -1041,4 +1045,87 @@ model BiometricDevice {
   updatedAt      DateTime  @updatedAt
 
   @@map("biometric_devices")
+}
+
+model Asset {
+  id             String    @id @default(uuid())
+  assetTag       String    @unique
+  name           String
+  category       String
+  serialNumber   String?
+  condition      String    @default("GOOD")
+  status         String    @default("AVAILABLE")
+  assignedTo     Employee? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId   String?
+  assignedAt     DateTime?
+  returnedAt     DateTime?
+  recoveryStatus String    @default("NOT_APPLICABLE")
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("assets")
+}
+
+model LearningCourse {
+  id          String               @id @default(uuid())
+  title       String
+  description String?
+  category    String               @default("GENERAL")
+  isMandatory Boolean              @default(false)
+  isActive    Boolean              @default(true)
+  enrollments LearningEnrollment[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@map("learning_courses")
+}
+
+model LearningEnrollment {
+  id          String         @id @default(uuid())
+  course      LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String
+  employee    Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  status      String         @default("ASSIGNED")
+  progress    Int            @default(0)
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([courseId, employeeId])
+  @@map("learning_enrollments")
+}
+
+model HelpdeskTicket {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  category    String    @default("HR")
+  subject     String
+  description String
+  priority    String    @default("MEDIUM")
+  status      String    @default("OPEN")
+  assignedTo  String?
+  resolution  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("helpdesk_tickets")
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String?
+  title      String
+  message    String
+  type       String    @default("INFO")
+  isRead     Boolean   @default(false)
+  actionUrl  String?
+  createdAt  DateTime  @default(now())
+  readAt     DateTime?
+
+  @@map("notifications")
 }

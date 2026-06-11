@@ -10,10 +10,10 @@ const {
   getDailySummary,
 } = require('../controllers/timesheetController');
 
-router.post('/', authenticate, logTimesheet);
-router.get('/employee/:employeeId', authenticate, getEmployeeTimesheets);
+router.post('/', authenticate, rbacMiddleware('ATTENDANCE', 'CREATE'), logTimesheet);
+router.get('/employee/:employeeId', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getEmployeeTimesheets);
 router.get('/all', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getAllTimesheets);
-router.get('/daily', authenticate, getDailySummary);
+router.get('/daily', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getDailySummary);
 
 router.post('/generate-attendance', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), generateAttendanceFromTimesheet);
 

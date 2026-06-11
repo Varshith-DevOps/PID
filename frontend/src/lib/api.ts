@@ -1034,4 +1034,79 @@ export const downloadReportExport = async (payload: { reportType: string; filter
   window.URL.revokeObjectURL(url);
 };
 
+export const getAssets = async (params?: { status?: string; assignedToId?: string }) => {
+  const { data } = await api.get('/assets', { params });
+  return data;
+};
+
+export const createAsset = async (payload: { assetTag: string; name: string; category: string; serialNumber?: string; condition?: string; notes?: string }) => {
+  const { data } = await api.post('/assets', payload);
+  return data;
+};
+
+export const assignAsset = async (id: string, employeeId: string) => {
+  const { data } = await api.put(`/assets/${id}/assign`, { employeeId });
+  return data;
+};
+
+export const returnAsset = async (id: string, payload?: { condition?: string; notes?: string }) => {
+  const { data } = await api.put(`/assets/${id}/return`, payload || {});
+  return data;
+};
+
+export const getLearningCourses = async () => {
+  const { data } = await api.get('/learning/courses');
+  return data;
+};
+
+export const createLearningCourse = async (payload: { title: string; description?: string; category?: string; isMandatory?: boolean }) => {
+  const { data } = await api.post('/learning/courses', payload);
+  return data;
+};
+
+export const getLearningEnrollments = async (params?: { employeeId?: string }) => {
+  const { data } = await api.get('/learning/enrollments', { params });
+  return data;
+};
+
+export const assignLearningCourse = async (payload: { courseId: string; employeeId: string; dueDate?: string }) => {
+  const { data } = await api.post('/learning/enrollments', payload);
+  return data;
+};
+
+export const updateLearningEnrollment = async (id: string, payload: { status?: string; progress?: number }) => {
+  const { data } = await api.put(`/learning/enrollments/${id}`, payload);
+  return data;
+};
+
+export const getHelpdeskTickets = async (params?: { status?: string; employeeId?: string }) => {
+  const { data } = await api.get('/helpdesk/tickets', { params });
+  return data;
+};
+
+export const createHelpdeskTicket = async (payload: { employeeId?: string; category?: string; subject: string; description: string; priority?: string }) => {
+  const { data } = await api.post('/helpdesk/tickets', payload);
+  return data;
+};
+
+export const updateHelpdeskTicket = async (id: string, payload: { status?: string; assignedTo?: string; resolution?: string; priority?: string }) => {
+  const { data } = await api.put(`/helpdesk/tickets/${id}`, payload);
+  return data;
+};
+
+export const getNotifications = async (params?: { employeeId?: string; unreadOnly?: boolean }) => {
+  const { data } = await api.get('/notifications', { params });
+  return data;
+};
+
+export const createNotification = async (payload: { employeeId?: string; title: string; message: string; type?: string; actionUrl?: string }) => {
+  const { data } = await api.post('/notifications', payload);
+  return data;
+};
+
+export const markNotificationRead = async (id: string) => {
+  const { data } = await api.put(`/notifications/${id}/read`);
+  return data;
+};
+
 export default api;

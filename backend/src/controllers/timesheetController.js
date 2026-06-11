@@ -6,6 +6,7 @@
  */
 
 const prisma = require('../config/database');
+const { canAccessEmployee, getEmployeeScopeIds, isHr } = require('../services/accessControl');
 
 const logTimesheet = async (req, res) => {
   try {
@@ -13,6 +14,13 @@ const logTimesheet = async (req, res) => {
 
     if (!employeeId || !hoursWorked || !date) {
       return res.status(400).json({ error: 'Employee, date and hours required' });
+    }
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only log timesheets for authorized employees.' });
+    }
+    const parsedHours = Number(hoursWorked);
+    if (!Number.isFinite(parsedHours) || parsedHours <= 0 || parsedHours > 24) {
+      return res.status(400).json({ error: 'Hours worked must be greater than 0 and not exceed 24.' });
     }
 
     const targetDate = new Date(date);
@@ -28,18 +36,18 @@ const logTimesheet = async (req, res) => {
     if (existing) {
       timesheet = await prisma.timesheet.update({
         where: { id: existing.id },
-        data: { hoursWorked, description },
+        data: { hoursWorked: parsedHours, description },
         include: { task: { select: { title: true } }, employee: { select: { firstName: true, lastName: true } } },
       });
     } else {
       timesheet = await prisma.timesheet.create({
-        data: { employeeId, taskId: safeTaskId, date: targetDate, hoursWorked, description: description || null },
+        data: { employeeId, taskId: safeTaskId, date: targetDate, hoursWorked: parsedHours, description: description || null },
         include: { task: { select: { title: true } }, employee: { select: { firstName: true, lastName: true } } },
       });
     }
 
     const overtimeController = require('./overtimeController');
-    await overtimeController.detectAndCreateOvertime(employeeId, targetDate, hoursWorked);
+    await overtimeController.detectAndCreateOvertime(employeeId, targetDate, parsedHours);
 
     res.json(timesheet);
   } catch (error) {
@@ -56,12 +64,8 @@ const getEmployeeTimesheets = async (req, res) => {
       return res.status(400).json({ error: 'Employee ID is required' });
     }
 
-    // BOLA/IDOR Check: EMPLOYEE can only view their own timesheets
-    if (req.user?.role === 'EMPLOYEE') {
-      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
-      if (!linkedEmployee || linkedEmployee.id !== targetEmployeeId) {
-        return res.status(403).json({ error: 'Access denied. You can only view your own timesheets.' });
-      }
+    if (!(await canAccessEmployee(req.user, targetEmployeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested timesheets.' });
     }
 
     const { startDate, endDate } = req.query;
@@ -71,6 +75,10 @@ const getEmployeeTimesheets = async (req, res) => {
       where.date = {};
       if (startDate) where.date.gte = new Date(startDate);
       if (endDate) where.date.lte = new Date(endDate);
+    }
+    if (!isHr(req.user)) {
+      const employeeIds = await getEmployeeScopeIds(req.user);
+      where.employeeId = { in: employeeIds.length ? employeeIds : ['__no_employee_scope__'] };
     }
 
     const timesheets = await prisma.timesheet.findMany({
@@ -228,6 +236,10 @@ const getDailySummary = async (req, res) => {
       where: { date: { gte: targetDate, lte: endDate } },
       include: { employee: { select: { firstName: true, lastName: true } }, task: { select: { title: true } } },
     });
+    if (!isHr(req.user)) {
+      const employeeIds = new Set(await getEmployeeScopeIds(req.user));
+      timesheets.splice(0, timesheets.length, ...timesheets.filter((t) => employeeIds.has(t.employeeId)));
+    }
 
     const employeeSummary = {};
     for (const t of timesheets) {

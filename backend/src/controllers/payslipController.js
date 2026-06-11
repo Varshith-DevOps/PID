@@ -10,6 +10,7 @@ const nodemailer = require('nodemailer');
 const { generatePayslipPDF, generateBulkPayslips } = require('../services/pdfService');
 const fs = require('fs');
 const path = require('path');
+const { canAccessEmployee } = require('../services/accessControl');
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -26,14 +27,14 @@ const getPayslipHistory = async (req, res) => {
     const { employeeId, year, month } = req.query;
     const where = {};
 
-    // SEC-01 FIX: Enforce ownership — EMPLOYEE role can only view their own payslips
-    if (req.user?.role === 'EMPLOYEE') {
-      // Look up the employee record linked to this user account
-      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
-      if (!linkedEmployee) return res.status(403).json({ error: 'No employee profile linked to your account' });
-      where.employeeId = linkedEmployee.id;
-    } else if (employeeId) {
+    if (employeeId) {
+      if (!(await canAccessEmployee(req.user, employeeId))) {
+        return res.status(403).json({ error: 'Access denied for requested employee payslips' });
+      }
       where.employeeId = employeeId;
+    } else if (req.user?.role === 'EMPLOYEE') {
+      if (!req.user.employeeId) return res.status(403).json({ error: 'No employee profile linked to your account' });
+      where.employeeId = req.user.employeeId;
     }
 
     if (year || month) {
@@ -72,12 +73,8 @@ const getPayslip = async (req, res) => {
 
     if (!record) return res.status(404).json({ error: 'Payslip not found' });
 
-    // SEC-01 FIX: Enforce ownership — EMPLOYEE can only view their own payslip
-    if (req.user?.role === 'EMPLOYEE') {
-      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
-      if (!linkedEmployee || linkedEmployee.id !== record.employeeId) {
-        return res.status(403).json({ error: 'Access denied. You can only view your own payslips.' });
-      }
+    if (!(await canAccessEmployee(req.user, record.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only view authorized payslips.' });
     }
 
     res.json(record);
@@ -99,12 +96,8 @@ const downloadPayslipPDF = async (req, res) => {
 
     if (!record) return res.status(404).json({ error: 'Payslip not found' });
 
-    // SEC-01 FIX: Enforce ownership — EMPLOYEE can only download their own payslip PDF
-    if (req.user?.role === 'EMPLOYEE') {
-      const linkedEmployee = await prisma.employee.findUnique({ where: { userId: req.user.id } });
-      if (!linkedEmployee || linkedEmployee.id !== record.employeeId) {
-        return res.status(403).json({ error: 'Access denied. You can only download your own payslips.' });
-      }
+    if (!(await canAccessEmployee(req.user, record.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only download authorized payslips.' });
     }
 
     const pdfBuffer = await generatePayslipPDF(record, record.employee, {});

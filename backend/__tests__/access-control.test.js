@@ -5,6 +5,8 @@ const prisma = require('../src/config/database');
 describe('Enterprise Access Control Hardening', () => {
   let employeeToken;
   let adminToken;
+  let employeeId;
+  let otherEmployeeId;
 
   beforeAll(async () => {
     const empRes = await request(app)
@@ -16,6 +18,11 @@ describe('Enterprise Access Control Hardening', () => {
       .post('/api/auth/login')
       .send({ email: 'admin@hrms.com', password: 'admin123' });
     adminToken = adminRes.body.token;
+
+    const employee = await prisma.employee.findUnique({ where: { email: 'rajesh.kumar@company.com' } });
+    const otherEmployee = await prisma.employee.findUnique({ where: { email: 'priya.sharma@company.com' } });
+    employeeId = employee.id;
+    otherEmployeeId = otherEmployee.id;
   });
 
   afterAll(async () => {
@@ -56,6 +63,147 @@ describe('Enterprise Access Control Hardening', () => {
       .send({ remarks: 'Should not be allowed', markAsPaid: true });
 
     expect(res.status).toBe(403);
+  });
+
+  it('rejects invalid expense claim amounts', async () => {
+    const res = await request(app)
+      .post('/api/expenses/claims')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        title: 'Negative claim regression',
+        category: 'TRAVEL',
+        amount: -1,
+        description: 'Invalid amount should be rejected',
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('prevents employees from querying another employee expense claims', async () => {
+    const res = await request(app)
+      .get(`/api/expenses/claims?employeeId=${otherEmployeeId}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('prevents employees from reading another employee leave balance', async () => {
+    const res = await request(app)
+      .get(`/api/leave/balance?employeeId=${otherEmployeeId}`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('validates timesheet ownership and hour boundaries', async () => {
+    const otherEmployeeRes = await request(app)
+      .post('/api/timesheet')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        employeeId: otherEmployeeId,
+        date: '2026-06-10',
+        hoursWorked: 8,
+        description: 'Unauthorized timesheet',
+      });
+
+    expect(otherEmployeeRes.status).toBe(403);
+
+    const boundaryRes = await request(app)
+      .post('/api/timesheet')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        employeeId,
+        date: '2026-06-10',
+        hoursWorked: 25,
+        description: 'Invalid hours',
+      });
+
+    expect(boundaryRes.status).toBe(400);
+  });
+
+  it('keeps project task collection route from being swallowed by project id route', async () => {
+    const res = await request(app)
+      .get('/api/projects/tasks/all')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('integrates asset module with admin create and employee self-service view only', async () => {
+    const tag = `QA-ASSET-${Date.now()}`;
+    const createRes = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ assetTag: tag, name: 'QA Laptop', category: 'Laptop' });
+
+    expect(createRes.status).toBe(201);
+
+    const employeeCreateRes = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ assetTag: `${tag}-EMP`, name: 'Unauthorized Asset', category: 'Laptop' });
+
+    expect(employeeCreateRes.status).toBe(403);
+
+    const employeeListRes = await request(app)
+      .get('/api/assets')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(employeeListRes.status).toBe(200);
+    expect(employeeListRes.body.find((asset) => asset.assetTag === tag)).toBeUndefined();
+  });
+
+  it('integrates learning, helpdesk and notification module permissions', async () => {
+    const courseRes = await request(app)
+      .post('/api/learning/courses')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ title: `QA Course ${Date.now()}`, category: 'Compliance' });
+
+    expect(courseRes.status).toBe(201);
+
+    const enrollmentRes = await request(app)
+      .post('/api/learning/enrollments')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ courseId: courseRes.body.id, employeeId });
+
+    expect(enrollmentRes.status).toBe(201);
+
+    const employeeEnrollmentsRes = await request(app)
+      .get('/api/learning/enrollments')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(employeeEnrollmentsRes.status).toBe(200);
+    expect(employeeEnrollmentsRes.body.every((item) => item.employeeId === employeeId)).toBe(true);
+
+    const ticketRes = await request(app)
+      .post('/api/helpdesk/tickets')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ category: 'HR', subject: 'QA ticket', description: 'Regression helpdesk ticket' });
+
+    expect(ticketRes.status).toBe(201);
+    expect(ticketRes.body.employeeId).toBe(employeeId);
+
+    const notificationDeniedRes = await request(app)
+      .post('/api/notifications')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ title: 'Unauthorized', message: 'Employees should not broadcast' });
+
+    expect(notificationDeniedRes.status).toBe(403);
+
+    const notificationRes = await request(app)
+      .post('/api/notifications')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ employeeId, title: 'QA notification', message: 'Regression notification' });
+
+    expect(notificationRes.status).toBe(201);
+
+    const inboxRes = await request(app)
+      .get('/api/notifications')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(inboxRes.status).toBe(200);
+    expect(inboxRes.body.some((item) => item.id === notificationRes.body.id)).toBe(true);
   });
 
   it('requires REPORTS.EXPORT permission for report exports', async () => {

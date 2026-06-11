@@ -6,6 +6,7 @@
  */
 
 const prisma = require('../config/database');
+const { canAccessEmployee, isManagerOrAdmin } = require('../services/accessControl');
 
 const DEFAULT_LEAVE_QUOTAS = [
   { leaveType: 'ANNUAL', quota: 20 },
@@ -67,6 +68,9 @@ const createLeaveRequest = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only request leave for authorized employees.' });
+    }
 
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -101,6 +105,12 @@ const getLeaveRequests = async (req, res) => {
     const where = {};
 
     if (employeeId) where.employeeId = employeeId;
+    if (employeeId && !(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested employee leave records' });
+    }
+    if (!employeeId && req.user?.role === 'EMPLOYEE') {
+      where.employeeId = req.user.employeeId;
+    }
     if (status) where.status = status;
 
     const leaves = await prisma.leave.findMany({
@@ -123,6 +133,7 @@ const approveLeave = async (req, res) => {
     const { id } = req.params;
     const leave = await prisma.leave.findUnique({ where: { id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
+    if (!isManagerOrAdmin(req.user)) return res.status(403).json({ error: 'Only managers or admins can approve leave' });
     if (leave.status !== 'PENDING') return res.status(400).json({ error: 'Leave request is already processed' });
 
     if (leave.leaveType !== 'UNPAID') {
@@ -152,6 +163,7 @@ const rejectLeave = async (req, res) => {
     const { rejectReason } = req.body;
     const leave = await prisma.leave.findUnique({ where: { id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
+    if (!isManagerOrAdmin(req.user)) return res.status(403).json({ error: 'Only managers or admins can reject leave' });
 
     const updated = await prisma.leave.update({
       where: { id },
@@ -170,6 +182,9 @@ const cancelLeave = async (req, res) => {
     const { id } = req.params;
     const leave = await prisma.leave.findUnique({ where: { id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
+    if (!(await canAccessEmployee(req.user, leave.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only cancel authorized leave requests.' });
+    }
 
     if (leave.status !== 'PENDING') {
       return res.status(400).json({ error: 'Can only cancel pending leaves' });
@@ -210,6 +225,9 @@ const getLeaveBalance = async (req, res) => {
   try {
     const { employeeId, year } = req.query;
     if (!employeeId) return res.status(400).json({ error: 'Employee is required' });
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested employee leave balance' });
+    }
 
     const targetYear = parseInt(year || new Date().getFullYear());
     const balance = await buildLeaveBalance(employeeId, targetYear);
@@ -253,6 +271,9 @@ const getLeaveCalendar = async (req, res) => {
     const year = parseInt(req.query.year || new Date().getFullYear());
     const month = parseInt(req.query.month || new Date().getMonth() + 1);
     const employeeId = req.query.employeeId;
+    if (employeeId && !(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested employee leave calendar' });
+    }
 
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0, 23, 59, 59, 999);

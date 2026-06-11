@@ -54,21 +54,37 @@ const getPermissions = (role) => {
       { module: 'EXPENSES', action: 'EDIT', isGranted: true },
       { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
       { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
+      { module: 'ASSETS', action: 'VIEW', isGranted: true },
+      { module: 'LEARNING', action: 'VIEW', isGranted: true },
+      { module: 'LEARNING', action: 'CREATE', isGranted: true },
+      { module: 'LEARNING', action: 'EDIT', isGranted: true },
+      { module: 'HELPDESK', action: 'VIEW', isGranted: true },
+      { module: 'HELPDESK', action: 'CREATE', isGranted: true },
+      { module: 'HELPDESK', action: 'EDIT', isGranted: true },
+      { module: 'NOTIFICATIONS', action: 'VIEW', isGranted: true },
+      { module: 'NOTIFICATIONS', action: 'EDIT', isGranted: true },
     ],
     EMPLOYEE: [
       { module: 'ATTENDANCE', action: 'VIEW', isGranted: true },
       { module: 'ATTENDANCE', action: 'CREATE', isGranted: true },
       { module: 'LEAVE', action: 'VIEW', isGranted: true },
       { module: 'LEAVE', action: 'CREATE', isGranted: true },
+      { module: 'PAYROLL', action: 'VIEW', isGranted: true },
+      { module: 'COMPLIANCE', action: 'VIEW', isGranted: true },
       { module: 'REPORTS', action: 'VIEW', isGranted: true },
       { module: 'EXPENSES', action: 'VIEW', isGranted: true },
       { module: 'EXPENSES', action: 'CREATE', isGranted: true },
       { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
       { module: 'PERFORMANCE', action: 'CREATE', isGranted: true },
       { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
+      { module: 'ASSETS', action: 'VIEW', isGranted: true },
+      { module: 'LEARNING', action: 'VIEW', isGranted: true },
+      { module: 'LEARNING', action: 'EDIT', isGranted: true },
       { module: 'HELPDESK', action: 'VIEW', isGranted: true },
       { module: 'HELPDESK', action: 'CREATE', isGranted: true },
+      { module: 'HELPDESK', action: 'EDIT', isGranted: true },
       { module: 'NOTIFICATIONS', action: 'VIEW', isGranted: true },
+      { module: 'NOTIFICATIONS', action: 'EDIT', isGranted: true },
       { module: 'ACCOUNTS', action: 'VIEW', isGranted: true },
       { module: 'ACCOUNTS', action: 'CREATE', isGranted: true },
     ],
@@ -159,6 +175,11 @@ async function main() {
   // Clear all data
   await prisma.shiftAssignment.deleteMany();
   await prisma.shiftType.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.helpdeskTicket.deleteMany();
+  await prisma.learningEnrollment.deleteMany();
+  await prisma.learningCourse.deleteMany();
+  await prisma.asset.deleteMany();
   await prisma.travelAdvance.deleteMany();
   await prisma.expenseClaim.deleteMany();
   await prisma.feedback360.deleteMany();

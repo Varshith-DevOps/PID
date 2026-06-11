@@ -313,6 +313,25 @@ a { color: var(--accent-blue); text-decoration: none; }
   transform: translateY(-2px);
 }
 
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  backdrop-filter: blur(20px);
+  transition: var(--transition);
+}
+
+.card h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
 /* ========== BUTTONS ========== */
 .btn {
   display: inline-flex;
@@ -426,6 +445,39 @@ a { color: var(--accent-blue); text-decoration: none; }
 
 .textarea-field { min-height: 100px; resize: vertical; }
 
+.form-control {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: var(--transition);
+  outline: none;
+}
+
+.form-control:focus {
+  border-color: var(--border-focus);
+  background: var(--bg-input-focus);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+select.form-control option {
+  background: #1f2937;
+  color: white;
+}
+
+textarea.form-control {
+  min-height: 100px;
+  resize: vertical;
+}
+
 .form-label {
   display: block;
   font-size: 0.8rem;
@@ -440,6 +492,55 @@ a { color: var(--accent-blue); text-decoration: none; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.list-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.list-item strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.list-item span,
+.list-item small {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+button.list-item {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button.list-item:hover {
+  background: rgba(255,255,255,0.07);
 }
 
 .checkbox-label {
@@ -1060,4 +1161,5 @@ a { color: var(--accent-blue); text-decoration: none; }
   .profile-meta { justify-content: center; }
   .form-grid-3 { grid-template-columns: 1fr 1fr; }
   .form-grid { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
 }

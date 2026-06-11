@@ -34,6 +34,11 @@
       "module": "PROJECTS",
       "action": "VIEW",
       "isGranted": true
+    },
+    {
+      "module": "REPORTS",
+      "action": "VIEW",
+      "isGranted": true
     }
   ]
 }

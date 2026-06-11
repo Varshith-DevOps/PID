@@ -60,21 +60,21 @@ const upload = multer({
 // Job Openings
 router.get('/jobs', authenticate, getJobOpenings);
 router.get('/jobs/:id', authenticate, getJobOpeningById);
-router.post('/jobs', authenticate, rbacMiddleware('EMPLOYEES', 'CREATE'), createJobOpening);
-router.put('/jobs/:id', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateJobOpening);
-router.delete('/jobs/:id', authenticate, rbacMiddleware('EMPLOYEES', 'DELETE'), deleteJobOpening);
+router.post('/jobs', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOpening);
+router.put('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateJobOpening);
+router.delete('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'DELETE'), deleteJobOpening);
 
 // Applicants
-router.get('/applicants', authenticate, getApplicants);
+router.get('/applicants', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getApplicants);
 router.post('/applicants', upload.single('resume'), applyForJob); // Allow public/employee submission
-router.put('/applicants/:id/stage', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateApplicantStage);
+router.put('/applicants/:id/stage', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateApplicantStage);
 
 // Interviews
-router.post('/interviews', authenticate, rbacMiddleware('EMPLOYEES', 'CREATE'), scheduleInterview);
-router.put('/interviews/:id', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), submitInterviewFeedback);
+router.post('/interviews', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), scheduleInterview);
+router.put('/interviews/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), submitInterviewFeedback);
 
 // Offers
-router.post('/offers', authenticate, rbacMiddleware('EMPLOYEES', 'CREATE'), createJobOffer);
-router.get('/offers/:id/pdf', authenticate, downloadOfferLetter);
+router.post('/offers', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOffer);
+router.get('/offers/:id/pdf', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), downloadOfferLetter);
 
 module.exports = router;

@@ -6,6 +6,7 @@
  */
 
 const prisma = require('../config/database');
+const { canAccessEmployee, isManagerOrAdmin, isHr } = require('../services/accessControl');
 
 // ==========================================
 // 1. Key Result Areas (KRAs) / Goal Setting
@@ -22,6 +23,9 @@ const getKras = async (req, res) => {
     const employeeId = req.query.employeeId || req.user.employeeId;
     if (!employeeId) {
       return res.status(400).json({ error: 'Employee ID is required' });
+    }
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested KRA records' });
     }
 
     const kras = await prisma.kRA.findMany({
@@ -53,6 +57,9 @@ const createKra = async (req, res) => {
     const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!emp) {
       return res.status(404).json({ error: 'Employee not found' });
+    }
+    if (!isManagerOrAdmin(req.user) && !(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You cannot create KRAs for this employee.' });
     }
 
     // Check sum of weightages does not exceed 100% for this year/quarter
@@ -105,6 +112,9 @@ const updateKra = async (req, res) => {
     const existingKra = await prisma.kRA.findUnique({ where: { id } });
     if (!existingKra) {
       return res.status(404).json({ error: 'KRA record not found' });
+    }
+    if (!isManagerOrAdmin(req.user) && !(await canAccessEmployee(req.user, existingKra.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You cannot update this KRA.' });
     }
 
     // Check weightages if weightage changes
@@ -162,6 +172,9 @@ const deleteKra = async (req, res) => {
     if (!existingKra) {
       return res.status(404).json({ error: 'KRA not found' });
     }
+    if (!isHr(req.user)) {
+      return res.status(403).json({ error: 'Only HR/admin roles can delete KRAs.' });
+    }
 
     await prisma.kRA.delete({ where: { id } });
     res.json({ message: 'KRA successfully deleted' });
@@ -187,7 +200,7 @@ const getAppraisals = async (req, res) => {
     const filter = {};
 
     // Allow admins/HR to query all appraisals or specific employee
-    if (req.user.role === 'ADMIN' || req.user.role === 'HR') {
+    if (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN' || req.user.role === 'HR') {
       if (req.query.all === 'true') {
         // Fetch all appraisals
       } else if (employeeId) {
@@ -195,6 +208,9 @@ const getAppraisals = async (req, res) => {
       }
     } else {
       filter.employeeId = req.user.employeeId;
+    }
+    if (filter.employeeId && !(await canAccessEmployee(req.user, filter.employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested appraisals' });
     }
 
     const appraisals = await prisma.performanceAppraisal.findMany({
@@ -238,6 +254,9 @@ const createAppraisal = async (req, res) => {
     const emp = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!emp) {
       return res.status(404).json({ error: 'Employee not found' });
+    }
+    if (!isManagerOrAdmin(req.user)) {
+      return res.status(403).json({ error: 'Only managers or HR/admin roles can initiate appraisals.' });
     }
 
     // Check if an appraisal cycle already exists for this employee
@@ -284,6 +303,9 @@ const submitSelfEvaluation = async (req, res) => {
     if (!appraisal) {
       return res.status(404).json({ error: 'Appraisal cycle not found' });
     }
+    if (!(await canAccessEmployee(req.user, appraisal.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You cannot submit this self evaluation.' });
+    }
 
     const updated = await prisma.performanceAppraisal.update({
       where: { id },
@@ -320,6 +342,9 @@ const submitManagerEvaluation = async (req, res) => {
     if (!appraisal) {
       return res.status(404).json({ error: 'Appraisal record not found' });
     }
+    if (!isManagerOrAdmin(req.user)) {
+      return res.status(403).json({ error: 'Only managers or HR/admin roles can submit manager evaluations.' });
+    }
 
     const updated = await prisma.performanceAppraisal.update({
       where: { id },
@@ -355,6 +380,9 @@ const getFeedback360 = async (req, res) => {
 
     if (!employeeId) {
       return res.status(400).json({ error: 'Employee ID is required' });
+    }
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested feedback records' });
     }
 
     const feedbacks = await prisma.feedback360.findMany({

@@ -34,6 +34,10 @@ const taxRoutes = require('./routes/taxRoutes');
 const complianceRoutes = require('./routes/complianceRoutes');
 const fnfRoutes = require('./routes/fnfRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const assetRoutes = require('./routes/assetRoutes');
+const learningRoutes = require('./routes/learningRoutes');
+const helpdeskRoutes = require('./routes/helpdeskRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
 
 const app = express();
@@ -75,6 +79,10 @@ app.use('/api/tax', taxRoutes);
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/fnf', fnfRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/assets', assetRoutes);
+app.use('/api/learning', learningRoutes);
+app.use('/api/helpdesk', helpdeskRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 /** Health check endpoint for monitoring and load balancers */
 app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
