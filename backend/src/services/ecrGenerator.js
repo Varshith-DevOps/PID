@@ -61,7 +61,7 @@ const generateEPFO_ECR = (records) => {
     
     // EPF wages = basic + da, capped at 15000 unless employee structure is uncapped
     // Let's use the actual basic + da in record, capped at 15000 if restricted
-    const basicAndDa = record.basicSalary + record.da;
+    const basicAndDa = record.basicSalary + (record.da || 0);
     const isRestricted = pfDetails?.restrictPfToCeiling !== false; // default true
     const epfWages = Math.round(isRestricted ? Math.min(basicAndDa, 15000) : basicAndDa);
     const epsWages = Math.round(Math.min(basicAndDa, 15000));

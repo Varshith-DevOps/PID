@@ -1,6 +1,6 @@
-# Employee Login & Comprehensive Profile Management
+# Employee Login & Comprehensive Profile Management [STATUS: COMPLETED]
 
-Enable every employee to login with their actual company email (e.g., `rajesh.kumar@company.com`), and build a rich, tabbed employee profile page in the Admin portal to manage personal, professional, education, salary revision, documents, address details, and password changes.
+Enable every employee to login with their actual company email (e.g., `rajesh.kumar@company.com`), and build a rich, tabbed employee profile page in the Admin portal to manage personal, professional, education, salary revision, documents, address details, and password changes. (This plan has been fully implemented, seeded, and verified).
 
 ## User Review Required
 
@@ -14,7 +14,7 @@ Enable every employee to login with their actual company email (e.g., `rajesh.ku
 
 ### Component 1: Schema — New Models & Employee-User Link
 
-#### [MODIFY] [schema.prisma](file:///d:/AG/HRMS%20application/backend/prisma/schema.prisma)
+#### [MODIFY] [schema.prisma](file:///e:/HRMS_application/backend/prisma/schema.prisma)
 
 **Changes to existing `Employee` model:**
 - Add `userId String? @unique` + relation to `User` (optional for backward compat)
@@ -34,11 +34,11 @@ Enable every employee to login with their actual company email (e.g., `rajesh.ku
 
 ### Component 2: Backend — Auth Login by Employee Email
 
-#### [MODIFY] [authController.js](file:///d:/AG/HRMS%20application/backend/src/controllers/authController.js)
+#### [MODIFY] [authController.js](file:///e:/HRMS_application/backend/src/controllers/authController.js)
 
 - Update `getProfile()` to also return the linked `employeeId` from the `Employee` table when the user has a linked employee record. This fixes the Employee Dashboard which needs the Employee UUID.
 
-#### [MODIFY] [login flow](file:///d:/AG/HRMS%20application/backend/src/controllers/authController.js)
+#### [MODIFY] [login flow](file:///e:/HRMS_application/backend/src/controllers/authController.js)
 
 - Login already works by looking up `User.email`. No changes needed to the login controller — we just need to create User accounts with the employee's email addresses (handled in seed).
 
@@ -46,7 +46,7 @@ Enable every employee to login with their actual company email (e.g., `rajesh.ku
 
 ### Component 3: Backend — Employee Profile CRUD APIs
 
-#### [MODIFY] [employeeController.js](file:///d:/AG/HRMS%20application/backend/src/controllers/employeeController.js)
+#### [MODIFY] [employeeController.js](file:///e:/HRMS_application/backend/src/controllers/employeeController.js)
 
 Enhance `getEmployeeById` to include all new relations:
 ```js
@@ -66,14 +66,14 @@ Add new endpoints:
 - `addExperience(employeeId, data)` / `updateExperience(id, data)` / `deleteExperience(id)`
 - `addSalaryRevision(employeeId, data)`
 
-#### [MODIFY] [authController.js](file:///d:/AG/HRMS%20application/backend/src/controllers/authController.js)
+#### [MODIFY] [authController.js](file:///e:/HRMS_application/backend/src/controllers/authController.js)
 
 Add `changePassword(req, res)` endpoint:
 - Accepts `{ currentPassword, newPassword }`
 - Validates current password
 - Hashes and saves new password
 
-#### [MODIFY] [employeeRoutes.js](file:///d:/AG/HRMS%20application/backend/src/routes/employeeRoutes.js)
+#### [MODIFY] [employeeRoutes.js](file:///e:/HRMS_application/backend/src/routes/employeeRoutes.js)
 
 Register all new sub-resource routes:
 ```
@@ -89,7 +89,7 @@ DELETE /employees/experience/:expId
 POST   /employees/:id/salary-revision
 ```
 
-#### [MODIFY] [authRoutes.js](file:///d:/AG/HRMS%20application/backend/src/routes/authRoutes.js)
+#### [MODIFY] [authRoutes.js](file:///e:/HRMS_application/backend/src/routes/authRoutes.js)
 
 Add: `PUT /auth/change-password` — authenticated, any role
 
@@ -97,7 +97,7 @@ Add: `PUT /auth/change-password` — authenticated, any role
 
 ### Component 4: Seed Data — User Accounts for All 20 Employees
 
-#### [MODIFY] [seed.js](file:///d:/AG/HRMS%20application/backend/prisma/seed.js)
+#### [MODIFY] [seed.js](file:///e:/HRMS_application/backend/prisma/seed.js)
 
 - Create a `User` account (role: EMPLOYEE) for each of the 20 employees with their company email and password `employee123`
 - Link each Employee record to its User via `userId`
@@ -111,7 +111,7 @@ Add: `PUT /auth/change-password` — authenticated, any role
 
 ### Component 5: Frontend — Comprehensive Employee Detail Page (Tabbed)
 
-#### [NEW] [employees/[id]/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/employees/[id]/page.tsx)
+#### [NEW] [employees/[id]/page.tsx](file:///e:/HRMS_application/frontend/src/app/employees/[id]/page.tsx)
 
 A **dedicated employee detail page** with a tabbed interface. Tabs:
 
@@ -127,12 +127,12 @@ A **dedicated employee detail page** with a tabbed interface. Tabs:
 
 Each tab has inline editing with save/cancel. Uses the existing glassmorphism design system.
 
-#### [MODIFY] [employees/page.tsx](file:///d:/AG/HRMS%20application/frontend/src/app/employees/page.tsx)
+#### [MODIFY] [employees/page.tsx](file:///e:/HRMS_application/frontend/src/app/employees/page.tsx)
 
 - Add a **"View"** button in the employee list table → navigates to `/employees/[id]`
 - Keep the existing "Edit" button for quick inline edits
 
-#### [MODIFY] [api.ts](file:///d:/AG/HRMS%20application/frontend/src/lib/api.ts)
+#### [MODIFY] [api.ts](file:///e:/HRMS_application/frontend/src/lib/api.ts)
 
 Add new API functions:
 ```ts
@@ -154,7 +154,7 @@ changePassword(currentPassword, newPassword)
 
 ### Component 6: Frontend — Login Page Update
 
-#### [MODIFY] [page.tsx (login)](file:///d:/AG/HRMS%20application/frontend/src/app/page.tsx)
+#### [MODIFY] [page.tsx (login)](file:///e:/HRMS_application/frontend/src/app/page.tsx)
 
 - Update the footer hint text to say: `Use your company email or admin@hrms.com / admin123`
 

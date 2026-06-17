@@ -188,7 +188,8 @@ const projectTDS = async (employeeId, month, year, currentMonthGross, currentMon
     where: { id: employeeId },
     include: {
       salaryStructure: true,
-      pfDetails: true
+      pfDetails: true,
+      exitDetails: true
     }
   });
 
@@ -242,7 +243,21 @@ const projectTDS = async (employeeId, month, year, currentMonthGross, currentMon
   const prevPT = prevEmployer?.previousEmployerPT || 0.0;
 
   // 5. Project remaining months
-  const remainingMonths = getRemainingMonthsInFY(month);
+  let remainingMonths = getRemainingMonthsInFY(month);
+  if (employee.exitDetails?.lastWorkingDate) {
+    const exitDate = new Date(employee.exitDetails.lastWorkingDate);
+    const targetDate = new Date(year, month - 1, 1);
+    const exitMonth = exitDate.getMonth() + 1;
+    const exitYear = exitDate.getFullYear();
+    const exitTargetDate = new Date(exitYear, exitMonth - 1, 1);
+    
+    if (exitTargetDate <= targetDate) {
+      remainingMonths = 0;
+    } else {
+      const diffMonths = (exitYear - year) * 12 + (exitMonth - month);
+      remainingMonths = Math.min(remainingMonths, Math.max(0, diffMonths));
+    }
+  }
 
   // Standard projected monthly gross from structure
   const monthlyGrossStandard = (structure.basicSalary || 0) +
@@ -269,26 +284,38 @@ const projectTDS = async (employeeId, month, year, currentMonthGross, currentMon
   if (regime === 'OLD') {
     // Add Chapter VI-A declared investments
     if (declaration) {
-      // 80C capped at 1.5L
-      const dec80C = Math.min(declaration.section80C || 0, 150000.0);
+      const isDeclApproved = declaration.isFinalized === true;
+      const dec80C = isDeclApproved ? Math.min(declaration.section80C || 0, 150000.0) : 0.0;
+      
       // PF contribution also counts towards 80C (statutory employee PF + projected PF + previous employer PF)
-      const currentMonthPF = currentMonthBasic * (structure.pfEnabled ? (structure.pfRate || 0.12) : 0);
-      const projectedFuturePF = remainingMonths * (structure.basicSalary * (structure.pfEnabled ? (structure.pfRate || 0.12) : 0));
+      const payrollSettings = await prisma.payrollSettings.findFirst();
+      const restrictPf = payrollSettings?.restrictPfToCeiling !== false; // default true
+      const pfCeiling = payrollSettings?.pfWageCeiling || 15000.0;
+      
+      const currentMonthPFBase = currentMonthBasic + (currentMonthDA || 0);
+      const currentMonthPFBaseRestricted = restrictPf ? Math.min(currentMonthPFBase, pfCeiling) : currentMonthPFBase;
+      const currentMonthPF = currentMonthPFBaseRestricted * (structure.pfEnabled ? (structure.pfRate || 0.12) : 0);
+      
+      const futurePFBase = structure.basicSalary + (structure.da || 0);
+      const futurePFBaseRestricted = restrictPf ? Math.min(futurePFBase, pfCeiling) : futurePFBase;
+      const projectedFuturePF = remainingMonths * (futurePFBaseRestricted * (structure.pfEnabled ? (structure.pfRate || 0.12) : 0));
+      
       const totalPFDeduction = ytdPF + currentMonthPF + projectedFuturePF + prevPF;
       
       const aggregate80C = Math.min(dec80C + totalPFDeduction, 150000.0);
       totalDeductions += aggregate80C;
 
       // 80D capped at 75K
-      const dec80D = Math.min(declaration.section80D || 0, 75000.0);
+      const dec80D = isDeclApproved ? Math.min(declaration.section80D || 0, 75000.0) : 0.0;
       totalDeductions += dec80D;
 
       // Section 24b capped at 2L
-      const dec24b = Math.min(declaration.section24b || 0, 200000.0);
+      const dec24b = isDeclApproved ? Math.min(declaration.section24b || 0, 200000.0) : 0.0;
       totalDeductions += dec24b;
 
-      // Other deductions u/s Chapter VI-A (80G, etc.)
-      totalDeductions += (declaration.otherDeductions || 0);
+      // Other deductions u/s Chapter VI-A (80G, etc.) capped at 150,000
+      const otherDeductions = isDeclApproved ? Math.min(declaration.otherDeductions || 0, 150000.0) : 0.0;
+      totalDeductions += otherDeductions;
     }
   }
 

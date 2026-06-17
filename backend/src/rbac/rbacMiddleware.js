@@ -18,6 +18,28 @@ const SUPER_ADMIN_ROLES = ['SUPER_ADMIN'];
 /** Roles with elevated management privileges */
 const ADMIN_MANAGER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'];
 
+const permissionGranted = (user, module, action) => {
+  const permission = user.permissions.find(
+    (p) => p.module === module && p.action === action
+  );
+  const defaultPermission = getDefaultPermissions(user.role).find(
+    (p) => p.module === module && p.action === action
+  );
+
+  // Seeded/local users can carry stale explicit grants after defaults evolve.
+  // Keep explicit denies for ordinary employees, but let elevated roles inherit
+  // newly-added safe defaults.
+  if (permission) {
+    if (permission.isGranted === true) return true;
+    if (['ADMIN', 'HR', 'MANAGER', 'FINANCE', 'ACCOUNTS'].includes(user.role)) {
+      return defaultPermission?.isGranted === true;
+    }
+    return false;
+  }
+
+  return defaultPermission?.isGranted === true;
+};
+
 /**
  * Check if a user role is within the allowed roles list.
  * @param {string} userRole - The user's current role
@@ -44,15 +66,7 @@ const checkModulePermission = async (userId, module, action) => {
   if (!user) return false;
   if (SUPER_ADMIN_ROLES.includes(user.role)) return true;
 
-  const permission = user.permissions.find(
-    (p) => p.module === module && p.action === action
-  );
-  if (permission) return permission.isGranted === true;
-
-  const defaultPermission = getDefaultPermissions(user.role).find(
-    (p) => p.module === module && p.action === action
-  );
-  return defaultPermission?.isGranted === true;
+  return permissionGranted(user, module, action);
 };
 
 /**
@@ -72,10 +86,10 @@ const rbacMiddleware = (module, action) => {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-      // Consolidate user status check and permission lookup in one database query
+      // Consolidate user status check, permission lookup, and company details in one database query
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        include: { permissions: true }
+        include: { permissions: true, company: true }
       });
 
       if (!user || !user.isActive) {
@@ -87,17 +101,35 @@ const rbacMiddleware = (module, action) => {
         return next();
       }
 
+      // Enforce KYC & CIN Gating for tenant users
+      if (user.companyId && user.role !== 'SALES') {
+        const company = user.company;
+        if (!company) {
+          return res.status(403).json({ error: 'Company not found.' });
+        }
+
+        // 1. Without company CIN account cannot be used
+        if (!company.cin) {
+          if (module !== 'SETTINGS') {
+            return res.status(403).json({
+              error: 'Company CIN is missing. Access blocked.',
+              cinMissing: true
+            });
+          }
+        } else if (company.kycStatus !== 'APPROVED') {
+          // 2. If KYC not done, only attendance & leave module only can be used
+          if (module && !['ATTENDANCE', 'LEAVE', 'SETTINGS'].includes(module)) {
+            return res.status(403).json({
+              error: 'KYC not approved. Access restricted to Attendance and Leave modules.',
+              kycRequired: true
+            });
+          }
+        }
+      }
+
       // Check specific module+action permission
       if (module && action) {
-        const permission = user.permissions.find(
-          (p) => p.module === module && p.action === action
-        );
-        const defaultPermission = permission ? null : getDefaultPermissions(user.role).find(
-          (p) => p.module === module && p.action === action
-        );
-        const isGranted = permission ? permission.isGranted === true : defaultPermission?.isGranted === true;
-
-        if (!isGranted) {
+        if (!permissionGranted(user, module, action)) {
           return res.status(403).json({
             error: `Permission denied for ${module}.${action}`,
           });

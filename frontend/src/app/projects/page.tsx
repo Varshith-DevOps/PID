@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
-import { getProjects, getProjectById, createProject, updateProject, deleteProject, addProjectExpense, getTasks, createTask, updateTask, getEmployees } from '@/lib/api';
-import { CanView, CanCreate, CanEdit } from '@/components/PermissionGuard';
+import { getProjects, getProjectById, createProject, updateProject, deleteProject, addProjectExpense, getTasks, createTask, updateTask, deleteTask, getEmployees } from '@/lib/api';
+import { CanCreate, CanEdit, CanDelete } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
 
 interface Project {
@@ -59,8 +59,9 @@ export default function ProjectsPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'projects' | 'tasks' | 'detail' | 'createProject' | 'createTask'>('projects');
+  const [view, setView] = useState<'projects' | 'tasks' | 'detail' | 'createProject' | 'editProject' | 'createTask'>('projects');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [form, setForm] = useState({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' });
   const [taskForm, setTaskForm] = useState({ title: '', description: '', projectId: '', assigneeId: '', estimatedHours: 0, deadline: '', priority: 'MEDIUM' });
   const [expenseForm, setExpenseForm] = useState({ description: '', amount: 0 });
@@ -72,6 +73,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (user && view === 'projects') loadProjects();
     if (user && view === 'tasks') loadTasks();
+    if (user && view === 'createTask' && projects.length === 0) loadProjects();
   }, [user, view]);
 
   useEffect(() => {
@@ -121,6 +123,43 @@ export default function ProjectsPage() {
     } catch (err) { alert('Failed to create project'); }
   };
 
+  const beginEditProject = (project: Project) => {
+    setEditingProject(project);
+    setForm({
+      name: project.name || '',
+      description: project.description || '',
+      startDate: project.startDate ? project.startDate.split('T')[0] : '',
+      deadline: project.deadline ? project.deadline.split('T')[0] : '',
+      budget: project.budget || 0,
+      managerId: project.manager?.id || '',
+      status: project.status || 'PLANNING',
+    });
+    setView('editProject');
+  };
+
+  const handleUpdateProject = async () => {
+    if (!editingProject) return;
+    try {
+      await updateProject(editingProject.id, form);
+      setEditingProject(null);
+      setForm({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' });
+      setView('projects');
+      loadProjects();
+      alert('Project updated');
+    } catch (err) { alert('Failed to update project'); }
+  };
+
+  const handleDeleteProject = async (project: Project) => {
+    if (!confirm(`Deactivate project "${project.name}"?`)) return;
+    try {
+      await deleteProject(project.id);
+      if (selectedProject?.id === project.id) setSelectedProject(null);
+      loadProjects();
+      setView('projects');
+      alert('Project deactivated');
+    } catch (err) { alert('Failed to deactivate project'); }
+  };
+
   const handleSaveTask = async () => {
     try {
       await createTask(taskForm);
@@ -150,6 +189,15 @@ export default function ProjectsPage() {
     } catch (err) { console.error(err); }
   };
 
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm('Delete this task?')) return;
+    try {
+      await deleteTask(taskId);
+      loadTasks();
+      if (selectedProject) loadProjectDetail(selectedProject.id);
+    } catch (err) { alert('Failed to delete task'); }
+  };
+
   if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
 
   return (
@@ -168,7 +216,7 @@ export default function ProjectsPage() {
               <button className={`tab-btn ${view === 'projects' ? 'active' : ''}`} onClick={() => setView('projects')}>Projects</button>
               <button className={`tab-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>Tasks</button>
             </div>
-            <CanCreate module="PAYROLL">
+            <CanCreate module="PROJECTS">
               <button className="btn btn-success btn-sm" onClick={() => setView(view === 'tasks' ? 'createTask' : 'createProject')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 {view === 'tasks' ? 'New Task' : 'New Project'}
@@ -177,9 +225,9 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {view === 'createProject' && (
+        {(view === 'createProject' || view === 'editProject') && (
           <div className="glass-card" style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Create Project</h2>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>{view === 'editProject' ? 'Edit Project' : 'Create Project'}</h2>
             <div className="form-grid">
               <div className="form-group"><label className="form-label">Project Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" /></div>
               <div className="form-group"><label className="form-label">Budget</label><input type="number" value={form.budget} onChange={(e) => setForm({ ...form, budget: parseFloat(e.target.value) })} className="input-field" /></div>
@@ -187,10 +235,11 @@ export default function ProjectsPage() {
               <div className="form-group"><label className="form-label">Status</label><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="select-field">{PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
               <div className="form-group"><label className="form-label">Start Date</label><input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="input-field" /></div>
               <div className="form-group"><label className="form-label">Deadline</label><input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="input-field" /></div>
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Description</label><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input-field" rows={3} /></div>
             </div>
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-              <button onClick={handleSaveProject} className="btn btn-primary">Create</button>
-              <button onClick={() => setView('projects')} className="btn btn-ghost">Cancel</button>
+              <button onClick={view === 'editProject' ? handleUpdateProject : handleSaveProject} className="btn btn-primary">{view === 'editProject' ? 'Update' : 'Create'}</button>
+              <button onClick={() => { setEditingProject(null); setForm({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' }); setView('projects'); }} className="btn btn-ghost">Cancel</button>
             </div>
           </div>
         )}
@@ -216,9 +265,9 @@ export default function ProjectsPage() {
         {view === 'projects' && (
           <div className="glass-card" style={{ overflow: 'hidden' }}>
             <table className="data-table">
-              <thead><tr><th>Project</th><th>Manager</th><th>Deadline</th><th style={{ textAlign: 'right' }}>Budget</th><th style={{ textAlign: 'center' }}>Progress</th><th>Status</th></tr></thead>
+              <thead><tr><th>Project</th><th>Manager</th><th>Deadline</th><th style={{ textAlign: 'right' }}>Budget</th><th style={{ textAlign: 'center' }}>Progress</th><th>Status</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={6} className="loading-container"><div className="loading-spinner" />Loading...</td></tr> :
+                {loading ? <tr><td colSpan={7} className="loading-container"><div className="loading-spinner" />Loading...</td></tr> :
                   projects.map((p) => (
                     <tr key={p.id}>
                       <td><button onClick={() => loadProjectDetail(p.id)} style={{ fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-blue)', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>{p.name}</button></td>
@@ -234,9 +283,19 @@ export default function ProjectsPage() {
                         </div>
                       </td>
                       <td><span className={`badge ${STATUS_MAP[p.status]?.cls || 'badge-neutral'}`}>{p.status}</span></td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
+                          <CanEdit module="PROJECTS">
+                            <button onClick={() => beginEditProject(p)} className="btn btn-ghost btn-sm">Edit</button>
+                          </CanEdit>
+                          <CanDelete module="PROJECTS">
+                            <button onClick={() => handleDeleteProject(p)} className="btn btn-danger btn-sm">Deactivate</button>
+                          </CanDelete>
+                        </div>
+                      </td>
                     </tr>
                   ))}
-                {projects.length === 0 && !loading && <tr><td colSpan={6} className="empty-state">No projects found</td></tr>}
+                {projects.length === 0 && !loading && <tr><td colSpan={7} className="empty-state">No projects found</td></tr>}
               </tbody>
             </table>
           </div>
@@ -245,9 +304,9 @@ export default function ProjectsPage() {
         {view === 'tasks' && (
           <div className="glass-card" style={{ overflow: 'hidden' }}>
             <table className="data-table">
-              <thead><tr><th>Task</th><th>Project</th><th>Assigned To</th><th style={{ textAlign: 'center' }}>Priority</th><th>Status</th><th style={{ textAlign: 'center' }}>Hours</th></tr></thead>
+              <thead><tr><th>Task</th><th>Project</th><th>Assigned To</th><th style={{ textAlign: 'center' }}>Priority</th><th>Status</th><th style={{ textAlign: 'center' }}>Hours</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={6} className="loading-container"><div className="loading-spinner" />Loading...</td></tr> :
+                {loading ? <tr><td colSpan={7} className="loading-container"><div className="loading-spinner" />Loading...</td></tr> :
                   tasks.map((t) => (
                     <tr key={t.id}>
                       <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{t.title}</td>
@@ -255,14 +314,21 @@ export default function ProjectsPage() {
                       <td>{t.assignee?.firstName} {t.assignee?.lastName}</td>
                       <td style={{ textAlign: 'center' }}><span className={`badge ${PRIORITY_MAP[t.priority] || 'badge-neutral'}`}>{t.priority}</span></td>
                       <td>
-                        <select value={t.status} onChange={(e) => handleTaskStatusChange(t.id, e.target.value)} className="select-field" style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', width: 'auto' }}>
-                          {TASK_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                        </select>
+                        <CanEdit module="PROJECTS" fallback={<span className={`badge ${STATUS_MAP[t.status]?.cls || 'badge-neutral'}`}>{t.status.replace('_', ' ')}</span>}>
+                          <select value={t.status} onChange={(e) => handleTaskStatusChange(t.id, e.target.value)} className="select-field" style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', width: 'auto' }}>
+                            {TASK_STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+                          </select>
+                        </CanEdit>
                       </td>
                       <td style={{ textAlign: 'center', fontWeight: 600 }}><span style={{ color: 'var(--success)' }}>{t.actualHours || 0}</span>/{t.estimatedHours || 0}h</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <CanDelete module="PROJECTS">
+                          <button onClick={() => handleDeleteTask(t.id)} className="btn btn-danger btn-sm">Delete</button>
+                        </CanDelete>
+                      </td>
                     </tr>
                   ))}
-                {tasks.length === 0 && !loading && <tr><td colSpan={6} className="empty-state">No tasks found</td></tr>}
+                {tasks.length === 0 && !loading && <tr><td colSpan={7} className="empty-state">No tasks found</td></tr>}
               </tbody>
             </table>
           </div>
@@ -298,13 +364,13 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-            <CanCreate module="PAYROLL">
+            <CanEdit module="PROJECTS">
               <div className="glass-card" style={{ padding: '1.25rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
                 <input placeholder="Expense Description" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} className="input-field" style={{ flex: 1 }} />
                 <input type="number" placeholder="Amount" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: parseFloat(e.target.value) })} className="input-field" style={{ width: '160px' }} />
                 <button onClick={handleAddExpense} className="btn btn-primary">Add Expense</button>
               </div>
-            </CanCreate>
+            </CanEdit>
           </>
         )}
       </main>

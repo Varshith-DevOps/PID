@@ -46,6 +46,7 @@ const finalizeFNFSettlement = async (req, res) => {
         where: { employeeId },
         data: {
           fnfStatus: 'COMPLETED',
+          fnfAmount: calc.netSettlement,
           remarks: remarks || 'F&F Finalized successfully.'
         }
       });

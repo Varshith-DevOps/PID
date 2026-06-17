@@ -29,6 +29,8 @@ const MODULES = [
   'ASSETS',
   'LEARNING',
   'HELPDESK',
+  'INTEGRATIONS',
+  'ORGANIZATION',
   'WORKFLOWS',
   'NOTIFICATIONS'
 ];
@@ -59,7 +61,8 @@ const ACCESS_ROLES = [
   'ACCOUNTS',
   'FINANCE',
   'PAYROLL_REVIEWER',
-  'PAYROLL_APPROVER'
+  'PAYROLL_APPROVER',
+  'SALES'
 ];
 
 const ROLE_LABELS = {
@@ -74,6 +77,7 @@ const ROLE_LABELS = {
   FINANCE: 'Finance Officer',
   PAYROLL_REVIEWER: 'Payroll Reviewer',
   PAYROLL_APPROVER: 'Payroll Approver',
+  SALES: 'Sales Representative'
 };
 
 const getDefaultPermissions = (role) => {
@@ -120,6 +124,8 @@ const getDefaultPermissions = (role) => {
       { module: 'HELPDESK', action: 'VIEW', isGranted: true },
       { module: 'HELPDESK', action: 'CREATE', isGranted: true },
       { module: 'HELPDESK', action: 'EDIT', isGranted: true },
+      { module: 'WORKFLOWS', action: 'VIEW', isGranted: true },
+      { module: 'WORKFLOWS', action: 'EDIT', isGranted: true },
       { module: 'NOTIFICATIONS', action: 'VIEW', isGranted: true },
       { module: 'NOTIFICATIONS', action: 'EDIT', isGranted: true },
       ],
@@ -137,6 +143,7 @@ const getDefaultPermissions = (role) => {
       { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
       { module: 'PERFORMANCE', action: 'CREATE', isGranted: true },
       { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
+      { module: 'PROJECTS', action: 'VIEW', isGranted: true },
       { module: 'ASSETS', action: 'VIEW', isGranted: true },
       { module: 'LEARNING', action: 'VIEW', isGranted: true },
       { module: 'LEARNING', action: 'EDIT', isGranted: true },
@@ -194,6 +201,8 @@ const getDefaultPermissions = (role) => {
       'HELPDESK',
       'ASSETS',
       'LEARNING',
+      'INTEGRATIONS',
+      'ORGANIZATION',
       'WORKFLOWS',
       'NOTIFICATIONS'
     ].flatMap((m) => [
@@ -209,7 +218,9 @@ const getDefaultPermissions = (role) => {
       'EXPENSES',
       'ACCOUNTS',
       'REPORTS',
-      'EMPLOYEES'
+      'EMPLOYEES',
+      'INTEGRATIONS',
+      'WORKFLOWS'
     ].flatMap((m) => [
       { module: m, action: 'VIEW', isGranted: true },
       { module: m, action: 'CREATE', isGranted: m !== 'EMPLOYEES' },
@@ -234,6 +245,7 @@ const getDefaultPermissions = (role) => {
       { module: 'REPORTS', action: 'VIEW', isGranted: true },
       { module: 'REPORTS', action: 'EXPORT', isGranted: true },
     ],
+    SALES: [],
   };
   return defaults[role] || [];
 };

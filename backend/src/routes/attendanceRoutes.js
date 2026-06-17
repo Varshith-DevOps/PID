@@ -17,11 +17,19 @@ router.get('/settings', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getSe
 router.put('/settings', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateSettings);
 
 const { validateAttendancePunch } = require('../middleware/attendanceValidation');
-const { syncBiometricPunches } = require('../controllers/attendanceSyncController');
+const { syncBiometricPunches, syncUniversalDevicePunch } = require('../controllers/attendanceSyncController');
 
 router.post('/check-in', authenticate, validateAttendancePunch, checkIn);
 router.post('/check-out', authenticate, validateAttendancePunch, checkOut);
 router.post('/sync', authenticate, syncBiometricPunches);
+
+// Universal device webhook (supports M2M API key authentication)
+router.post('/device-push/universal', (req, res, next) => {
+  if (req.headers['x-api-key']) {
+    return next();
+  }
+  return authenticate(req, res, next);
+}, syncUniversalDevicePunch);
 
 router.get('/today', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getTodayAttendance);
 router.get('/employee/:employeeId', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getEmployeeAttendance);

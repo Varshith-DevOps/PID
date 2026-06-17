@@ -45,7 +45,7 @@ export default function TimesheetPage() {
   const loadMyTimesheets = async () => {
     setLoading(true);
     try {
-      const data = await getEmployeeTimesheets(user?.id || '', {});
+      const data = await getEmployeeTimesheets(user?.employeeId || user?.id || '', {});
       setMyTimesheets(data.timesheets);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
@@ -86,7 +86,7 @@ export default function TimesheetPage() {
   const handleLogHours = async () => {
     try {
       const payload = {
-        employeeId: user?.id || '',
+        employeeId: user?.employeeId || user?.id || '',
         taskId: form.taskId || undefined,
         date: form.date,
         hoursWorked: form.hoursWorked,

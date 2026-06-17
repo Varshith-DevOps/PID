@@ -5,6 +5,7 @@ const prisma = require('../src/config/database');
 describe('Enterprise Access Control Hardening', () => {
   let employeeToken;
   let adminToken;
+  let managerToken;
   let employeeId;
   let otherEmployeeId;
 
@@ -18,6 +19,11 @@ describe('Enterprise Access Control Hardening', () => {
       .post('/api/auth/login')
       .send({ email: 'admin@hrms.com', password: 'admin123' });
     adminToken = adminRes.body.token;
+
+    const managerRes = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'manager@hrms.com', password: 'admin123' });
+    managerToken = managerRes.body.token;
 
     const employee = await prisma.employee.findUnique({ where: { email: 'rajesh.kumar@company.com' } });
     const otherEmployee = await prisma.employee.findUnique({ where: { email: 'priya.sharma@company.com' } });
@@ -36,6 +42,40 @@ describe('Enterprise Access Control Hardening', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.employeeId).toBeTruthy();
+  });
+
+  it('serves a personalized employee dashboard without requiring admin report grants', async () => {
+    const res = await request(app)
+      .get('/api/dashboard/me')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.dashboardType).toBe('EMPLOYEE');
+    expect(res.body).toHaveProperty('focus');
+    expect(res.body.cards).toHaveProperty('tasks');
+    expect(res.body.cards).toHaveProperty('teamAvailability');
+  });
+
+  it('serves a manager cockpit with team workload and availability details', async () => {
+    const res = await request(app)
+      .get('/api/dashboard/me')
+      .set('Authorization', `Bearer ${managerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.dashboardType).toBe('MANAGER');
+    expect(res.body.cards).toHaveProperty('workload');
+    expect(res.body.cards).toHaveProperty('teamAvailability');
+  });
+
+  it('serves an admin executive dashboard with payroll and workforce signals', async () => {
+    const res = await request(app)
+      .get('/api/dashboard/me')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.dashboardType).toBe('ADMIN');
+    expect(res.body).toHaveProperty('payroll');
+    expect(res.body.cards).toHaveProperty('departments');
   });
 
   it('allows employees to create their own expense claims through default EXPENSES grants', async () => {
@@ -128,6 +168,81 @@ describe('Enterprise Access Control Hardening', () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('lets employees see assigned tasks and rolls timesheet hours into task actuals', async () => {
+    const projectRes = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: `QA Timesheet Project ${Date.now()}`,
+        managerId: employeeId,
+        status: 'ACTIVE',
+      });
+
+    expect(projectRes.status).toBe(201);
+
+    const taskRes = await request(app)
+      .post('/api/projects/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        title: `QA Assigned Task ${Date.now()}`,
+        projectId: projectRes.body.id,
+        assigneeId: employeeId,
+        estimatedHours: 8,
+      });
+
+    expect(taskRes.status).toBe(201);
+
+    const employeeTasksRes = await request(app)
+      .get('/api/projects/tasks/all')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(employeeTasksRes.status).toBe(200);
+    expect(employeeTasksRes.body.some((task) => task.id === taskRes.body.id)).toBe(true);
+
+    const timesheetRes = await request(app)
+      .post('/api/timesheet')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        employeeId,
+        taskId: taskRes.body.id,
+        date: '2026-06-11',
+        hoursWorked: 6,
+        description: 'Task rollup regression',
+      });
+
+    expect(timesheetRes.status).toBe(200);
+
+    const updatedTask = await prisma.task.findUnique({ where: { id: taskRes.body.id } });
+    expect(updatedTask.actualHours).toBe(6);
+  });
+
+  it('rejects timesheet logging against a task assigned to another employee', async () => {
+    const project = await prisma.project.findFirst();
+    const taskRes = await request(app)
+      .post('/api/projects/tasks')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        title: `QA Other Employee Task ${Date.now()}`,
+        projectId: project.id,
+        assigneeId: otherEmployeeId,
+      });
+
+    expect(taskRes.status).toBe(201);
+
+    const res = await request(app)
+      .post('/api/timesheet')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        employeeId,
+        taskId: taskRes.body.id,
+        date: '2026-06-12',
+        hoursWorked: 4,
+        description: 'Wrong task assignment',
+      });
+
+    expect(res.status).toBe(400);
   });
 
   it('integrates asset module with admin create and employee self-service view only', async () => {

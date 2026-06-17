@@ -23,6 +23,13 @@ interface User {
   role: string;
   employeeId?: string;
   permissions?: Permission[];
+  subscriptionFeatures?: Record<string, boolean> | null;
+  companyName?: string | null;
+  companyLogo?: string | null;
+  companyKycStatus?: string | null;
+  companyCin?: string | null;
+  hasUsedFreeTrial?: boolean;
+  freeTrialExpiresAt?: string | null;
 }
 
 interface AuthContextType {

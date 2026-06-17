@@ -5,19 +5,69 @@
  */
 
 const prisma = require('../config/database');
+const { getEmployeeScopeIds, getLinkedEmployeeId, isHr } = require('../services/accessControl');
+
+const scopedProjectAccessWhere = async (user) => {
+  if (isHr(user)) return {};
+
+  const ownEmployeeId = await getLinkedEmployeeId(user);
+  const scopeIds = await getEmployeeScopeIds(user);
+  const ids = scopeIds.length ? scopeIds : ownEmployeeId ? [ownEmployeeId] : [];
+  if (!ids.length) return { id: '__no_project_scope__' };
+
+  return {
+    OR: [
+      { managerId: { in: ids } },
+      { resources: { some: { employeeId: { in: ids } } } },
+      { tasks: { some: { assigneeId: { in: ids } } } },
+    ],
+  };
+};
+
+const scopedTaskAccessWhere = async (user) => {
+  if (isHr(user)) return {};
+
+  const ownEmployeeId = await getLinkedEmployeeId(user);
+  const scopeIds = await getEmployeeScopeIds(user);
+  const ids = scopeIds.length ? scopeIds : ownEmployeeId ? [ownEmployeeId] : [];
+  if (!ids.length) return { id: '__no_task_scope__' };
+
+  return {
+    OR: [
+      { assigneeId: { in: ids } },
+      { project: { managerId: { in: ids } } },
+      { project: { resources: { some: { employeeId: { in: ids } } } } },
+    ],
+  };
+};
+
+const canAccessProject = async (user, projectId) => {
+  if (isHr(user)) return true;
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ...(await scopedProjectAccessWhere(user)),
+    },
+    select: { id: true },
+  });
+  return Boolean(project);
+};
 
 const getProjects = async (req, res) => {
   try {
     const { status, search, page = 1, limit = 20 } = req.query;
-    const where = { isActive: true };
+    const filters = [{ isActive: true }, await scopedProjectAccessWhere(req.user)];
 
-    if (status) where.status = status;
+    if (status) filters.push({ status });
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
+      filters.push({
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
+    const where = { AND: filters };
 
     const projects = await prisma.project.findMany({
       where,
@@ -41,6 +91,10 @@ const getProjects = async (req, res) => {
 const getProjectById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!(await canAccessProject(req.user, id))) {
+      return res.status(403).json({ error: 'Access denied for requested project.' });
+    }
+
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
@@ -66,10 +120,16 @@ const getProjectById = async (req, res) => {
 
 const createProject = async (req, res) => {
   try {
-    const { name, description, startDate, deadline, budget, managerId, resourceIds } = req.body;
+    const { name, description, startDate, deadline, budget, managerId, resourceIds, status } = req.body;
 
     if (!name || !managerId) {
       return res.status(400).json({ error: 'Name and manager required' });
+    }
+    if (req.user?.role === 'MANAGER') {
+      const scopeIds = await getEmployeeScopeIds(req.user, { includeReports: false });
+      if (!scopeIds.includes(managerId)) {
+        return res.status(403).json({ error: 'Managers can only create projects they manage.' });
+      }
     }
 
     const project = await prisma.project.create({
@@ -79,6 +139,7 @@ const createProject = async (req, res) => {
         startDate: startDate ? new Date(startDate) : null,
         deadline: deadline ? new Date(deadline) : null,
         budget: budget || 0,
+        status: status || 'PLANNING',
         managerId,
         resources: resourceIds?.length > 0 ? { create: resourceIds.map((id) => ({ employeeId: id })) } : undefined,
       },
@@ -98,6 +159,9 @@ const updateProject = async (req, res) => {
 
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!(await canAccessProject(req.user, id))) {
+      return res.status(403).json({ error: 'Access denied for requested project.' });
+    }
 
     if (resourceIds) {
       await prisma.projectResource.deleteMany({ where: { projectId: id } });
@@ -129,6 +193,8 @@ const updateProject = async (req, res) => {
 const deleteProject = async (req, res) => {
   try {
     const { id } = req.params;
+    const project = await prisma.project.findUnique({ where: { id } });
+    if (!project) return res.status(404).json({ error: 'Project not found' });
     await prisma.project.update({ where: { id }, data: { isActive: false } });
     res.json({ message: 'Project deactivated' });
   } catch (error) {
@@ -143,6 +209,9 @@ const addExpense = async (req, res) => {
 
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!(await canAccessProject(req.user, projectId))) {
+      return res.status(403).json({ error: 'Access denied for requested project.' });
+    }
 
     const expense = await prisma.projectExpense.create({
       data: { projectId, description, amount, date: date ? new Date(date) : new Date(), createdBy: req.user?.id },
@@ -157,12 +226,14 @@ const addExpense = async (req, res) => {
 const getTasks = async (req, res) => {
   try {
     const { projectId, assigneeId, status, priority, page = 1, limit = 50 } = req.query;
-    const where = {};
+    const filters = [];
 
-    if (projectId) where.projectId = projectId;
-    if (assigneeId) where.assigneeId = assigneeId;
-    if (status) where.status = status;
-    if (priority) where.priority = priority;
+    filters.push(await scopedTaskAccessWhere(req.user));
+    if (projectId) filters.push({ projectId });
+    if (assigneeId) filters.push({ assigneeId });
+    if (status) filters.push({ status });
+    if (priority) filters.push({ priority });
+    const where = filters.length ? { AND: filters } : {};
 
     const tasks = await prisma.task.findMany({
       where,
@@ -187,6 +258,13 @@ const createTask = async (req, res) => {
 
     if (!title || !assigneeId) {
       return res.status(400).json({ error: 'Title and assignee required' });
+    }
+    const scopedEmployeeIds = isHr(req.user) ? null : await getEmployeeScopeIds(req.user);
+    if (scopedEmployeeIds && !scopedEmployeeIds.includes(assigneeId)) {
+      return res.status(403).json({ error: 'You can only assign tasks within your employee scope.' });
+    }
+    if (projectId && !(await canAccessProject(req.user, projectId))) {
+      return res.status(403).json({ error: 'Access denied for requested project.' });
     }
 
     const task = await prisma.task.create({
@@ -219,6 +297,13 @@ const updateTask = async (req, res) => {
 
     const task = await prisma.task.findUnique({ where: { id } });
     if (!task) return res.status(404).json({ error: 'Task not found' });
+    const scopedTask = await prisma.task.findFirst({
+      where: { id, ...(await scopedTaskAccessWhere(req.user)) },
+      select: { id: true },
+    });
+    if (!scopedTask) {
+      return res.status(403).json({ error: 'Access denied for requested task.' });
+    }
 
     const isCompletion = status === 'COMPLETED' && task.status !== 'COMPLETED';
 
@@ -248,6 +333,15 @@ const updateTask = async (req, res) => {
 const deleteTask = async (req, res) => {
   try {
     const { id } = req.params;
+    const task = await prisma.task.findUnique({ where: { id } });
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    const scopedTask = await prisma.task.findFirst({
+      where: { id, ...(await scopedTaskAccessWhere(req.user)) },
+      select: { id: true },
+    });
+    if (!scopedTask) {
+      return res.status(403).json({ error: 'Access denied for requested task.' });
+    }
     await prisma.task.delete({ where: { id } });
     res.json({ message: 'Task deleted' });
   } catch (error) {

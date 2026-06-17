@@ -1,252 +1,256 @@
-# HRMS - Local Hosting Guide
+# NexusHR HRMS - Local Run Guide
 
-A comprehensive Human Resource Management System with complete authentication, RBAC, and HR modules.
+This guide explains how to run the current NexusHR HRMS application locally from this workspace.
 
-## Prerequisites
+## 1. Current Local Stack
 
-- **Node.js**: 18.x or higher
-- **PostgreSQL**: 14.x or higher
-- **npm**: 9.x or higher
+| Area | Technology |
+| --- | --- |
+| Frontend | Next.js 15, React 19, TypeScript, Axios, Recharts |
+| Backend | Node.js 20+, Express 5, Prisma 6 |
+| Local Database | SQLite |
+| Reports | ExcelJS, PDFKit, CSV streaming |
+| Tests | Jest, Supertest |
+| Optional Mobile App | Flutter |
 
-## Quick Start (Docker - Recommended)
+## 2. Required Tools
 
-### Option 1: Docker Compose (Easiest)
+- Node.js 20 or later.
+- npm.
+- Git.
+- Optional: Flutter SDK 3.x if you want to run `mobile_app`.
 
-```bash
-# Clone/download the project
-cd hrms-application
+Check versions:
 
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Access
-# Frontend: http://localhost:3000
-# Backend:  http://localhost:5000
+```powershell
+node -v
+npm -v
 ```
 
-### Option 2: Manual Setup
+## 3. Environment Files
 
-#### Step 1: Install PostgreSQL
+Backend file: `backend/.env`
 
-**Windows:**
-- Download from https://www.postgresql.org/download/windows/
-- During installation, set password: `password`
-- Keep default port: `5432`
-
-**Mac:**
-```bash
-brew install postgresql@14
-brew services start postgresql@14
+```env
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="supersecretjwtkey"
+JWT_EXPIRES_IN="7d"
+PORT=5000
 ```
 
-**Linux (Ubuntu):**
-```bash
-sudo apt update
-sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+Frontend file: `frontend/.env.local`
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ```
 
-#### Step 2: Create Database
+## 4. First-Time Backend Setup
 
-```bash
-# Connect to PostgreSQL
-psql -U postgres
+Open PowerShell:
 
-# Create database
-CREATE DATABASE hrms;
-
-# Exit
-\q
-```
-
-#### Step 3: Configure Environment
-
-```bash
-# Navigate to backend
-cd backend
-
-# Copy example env file
-copy .env.example .env
-
-# Edit .env with your database credentials
-# DATABASE_URL="postgresql://postgres:password@localhost:5432/hrms"
-```
-
-#### Step 4: Install Dependencies
-
-```bash
-# Backend
-cd backend
+```powershell
+cd e:\HRMS_application\backend
 npm install
-
-# Frontend (new terminal)
-cd frontend
-npm install
-```
-
-#### Step 5: Setup Database
-
-```bash
-cd backend
-npx prisma generate
-npx prisma db push
-```
-
-#### Step 6: Start Servers
-
-```bash
-# Terminal 1 - Backend
-cd backend
-node src/index.js
-
-# Terminal 2 - Frontend
-cd frontend
+npm run prisma:generate
+npm run prisma:push
+npm run seed
 npm run dev
 ```
 
-## Access the Application
+Backend URLs:
 
-| Service     | URL                    |
-|-------------|------------------------|
-| Frontend    | http://localhost:3000  |
-| Backend API | http://localhost:5000  |
-| Health      | http://localhost:5000/health |
-
-## Default Login Credentials
-
-After seeding the database:
-
-| Role       | Email              | Password   |
-|------------|--------------------|------------|
-| Super Admin | admin@hrms.com    | admin123   |
-| Admin      | manager@hrms.com   | admin123   |
-| Manager    | manager@hrms.com   | admin123   |
-| Employee   | employee@hrms.com  | admin123   |
-
-## Project Structure
-
-```
-hrms-application/
-├── backend/
-│   ├── prisma/
-│   │   ├── schema.prisma    # Database schema
-│   │   └── seed.js         # Seed data
-│   ├── src/
-│   │   ├── controllers/    # API controllers
-│   │   ├── routes/          # API routes
-│   │   ├── middleware/      # Auth middleware
-│   │   ├── services/        # Business logic
-│   │   └── config/         # Database config
-│   ├── scripts/             # Setup scripts
-│   ├── Dockerfile
-│   ├── package.json
-│   └── .env
-├── frontend/
-│   ├── src/
-│   │   ├── app/            # Next.js pages
-│   │   ├── lib/           # API & auth
-│   │   └── components/    # React components
-│   ├── Dockerfile
-│   └── package.json
-├── docker-compose.yml
-└── README-LOCAL.md
+```text
+Backend API:  http://localhost:5000/api
+Health check: http://localhost:5000/health
 ```
 
-## Features
+Expected health response:
 
-- **Authentication**: JWT-based login with role management
-- **RBAC**: Granular permissions per module
-- **Employee Management**: CRUD, documents, org chart
-- **Attendance**: Check-in/out, daily tracking
-- **Leave Management**: Request, approve/reject workflow
-- **Payroll**: Salary structure, PF, TDS, Gratuity
-- **Payslips**: PDF generation, email
-- **Projects**: Project & task management
-- **Timesheet**: Daily work logging
-- **Overtime**: OT request & approval
-- **Utilization**: Employee workload tracking
-- **Dashboards**: Role-based analytics with charts
-
-## Troubleshooting
-
-### PostgreSQL Connection Error
-
-```bash
-# Check PostgreSQL status
-pg_isready -h localhost -p 5432
-
-# Restart PostgreSQL
-sudo systemctl restart postgresql    # Linux
-pg_ctl restart -D /usr/local/var/postgres  # Mac
+```json
+{ "status": "ok", "uptime": 123.45 }
 ```
 
-### Port Already in Use
+## 5. First-Time Frontend Setup
 
-```bash
-# Kill process on port
-# Windows
-netstat -ano | findstr :5000
-taskkill /PID <PID> /F
+Open a second PowerShell terminal:
 
-# Linux/Mac
-lsof -ti:5000 | xargs kill -9
+```powershell
+cd e:\HRMS_application\frontend
+npm install
+npm run dev
 ```
 
-### Prisma Errors
+Frontend URL:
 
-```bash
-# Reset Prisma
-cd backend
-rm -rf node_modules/.prisma
-npx prisma generate
-npx prisma db push
+```text
+http://localhost:3000
 ```
 
-### Build Errors (Frontend)
+## 6. Login Credentials After Seeding
 
-```bash
-cd frontend
-rm -rf .next
+| Role | Email | Password |
+| --- | --- | --- |
+| Super Admin | `superadmin@hrms.com` | `admin123` |
+| Admin | `admin@hrms.com` | `admin123` |
+| Manager | `manager@hrms.com` | `admin123` |
+| Employee | `rajesh.kumar@company.com` | `employee123` |
+| Employee | `priya.sharma@company.com` | `employee123` |
+
+The seed script creates a sample company, departments, employees, roles, permissions, payroll data, attendance data, projects, expenses, recruitment data, dashboards, and reports-related records.
+
+## 7. Daily Development Commands
+
+### Backend
+
+```powershell
+cd e:\HRMS_application\backend
+npm run dev
+```
+
+Useful backend commands:
+
+```powershell
+npm start
+npm run prisma:generate
+npm run prisma:push
+npm run seed
+npm test
+npx prisma studio --schema=prisma/schema.prisma
+```
+
+### Frontend
+
+```powershell
+cd e:\HRMS_application\frontend
+npm run dev
+```
+
+Useful frontend commands:
+
+```powershell
+npm run build
+npm start
+```
+
+## 8. Optional Mobile App
+
+```powershell
+cd e:\HRMS_application\mobile_app
+flutter pub get
+flutter run
+```
+
+The mobile app is a Flutter Employee Self Service portal codebase. Confirm API base URL handling inside the mobile app before using a physical device, because mobile devices cannot call `localhost` on your PC directly.
+
+## 9. How to Reset Local Data
+
+The seed script clears existing local data and recreates sample data.
+
+```powershell
+cd e:\HRMS_application\backend
+npm run seed
+```
+
+Run this only when you are comfortable losing local test records in the SQLite database.
+
+## 10. How to Validate the Application
+
+### Backend Tests
+
+```powershell
+cd e:\HRMS_application\backend
+npm test
+```
+
+### Frontend Build
+
+```powershell
+cd e:\HRMS_application\frontend
 npm run build
 ```
 
-## Seeding Test Data
+### Manual Smoke Check
 
-```bash
-cd backend
-node prisma/seed.js
+1. Open `http://localhost:5000/health`.
+2. Open `http://localhost:3000`.
+3. Login as `admin@hrms.com` with `admin123`.
+4. Open dashboard, employees, attendance, leave, payroll, and reports.
+5. Export one report as Excel, CSV, and PDF.
+6. Login as an employee and confirm restricted admin pages are not accessible.
+
+## 11. Troubleshooting
+
+### Port Already In Use
+
+Check the port:
+
+```powershell
+Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
 ```
 
-## API Documentation
+Stop the process:
 
-Base URL: `http://localhost:5000/api`
-
-| Endpoint                | Description           |
-|-------------------------|----------------------|
-| /api/auth/login         | Login                |
-| /api/employees          | Employee CRUD        |
-| /api/attendance         | Attendance tracking  |
-| /api/leave              | Leave management     |
-| /api/payroll            | Payroll processing  |
-| /api/projects           | Project management   |
-| /api/timesheet         | Work hour logging    |
-| /api/overtime           | Overtime requests    |
-| /api/utilization        | Resource tracking    |
-
-## Development Commands
-
-```bash
-# Backend
-npm run dev          # Start dev server
-npx prisma studio    # Open Prisma GUI
-npx prisma migrate   # Run migrations
-
-# Frontend
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run lint         # Lint code
+```powershell
+Stop-Process -Id <PID> -Force
 ```
+
+### Backend Does Not Start
+
+Run:
+
+```powershell
+cd e:\HRMS_application\backend
+npm install
+npm run prisma:generate
+npm run prisma:push
+```
+
+Then start again:
+
+```powershell
+npm run dev
+```
+
+### Frontend Cannot Connect to API
+
+Check:
+
+- Backend is running on port `5000`.
+- `frontend/.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:5000/api`.
+- Browser can open `http://localhost:5000/health`.
+
+### Prisma or Database Looks Stale
+
+Run:
+
+```powershell
+cd e:\HRMS_application\backend
+npm run prisma:generate
+npm run prisma:push
+npm run seed
+```
+
+### Production Build Fails After Dev Server Has Been Running
+
+Stop the frontend dev server, then run:
+
+```powershell
+cd e:\HRMS_application\frontend
+npm run build
+npm run dev
+```
+
+## 12. Production Notes
+
+The current local setup is optimized for development. Before production:
+
+- Move database from SQLite to PostgreSQL or another managed relational database.
+- Move local uploads to private object storage.
+- Replace development secrets with managed secrets.
+- Configure `ALLOWED_ORIGINS`.
+- Enable HTTPS.
+- Add centralized logs, monitoring, backups, and restore tests.
+- Run full backend tests, frontend build, security tests, RBAC tests, and E2E smoke tests.
+
+More technical detail is available in `docs/02_TRD_Technical_Requirements.md`.

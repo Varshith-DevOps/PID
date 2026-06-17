@@ -77,6 +77,7 @@ const getPermissions = (role) => {
       { module: 'PERFORMANCE', action: 'VIEW', isGranted: true },
       { module: 'PERFORMANCE', action: 'CREATE', isGranted: true },
       { module: 'PERFORMANCE', action: 'EDIT', isGranted: true },
+      { module: 'PROJECTS', action: 'VIEW', isGranted: true },
       { module: 'ASSETS', action: 'VIEW', isGranted: true },
       { module: 'LEARNING', action: 'VIEW', isGranted: true },
       { module: 'LEARNING', action: 'EDIT', isGranted: true },
@@ -173,6 +174,16 @@ async function main() {
   console.log('🌱 Starting comprehensive seed...');
 
   // Clear all data
+  await prisma.contactRequest.deleteMany();
+  await prisma.paymentTransaction.deleteMany();
+  await prisma.subscription.deleteMany();
+  await prisma.company.deleteMany();
+  await prisma.plan.deleteMany();
+  await prisma.holiday.deleteMany();
+  await prisma.biometricDevice.deleteMany();
+  await prisma.branch.deleteMany();
+  await prisma.location.deleteMany();
+
   await prisma.shiftAssignment.deleteMany();
   await prisma.shiftType.deleteMany();
   await prisma.notification.deleteMany();
@@ -218,12 +229,138 @@ async function main() {
   await prisma.payrollSettings.deleteMany();
   console.log('✅ Cleared existing data');
 
+  console.log('🌱 Creating SaaS Plans...');
+  const planStarter = await prisma.plan.create({
+    data: {
+      name: 'Starter',
+      description: 'Ideal for small startups and teams.',
+      price: 2999.00,
+      billingCycle: 'MONTHLY',
+      employeeLimit: 15,
+      featureLimits: JSON.stringify({ coreHR: true, attendance: true, leave: true, payroll: false, performance: false, learning: false, helpdesk: false }),
+    }
+  });
+
+  const planProfessional = await prisma.plan.create({
+    data: {
+      name: 'Professional',
+      description: 'Perfect for growing businesses.',
+      price: 6999.00,
+      billingCycle: 'MONTHLY',
+      employeeLimit: 50,
+      featureLimits: JSON.stringify({ coreHR: true, attendance: true, leave: true, payroll: true, performance: true, learning: true, helpdesk: true }),
+    }
+  });
+
+  const planEnterprise = await prisma.plan.create({
+    data: {
+      name: 'Enterprise',
+      description: 'Custom solutions for large organizations.',
+      price: 14999.00,
+      billingCycle: 'MONTHLY',
+      employeeLimit: 1000,
+      featureLimits: JSON.stringify({ coreHR: true, attendance: true, leave: true, payroll: true, performance: true, learning: true, helpdesk: true, customWorkflows: true, apiAccess: true }),
+    }
+  });
+
+  console.log('🌱 Creating default Tenant Company...');
+  const defaultCompany = await prisma.company.create({
+    data: {
+      name: 'NexusHR Corp',
+      code: 'nexushr',
+      email: 'contact@nexushr.com',
+      phone: '+919876543210',
+      address: '101 Corporate Towers, Tech Park, Bangalore, India',
+      industry: 'Technology',
+      companySize: '20-50',
+      status: 'ACTIVE',
+      cin: 'U72200KA2020PTC123456',
+      kycStatus: 'APPROVED',
+      hasUsedFreeTrial: true,
+    }
+  });
+
+  console.log('🌱 Creating active Subscription for default Company...');
+  const defaultSub = await prisma.subscription.create({
+    data: {
+      companyId: defaultCompany.id,
+      planId: planProfessional.id,
+      status: 'ACTIVE',
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
+      paymentProvider: 'MOCK',
+      providerSubscriptionId: 'sub_mock_12345',
+    }
+  });
+
+  // Link subscription to company
+  await prisma.company.update({
+    where: { id: defaultCompany.id },
+    data: { subscriptionId: defaultSub.id }
+  });
+
+  // Create Branches
+  const b1 = await prisma.branch.create({
+    data: { companyId: defaultCompany.id, name: 'Head Office', timezone: 'Asia/Kolkata' }
+  });
+  const b2 = await prisma.branch.create({
+    data: { companyId: defaultCompany.id, name: 'US Branch', timezone: 'America/New_York' }
+  });
+
+  // Create Locations
+  const l1 = await prisma.location.create({
+    data: { companyId: defaultCompany.id, name: 'Hyderabad Office', timezone: 'Asia/Kolkata' }
+  });
+  const l2 = await prisma.location.create({
+    data: { companyId: defaultCompany.id, name: 'Bangalore Office', timezone: 'Asia/Kolkata' }
+  });
+  const l3 = await prisma.location.create({
+    data: { companyId: defaultCompany.id, name: 'New York Office', timezone: 'America/New_York' }
+  });
+
+  // Create Holidays
+  const holidays = [
+    { name: 'Republic Day', date: new Date('2026-01-26'), type: 'NATIONAL' },
+    { name: 'Independence Day', date: new Date('2026-08-15'), type: 'NATIONAL' },
+    { name: 'Gandhi Jayanti', date: new Date('2026-10-02'), type: 'NATIONAL' },
+    { name: 'Christmas Day', date: new Date('2026-12-25'), type: 'NATIONAL' },
+  ];
+  for (const h of holidays) {
+    await prisma.holiday.create({ data: h });
+  }
+
+  // Create Biometric Devices
+  await prisma.biometricDevice.create({
+    data: {
+      id: 'dev-001',
+      name: 'Main Gate Biometric',
+      deviceIp: '192.168.1.100',
+      lastClockDrift: 0,
+      ntpValidated: true
+    }
+  });
+  await prisma.biometricDevice.create({
+    data: {
+      id: 'dev-002',
+      name: 'Back Gate Biometric',
+      deviceIp: '192.168.1.101',
+      lastClockDrift: 0,
+      ntpValidated: true
+    }
+  });
+
   // Departments
   const deptNames = ['Engineering','Human Resources','Finance','Marketing','Operations'];
   const deptDescs = ['Software Development','HR Department','Finance & Accounting','Marketing & Sales','Operations'];
   const depts = {};
   for (let i = 0; i < deptNames.length; i++) {
-    const d = await prisma.department.upsert({ where:{name:deptNames[i]}, update:{}, create:{name:deptNames[i],description:deptDescs[i]} });
+    const d = await prisma.department.create({ 
+      data: {
+        companyId: defaultCompany.id,
+        name: deptNames[i],
+        description: deptDescs[i]
+      }
+    });
     depts[deptNames[i]] = d;
   }
   console.log('✅ Departments created');
@@ -231,12 +368,12 @@ async function main() {
   // System users (admin accounts)
   const hashedAdmin = await bcrypt.hash('admin123', 10);
   const sysUsers = [
-    { email:'superadmin@hrms.com', name:'Super Admin', role:'SUPER_ADMIN' },
-    { email:'admin@hrms.com', name:'Admin User', role:'ADMIN' },
-    { email:'manager@hrms.com', name:'Manager User', role:'MANAGER' },
+    { email:'superadmin@hrms.com', name:'Super Admin', role:'SUPER_ADMIN', companyId: null },
+    { email:'admin@hrms.com', name:'Admin User', role:'ADMIN', companyId: defaultCompany.id },
+    { email:'manager@hrms.com', name:'Manager User', role:'MANAGER', companyId: defaultCompany.id },
   ];
   for (const u of sysUsers) {
-    await prisma.user.create({ data:{ email:u.email, password:hashedAdmin, name:u.name, role:u.role, permissions:{ create:getPermissions(u.role) } } });
+    await prisma.user.create({ data:{ email:u.email, password:hashedAdmin, name:u.name, role:u.role, companyId:u.companyId, permissions:{ create:getPermissions(u.role) } } });
   }
   console.log('✅ System users created');
 
@@ -251,13 +388,13 @@ async function main() {
     const ed = EMPLOYEE_DATA[i];
     // Create user account
     const user = await prisma.user.create({
-      data: { email:ed.email, password:hashedEmp, name:`${ed.first} ${ed.last}`, role:'EMPLOYEE', permissions:{ create:getPermissions('EMPLOYEE') } },
+      data: { email:ed.email, password:hashedEmp, name:`${ed.first} ${ed.last}`, role:'EMPLOYEE', companyId: defaultCompany.id, permissions:{ create:getPermissions('EMPLOYEE') } },
     });
     const emp = await prisma.employee.create({
       data: {
         employeeId:`EMP${String(i+1).padStart(5,'0')}`, firstName:ed.first, lastName:ed.last, email:ed.email,
         phone:`+91${randInt(7000000000,9999999999)}`, gender:pick(['MALE','FEMALE']), jobTitle:ed.title,
-        departmentId:depts[ed.dept].id, salary:ed.salary, userId:user.id,
+        departmentId:depts[ed.dept].id, salary:ed.salary, userId:user.id, companyId: defaultCompany.id,
         joinDate:new Date(`2024-${String(randInt(1,12)).padStart(2,'0')}-${String(randInt(1,28)).padStart(2,'0')}`),
         nationality:'Indian', bloodGroup:pick(['A+','B+','O+','AB+','A-','B-','O-']),
         maritalStatus:pick(['Single','Married','Single']),

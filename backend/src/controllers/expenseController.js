@@ -6,7 +6,18 @@
  */
 
 const prisma = require('../config/database');
-const { canAccessEmployee, getEmployeeScopeIds, isManagerOrAdmin, isPayroll } = require('../services/accessControl');
+const path = require('path');
+const fs = require('fs');
+const { canAccessEmployee, getEmployeeScopeIds, canApproveEmployeeWorkflow, isPayroll } = require('../services/accessControl');
+
+const UPLOAD_ROOT = path.resolve(__dirname, '../../uploads');
+
+const resolveStoredUpload = (storedPath) => {
+  if (!storedPath) return null;
+  const normalized = String(storedPath).replace(/\\/g, '/').replace(/^\/uploads\//, '');
+  const resolved = path.resolve(UPLOAD_ROOT, normalized);
+  return resolved.startsWith(UPLOAD_ROOT) ? resolved : null;
+};
 
 // ==========================================
 // 1. Expense Claims Management
@@ -88,7 +99,7 @@ const createClaim = async (req, res) => {
 
     let receiptUrl = null;
     if (req.file) {
-      receiptUrl = `/uploads/receipts/${req.file.filename}`;
+      receiptUrl = `receipts/${req.file.filename}`;
     }
 
     const claim = await prisma.expenseClaim.create({
@@ -142,7 +153,7 @@ const updateClaim = async (req, res) => {
 
     let receiptUrl = existingClaim.receiptUrl;
     if (req.file) {
-      receiptUrl = `/uploads/receipts/${req.file.filename}`;
+      receiptUrl = `receipts/${req.file.filename}`;
     }
 
     const updated = await prisma.expenseClaim.update({
@@ -179,8 +190,11 @@ const managerApproveClaim = async (req, res) => {
     if (!claim) {
       return res.status(404).json({ error: 'Expense claim not found' });
     }
-    if (!isManagerOrAdmin(req.user)) {
-      return res.status(403).json({ error: 'Only managers or admins can approve claims at manager level' });
+    if (!(await canApproveEmployeeWorkflow(req.user, claim.employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only approve claims for your authorized team.' });
+    }
+    if (claim.status !== 'PENDING') {
+      return res.status(400).json({ error: `Only pending claims can be manager-approved. Current: ${claim.status}` });
     }
 
     const updated = await prisma.expenseClaim.update({
@@ -251,7 +265,7 @@ const rejectClaim = async (req, res) => {
     if (level === 'finance' && !isPayroll(req.user)) {
       return res.status(403).json({ error: 'Only finance/payroll roles can reject at finance level' });
     }
-    if (level !== 'finance' && !isManagerOrAdmin(req.user) && !(await canAccessEmployee(req.user, claim.employeeId))) {
+    if (level !== 'finance' && !(await canApproveEmployeeWorkflow(req.user, claim.employeeId))) {
       return res.status(403).json({ error: 'Access denied. You cannot reject this claim.' });
     }
 
@@ -448,6 +462,25 @@ const settleAdvance = async (req, res) => {
   }
 };
 
+const downloadClaimReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const claim = await prisma.expenseClaim.findUnique({ where: { id } });
+    if (!claim) return res.status(404).json({ error: 'Expense claim not found' });
+    if (!(isPayroll(req.user) || await canAccessEmployee(req.user, claim.employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested receipt' });
+    }
+    const receiptPath = resolveStoredUpload(claim.receiptUrl);
+    if (!receiptPath || !fs.existsSync(receiptPath)) {
+      return res.status(404).json({ error: 'Receipt file not found' });
+    }
+    res.download(receiptPath);
+  } catch (error) {
+    console.error('[DOWNLOAD RECEIPT ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   getClaims,
   createClaim,
@@ -459,4 +492,5 @@ module.exports = {
   createAdvance,
   approveAdvance,
   settleAdvance,
+  downloadClaimReceipt,
 };

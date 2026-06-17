@@ -12,6 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware } = require('../rbac/rbacMiddleware');
+const { publicApplicationLimiter } = require('../middleware/rateLimit');
 
 const {
   getJobOpenings,
@@ -45,28 +46,87 @@ const resumeStorage = multer.diskStorage({
 
 const upload = multer({
   storage: resumeStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx/;
-    const isValidExt = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const isValidMime = allowedTypes.test(file.mimetype) || file.mimetype === 'application/octet-stream';
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    const isValidExt = ['.pdf', '.doc', '.docx'].includes(path.extname(file.originalname).toLowerCase());
+    const isValidMime = allowedMimeTypes.includes(String(file.mimetype).toLowerCase());
     if (isValidExt && isValidMime) return cb(null, true);
     cb(new Error('Only document files (PDF, DOC, DOCX) are allowed'));
   },
 });
 
+const fileSignatures = {
+  '.pdf': [(buf) => buf.subarray(0, 4).equals(Buffer.from('%PDF'))],
+  '.doc': [(buf) => buf.subarray(0, 8).equals(Buffer.from('D0CF11E0A1B11AE1', 'hex'))],
+  '.docx': [
+    (buf) => buf.subarray(0, 4).equals(Buffer.from('504B0304', 'hex')),
+    (buf) => buf.subarray(0, 4).equals(Buffer.from('504B0506', 'hex')),
+    (buf) => buf.subarray(0, 4).equals(Buffer.from('504B0708', 'hex')),
+  ],
+};
+
+const validateResumeSignature = (req, res, next) => {
+  if (!req.file) return next();
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  const validators = fileSignatures[ext] || [];
+  const fd = fs.openSync(req.file.path, 'r');
+  const buffer = Buffer.alloc(16);
+  try {
+    fs.readSync(fd, buffer, 0, buffer.length, 0);
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  if (!validators.some((validator) => validator(buffer))) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: 'Resume file content does not match the declared document type.' });
+  }
+
+  // Full antivirus scanning should be performed by deployment infrastructure.
+  // This gate prevents trivial polyglot/spoofed uploads before persistence.
+  next();
+};
+
+const validateResumeSafety = (req, res, next) => {
+  if (!req.file) return next();
+  const content = fs.readFileSync(req.file.path);
+  const eicarSignature = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!';
+  if (content.includes(Buffer.from(eicarSignature))) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: 'Resume failed malware safety checks.' });
+  }
+  next();
+};
+
 // ──── Routes ───────────────────────────────────────────────────────────────
 
 // Job Openings
-router.get('/jobs', authenticate, getJobOpenings);
-router.get('/jobs/:id', authenticate, getJobOpeningById);
-router.post('/jobs', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOpening);
-router.put('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateJobOpening);
-router.delete('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'DELETE'), deleteJobOpening);
+  router.get('/jobs', authenticate, getJobOpenings);
+  router.get('/jobs/:id', authenticate, getJobOpeningById);
+  router.post('/jobs', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOpening);
+  router.put('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateJobOpening);
+  router.delete('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'DELETE'), deleteJobOpening);
 
 // Applicants
 router.get('/applicants', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getApplicants);
-router.post('/applicants', upload.single('resume'), applyForJob); // Allow public/employee submission
+router.post('/applicants', publicApplicationLimiter, (req, res, next) => {
+  upload.single('resume')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size too large. Maximum limit is 5MB.' });
+      }
+      return res.status(400).json({ error: err.message });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    next();
+  });
+}, validateResumeSignature, validateResumeSafety, applyForJob); // Allow public/employee submission
 router.put('/applicants/:id/stage', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateApplicantStage);
 
 // Interviews

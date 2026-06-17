@@ -7,7 +7,7 @@ const { detectAndCreateOvertime } = require('./overtimeController');
  * Validates mobile punch signature if clientType is mobile
  */
 const verifyMobilePunchSignature = (punch) => {
-  const secret = process.env.MOBILE_APP_SECRET || 'supersecret';
+  const secret = process.env.MOBILE_APP_SECRET || 'nexus-hrms-secret-key-123';
   const { employeeId, timestamp, deviceId, signature } = punch;
   
   if (!signature) return false;
@@ -186,42 +186,38 @@ const syncBiometricPunches = async (req, res) => {
     let processedCount = 0;
     let failedCount = 0;
 
-    // Process in batches of 50 using transactions
-    const batchSize = 50;
-    for (let i = 0; i < sortedPunches.length; i += batchSize) {
-      const batch = sortedPunches.slice(i, i + batchSize);
-
-      await prisma.$transaction(async (tx) => {
-        for (const punch of batch) {
-          try {
-            // Verify mobile signature if applicable
-            if (punch.clientType === 'mobile') {
-              const signatureValid = verifyMobilePunchSignature(punch);
-              if (!signatureValid) {
-                throw new Error('Invalid mobile request signature');
-              }
+    // Process each punch in its own transaction (Bug 22)
+    for (const punch of sortedPunches) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // Verify mobile signature if applicable
+          if (punch.clientType === 'mobile') {
+            const signatureValid = verifyMobilePunchSignature(punch);
+            if (!signatureValid) {
+              throw new Error('Invalid mobile request signature');
             }
-
-            await processSinglePunch(tx, punch, defaultSettings);
-            results.push({
-              employeeId: punch.employeeId,
-              timestamp: punch.timestamp,
-              type: punch.type,
-              status: 'SUCCESS',
-            });
-            processedCount++;
-          } catch (punchErr) {
-            results.push({
-              employeeId: punch.employeeId,
-              timestamp: punch.timestamp,
-              type: punch.type,
-              status: 'FAILED',
-              error: punchErr.message,
-            });
-            failedCount++;
           }
-        }
-      });
+
+          await processSinglePunch(tx, punch, defaultSettings);
+        });
+
+        results.push({
+          employeeId: punch.employeeId,
+          timestamp: punch.timestamp,
+          type: punch.type,
+          status: 'SUCCESS',
+        });
+        processedCount++;
+      } catch (punchErr) {
+        results.push({
+          employeeId: punch.employeeId,
+          timestamp: punch.timestamp,
+          type: punch.type,
+          status: 'FAILED',
+          error: punchErr.message,
+        });
+        failedCount++;
+      }
     }
 
     // Audit Log for Sync run
@@ -249,6 +245,121 @@ const syncBiometricPunches = async (req, res) => {
   }
 };
 
+/**
+ * Universal adapter webhook to ingest and sync punches from any external biometric device.
+ * Supports authentication via X-API-Key and maps custom payload keys dynamically.
+ */
+const syncUniversalDevicePunch = async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'];
+    let companyId = req.user?.companyId;
+
+    // 1. Machine-to-Machine API Key authentication
+    if (!companyId && apiKey) {
+      const connection = await prisma.integrationConnection.findFirst({
+        where: { secretsRef: apiKey, status: 'ACTIVE' }
+      });
+      if (!connection) {
+        return res.status(401).json({ error: 'Invalid or unauthorized X-API-Key reference.' });
+      }
+      companyId = connection.companyId;
+    }
+
+    if (!companyId) {
+      return res.status(401).json({ error: 'Authentication required. Provide user credentials or X-API-Key.' });
+    }
+
+    const { deviceSerial, punches, customMapping } = req.body;
+    if (!Array.isArray(punches)) {
+      return res.status(400).json({ error: 'Punches array required.' });
+    }
+
+    // Default mapping fields
+    const keyEmployee = customMapping?.employeeCodeField || 'employeeCode';
+    const keyTimestamp = customMapping?.timestampField || 'timestamp';
+    const keyType = customMapping?.actionTypeField || 'actionType';
+
+    let defaultSettings = await prisma.attendanceSettings.findFirst();
+    if (!defaultSettings) {
+      defaultSettings = await prisma.attendanceSettings.create({ data: {} });
+    }
+
+    // Resolve or register physical biometric device record
+    let deviceRecord = null;
+    if (deviceSerial) {
+      deviceRecord = await prisma.biometricDevice.findFirst({
+        where: { name: deviceSerial }
+      });
+      if (!deviceRecord) {
+        deviceRecord = await prisma.biometricDevice.create({
+          data: { name: deviceSerial, lastSyncTime: new Date() }
+        });
+      } else {
+        await prisma.biometricDevice.update({
+          where: { id: deviceRecord.id },
+          data: { lastSyncTime: new Date() }
+        });
+      }
+    }
+
+    const processed = [];
+    const failed = [];
+
+    // Map and process punches sequentially
+    for (const rawPunch of punches) {
+      try {
+        const empCode = rawPunch[keyEmployee];
+        const rawTime = rawPunch[keyTimestamp];
+        const rawAct = rawPunch[keyType]; // expected: IN / OUT / CHECK_IN / CHECK_OUT
+
+        if (!empCode || !rawTime) {
+          throw new Error('Missing employee identifier or timestamp value in record.');
+        }
+
+        // Find employee database UUID from code
+        const employee = await prisma.employee.findFirst({
+          where: { employeeId: String(empCode), companyId }
+        });
+
+        if (!employee) {
+          throw new Error(`Employee code ${empCode} not registered in company database.`);
+        }
+
+        const standardPunch = {
+          employeeId: employee.id,
+          timestamp: new Date(rawTime).toISOString(),
+          type: (rawAct === 'IN' || rawAct === 'CHECK_IN') ? 'CHECK_IN' : 'CHECK_OUT',
+          deviceId: deviceRecord?.id || null,
+          clientType: 'biometric_device'
+        };
+
+        await prisma.$transaction(async (tx) => {
+          await processSinglePunch(tx, standardPunch, defaultSettings);
+        });
+
+        processed.push({ empCode, status: 'SUCCESS' });
+      } catch (err) {
+        failed.push({ rawPunch, error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      message: 'Universal biometric sync complete.',
+      deviceSerial: deviceSerial || 'UNKNOWN',
+      totalReceived: punches.length,
+      processedCount: processed.length,
+      failedCount: failed.length,
+      processed,
+      failed
+    });
+
+  } catch (error) {
+    console.error('[UNIVERSAL PUNCH SYNC ERROR]:', error.message);
+    return res.status(500).json({ error: 'Failed to process universal punch sync.' });
+  }
+};
+
 module.exports = {
   syncBiometricPunches,
+  syncUniversalDevicePunch,
 };

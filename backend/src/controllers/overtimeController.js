@@ -64,10 +64,13 @@ const detectAndCreateOvertime = async (employeeId, date, hoursWorked) => {
     console.warn(`[Statutory cap limit]: Employee ${employeeId} quarterly overtime is reaching ${currentQuarterHours + otHours} hours (legal limit: 75 hours).`);
   }
 
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const { toZonedTime, fromZonedTime, format } = require('date-fns-tz');
+  const timezone = employee.timezone || 'Asia/Kolkata';
+  const zonedDate = toZonedTime(new Date(date), timezone);
+  const localDayString = format(zonedDate, 'yyyy-MM-dd', { timeZone: timezone });
+
+  const startOfDay = fromZonedTime(`${localDayString}T00:00:00`, timezone);
+  const endOfDay = fromZonedTime(`${localDayString}T23:59:59.999`, timezone);
 
   const existingOt = await prisma.overtime.findFirst({
     where: { employeeId, date: { gte: startOfDay, lte: endOfDay } },
@@ -108,9 +111,17 @@ const getEmployeeOvertime = async (req, res) => {
 
     if (status) where.status = status;
     if (startDate || endDate) {
+      const { fromZonedTime } = require('date-fns-tz');
+      const timezone = 'Asia/Kolkata';
       where.date = {};
-      if (startDate) where.date.gte = new Date(startDate);
-      if (endDate) where.date.lte = new Date(endDate);
+      if (startDate) {
+        const startOnly = String(startDate).substring(0, 10);
+        where.date.gte = fromZonedTime(`${startOnly}T00:00:00`, timezone);
+      }
+      if (endDate) {
+        const endOnly = String(endDate).substring(0, 10);
+        where.date.lte = fromZonedTime(`${endOnly}T23:59:59.999`, timezone);
+      }
     }
 
     const overtime = await prisma.overtime.findMany({
@@ -189,7 +200,7 @@ const calculateOTPay = (structureOrBasic, otHours, settings, employee) => {
     const allowances = (structureOrBasic.hra || 0) + (structureOrBasic.conveyance || 0) + (structureOrBasic.medical || 0) + (structureOrBasic.specialAllowance || 0) + (structureOrBasic.otherAllowance || 0);
     ordinaryWages = basic + da + allowances;
   } else {
-    ordinaryWages = Number(structureOrBasic) || 0;
+    ordinaryWages = Number(structureOrBasic) || (employee?.salary || 0);
   }
 
   const hourlyRate = ordinaryWages / (settings?.standardHours || 176);
@@ -203,8 +214,13 @@ const getOTSummary = async (req, res) => {
     const targetMonth = parseInt(month) || new Date().getMonth() + 1;
     const targetYear = parseInt(year) || new Date().getFullYear();
 
-    const startDate = new Date(targetYear, targetMonth - 1, 1);
-    const endDate = new Date(targetYear, targetMonth, 0);
+    const { fromZonedTime } = require('date-fns-tz');
+    const timezone = 'Asia/Kolkata';
+    const padMonth = String(targetMonth).padStart(2, '0');
+    const startDate = fromZonedTime(`${targetYear}-${padMonth}-01T00:00:00`, timezone);
+    const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+    const padLastDay = String(lastDay).padStart(2, '0');
+    const endDate = fromZonedTime(`${targetYear}-${padMonth}-${padLastDay}T23:59:59.999`, timezone);
 
     const approvedOvertime = await prisma.overtime.findMany({
       where: {

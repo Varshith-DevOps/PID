@@ -25,7 +25,7 @@ const generateESICReport = (records) => {
   for (const record of records) {
     const emp = record.employee;
     const name = `${emp.firstName} ${emp.lastName}`.trim().replace(/,/g, '');
-    const ipNumber = emp.pfDetails?.esiNumber || emp.pfDetails?.epsNumber || '';
+    const ipNumber = emp.esicNumber || emp.pfDetails?.esiNumber || '';
     const workDays = record.daysWorked || 0;
     
     // ESI wages is grossEarnings minus excluded components like gratuity/bonus.

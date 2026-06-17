@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiEvents } from './api';
+import { normalizeManualMessage } from './userMessages';
 
 interface Toast {
   id: string;
@@ -32,7 +33,11 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
 
   const showToast = (message: string, type: 'success' | 'error') => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => {
+      const alreadyVisible = prev.some((toast) => toast.message === message && toast.type === type);
+      if (alreadyVisible) return prev;
+      return [...prev, { id, message, type }];
+    });
 
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -72,6 +77,20 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
       unsubscribeEnd();
       unsubscribeSuccess();
       unsubscribeError();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nativeAlert = window.alert;
+
+    window.alert = (message?: any) => {
+      const normalized = normalizeManualMessage(message);
+      showToast(normalized.message, normalized.type);
+    };
+
+    return () => {
+      window.alert = nativeAlert;
     };
   }, []);
 

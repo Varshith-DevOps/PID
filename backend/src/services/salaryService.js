@@ -173,7 +173,8 @@ class SalaryCalculator {
     const upperGender = gender.toUpperCase();
 
     for (const slab of slabs) {
-      if (grossEarnings > slab.min && grossEarnings <= slab.max) {
+      const checkGross = stateKey === 'TAMIL_NADU' ? grossEarnings * 6 : grossEarnings;
+      if (checkGross > slab.min && checkGross <= slab.max) {
         // Gender filter
         if (slab.gender !== 'ALL' && slab.gender !== upperGender) {
           continue;
@@ -266,7 +267,7 @@ class SalaryCalculator {
     if (!isEligible) return 0;
 
     const frac = yearsOfService - Math.floor(yearsOfService);
-    const completedYears = frac > 0.5 ? Math.ceil(yearsOfService) : Math.floor(yearsOfService);
+    const completedYears = frac >= 0.5 ? Math.ceil(yearsOfService) : Math.floor(yearsOfService);
     const monthlyWages = basicSalary + da;
     const gratuity = (monthlyWages * STATUTORY_CONSTANTS.GRATUITY.FORMULA_MULTIPLIER) * completedYears;
 

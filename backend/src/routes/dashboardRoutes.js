@@ -8,9 +8,10 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware } = require('../rbac/rbacMiddleware');
-const { getExecutiveSummary } = require('../controllers/dashboardController');
+const { getExecutiveSummary, getPersonalizedDashboard } = require('../controllers/dashboardController');
 
 // Requires authentication
 router.get('/summary', authenticate, rbacMiddleware('REPORTS', 'VIEW'), getExecutiveSummary);
+router.get('/me', authenticate, getPersonalizedDashboard);
 
 module.exports = router;

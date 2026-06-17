@@ -38,7 +38,13 @@ const assetRoutes = require('./routes/assetRoutes');
 const learningRoutes = require('./routes/learningRoutes');
 const helpdeskRoutes = require('./routes/helpdeskRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const platformRoutes = require('./routes/platformRoutes');
+const billingRoutes = require('./routes/billingRoutes');
+const contactRoutes = require('./routes/contactRoutes');
+const platformAdminRoutes = require('./routes/platformAdminRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
+const { securityHeaders } = require('./middleware/securityHeaders');
 
 const app = express();
 
@@ -48,11 +54,11 @@ app.use(cors({
   credentials: true
 }));
 app.use(cookieParser());
+app.use(securityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-/** Serve uploaded and generated files as static assets */
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+/** Uploaded HR files are deliberately not served statically; use authenticated download APIs. */
 app.use(auditPayrollMiddleware);
 
 // ──── API Routes ───────────────────────────────────────────────────────────
@@ -83,6 +89,11 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/helpdesk', helpdeskRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/platform', platformRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/platform-admin', platformAdminRoutes);
+app.use('/api/ai', aiRoutes);
 
 /** Health check endpoint for monitoring and load balancers */
 app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));

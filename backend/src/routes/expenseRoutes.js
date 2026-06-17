@@ -21,6 +21,7 @@ const {
   createAdvance,
   approveAdvance,
   settleAdvance,
+  downloadClaimReceipt,
 } = require('../controllers/expenseController');
 
 // All expense routes require authentication
@@ -49,8 +50,9 @@ const uploadReceipt = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['.pdf', '.jpeg', '.jpg', '.png', '.webp'];
+    const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedTypes.includes(ext)) {
+    if (allowedTypes.includes(ext) && allowedMimeTypes.includes(String(file.mimetype).toLowerCase())) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file format. Allowed formats: PDF, JPEG, PNG, WebP'));
@@ -62,6 +64,7 @@ const uploadReceipt = multer({
 router.get('/claims', rbacMiddleware('EXPENSES', 'VIEW'), getClaims);
 router.post('/claims', rbacMiddleware('EXPENSES', 'CREATE'), uploadReceipt.single('receipt'), createClaim);
 router.put('/claims/:id', rbacMiddleware('EXPENSES', 'EDIT'), uploadReceipt.single('receipt'), updateClaim);
+router.get('/claims/:id/receipt', rbacMiddleware('EXPENSES', 'VIEW'), downloadClaimReceipt);
 router.put('/claims/:id/manager-approve', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('EXPENSES', 'EDIT'), managerApproveClaim);
 router.put('/claims/:id/finance-approve', requireRole('SUPER_ADMIN', 'ADMIN', 'FINANCE', 'ACCOUNTS'), rbacMiddleware('EXPENSES', 'EDIT'), financeApproveClaim);
 router.put('/claims/:id/reject', rbacMiddleware('EXPENSES', 'EDIT'), rejectClaim);

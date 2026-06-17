@@ -11,6 +11,8 @@ const prisma = require('../config/database');
 const path = require('path');
 const fs = require('fs');
 const { validatePAN, validateIFSC, validateAadhaar, validateUAN, validateBankAccount } = require('../services/validators');
+const { canAccessEmployee, getLinkedEmployeeId, isHr, isPayroll } = require('../services/accessControl');
+const { assertPayrollRangeOpen, assertPayrollPeriodOpen } = require('../services/payrollPeriodGuard');
 
 /**
  * Log a field-level change to the ChangeHistory audit trail.
@@ -45,7 +47,6 @@ const employeeIncludes = {
   department: true,
   manager: { select: { id: true, firstName: true, lastName: true, jobTitle: true } },
   subordinates: { select: { id: true, firstName: true, lastName: true, jobTitle: true } },
-  documents: true,
 };
 
 const employeeFullIncludes = {
@@ -126,12 +127,33 @@ const getAllEmployees = async (req, res) => {
 const getEmployeeById = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!(await canAccessEmployee(req.user, id))) {
+      return res.status(403).json({ error: 'Access denied for requested employee profile' });
+    }
+
     const employee = await prisma.employee.findUnique({
       where: { id },
       include: employeeFullIncludes,
     });
 
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+
+    const ownEmployeeId = await getLinkedEmployeeId(req.user);
+    const canSeeSensitive = isHr(req.user) || isPayroll(req.user) || ownEmployeeId === id;
+    if (!canSeeSensitive) {
+      employee.salary = null;
+      employee.annualCTC = null;
+      employee.bonusPercent = null;
+      employee.panNumber = employee.panNumber ? `XXXXX${employee.panNumber.slice(-4)}` : null;
+      employee.aadharNumber = employee.aadharNumber ? `XXXXXXXX${employee.aadharNumber.slice(-4)}` : null;
+      employee.salaryStructure = null;
+      employee.salaryRevisions = [];
+      employee.bankDetails = null;
+      employee.pfDetails = null;
+      employee.documents = [];
+      employee.changeHistory = [];
+    }
+
     res.json(employee);
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -256,6 +278,11 @@ const updateEmployee = async (req, res) => {
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
 
+    if (joinDate) await assertPayrollPeriodOpen(joinDate, 'Joining date update');
+    if (salary !== undefined || annualCTC !== undefined || bonusPercent !== undefined || departmentId || managerId !== undefined || isActive !== undefined) {
+      await assertPayrollPeriodOpen(new Date(), 'Employee payroll-impacting profile update');
+    }
+
     if (panNumber && !validatePAN(panNumber)) {
       return res.status(400).json({ error: 'Invalid PAN Number format (must be 5 uppercase letters, 4 digits, 1 uppercase letter)' });
     }
@@ -326,6 +353,7 @@ const deleteEmployee = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    await assertPayrollPeriodOpen(new Date(), 'Employee deactivation');
 
     await prisma.employee.update({
       where: { id },
@@ -497,6 +525,7 @@ const upsertBankDetails = async (req, res) => {
     if (!bankName || !accountNumber || !ifscCode) {
       return res.status(400).json({ error: 'Bank name, account number, and IFSC code are required' });
     }
+    await assertPayrollPeriodOpen(new Date(), 'Bank detail update');
 
     if (!validateBankAccount(accountNumber)) {
       return res.status(400).json({ error: 'Invalid Bank Account Number (must be between 9 and 18 digits)' });
@@ -537,6 +566,7 @@ const upsertPFDetails = async (req, res) => {
     if (uanNumber && !validateUAN(uanNumber)) {
       return res.status(400).json({ error: 'Invalid UAN Number (must be a 12-digit number not starting with 0)' });
     }
+    await assertPayrollPeriodOpen(new Date(), 'PF/statutory detail update');
 
     const existing = await prisma.pFDetails.findUnique({ where: { employeeId: id } });
     let result;
@@ -579,6 +609,9 @@ const upsertExitDetails = async (req, res) => {
   try {
     const { id } = req.params;
     const { exitType, resignationDate, lastWorkingDate, noticePeriodDays, exitReason, exitInterview, rehireEligible, fnfStatus, fnfAmount, changeReason } = req.body;
+    if (resignationDate || lastWorkingDate) {
+      await assertPayrollRangeOpen(resignationDate || lastWorkingDate, lastWorkingDate || resignationDate, 'Exit detail update');
+    }
 
     const existing = await prisma.exitDetails.findUnique({ where: { employeeId: id } });
     let result;
@@ -687,6 +720,7 @@ const addSalaryRevision = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    await assertPayrollPeriodOpen(effectiveDate, 'Salary revision');
 
     const previousSalary = employee.salary;
 

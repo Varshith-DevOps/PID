@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const { toZonedTime, fromZonedTime, format } = require('date-fns-tz');
 
 const submitRegularization = async (req, res) => {
   try {
@@ -21,8 +22,9 @@ const submitRegularization = async (req, res) => {
       return res.status(404).json({ error: 'Employee profile not found' });
     }
 
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
+    const timezone = employee.timezone || 'Asia/Kolkata';
+    const dateOnly = String(date).substring(0, 10);
+    const targetDate = fromZonedTime(`${dateOnly}T00:00:00`, timezone);
 
     // Safeguard: Check payroll period lock status
     const targetMonth = targetDate.getMonth() + 1;
@@ -146,9 +148,10 @@ const actionRegularization = async (req, res) => {
     }
 
     // Safeguard: Check payroll period lock status
-    const targetDate = new Date(request.date);
-    const targetMonth = targetDate.getMonth() + 1;
-    const targetYear = targetDate.getFullYear();
+    const timezone = request.employee.timezone || 'Asia/Kolkata';
+    const zonedDate = toZonedTime(request.date, timezone);
+    const targetMonth = zonedDate.getMonth() + 1;
+    const targetYear = zonedDate.getFullYear();
     const payrollRun = await prisma.payrollRun.findFirst({
       where: { month: targetMonth, year: targetYear }
     });
@@ -162,8 +165,9 @@ const actionRegularization = async (req, res) => {
     }
 
     // If APPROVED, update/recalculate Attendance record and preserve original punches
+    const localDayString = format(zonedDate, 'yyyy-MM-dd', { timeZone: timezone });
+    const targetDate = fromZonedTime(`${localDayString}T00:00:00`, timezone);
     if (status === 'APPROVED') {
-      targetDate.setHours(0, 0, 0, 0);
 
       // Find or create attendance record
       const attendance = await prisma.attendance.findFirst({
@@ -195,11 +199,9 @@ const actionRegularization = async (req, res) => {
       const shift = (activeAssignment && activeAssignment.shiftType) ? activeAssignment.shiftType : { startTime: '09:00', gracePeriod: 15 };
 
       if (checkIn) {
-        const { toZonedTime, fromZonedTime, format } = require('date-fns-tz');
-        const timezone = request.employee.timezone || 'Asia/Kolkata';
         const zonedCheckIn = toZonedTime(new Date(checkIn), timezone);
-        const localDayString = format(zonedCheckIn, 'yyyy-MM-dd', { timeZone: timezone });
-        const scheduledLocalStr = `${localDayString}T${shift.startTime}:00`;
+        const localCheckInDayStr = format(zonedCheckIn, 'yyyy-MM-dd', { timeZone: timezone });
+        const scheduledLocalStr = `${localCheckInDayStr}T${shift.startTime.padStart(5, '0')}:00`;
         const scheduledUtc = fromZonedTime(scheduledLocalStr, timezone);
         lateMinutes = Math.max(0, Math.round((new Date(checkIn) - scheduledUtc) / 60000));
         const grace = shift.gracePeriod !== undefined ? shift.gracePeriod : 15;

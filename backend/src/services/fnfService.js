@@ -96,7 +96,9 @@ const calculateFNFSettlement = async (employeeId) => {
   if (exit.resignationDate && exit.lastWorkingDate) {
     const resignation = new Date(exit.resignationDate);
     const lwdDate = new Date(exit.lastWorkingDate);
-    noticeDaysServed = Math.max(0, Math.floor((lwdDate - resignation) / (24 * 60 * 60 * 1000)));
+    resignation.setHours(0, 0, 0, 0);
+    lwdDate.setHours(0, 0, 0, 0);
+    noticeDaysServed = Math.max(0, Math.floor((lwdDate - resignation) / (24 * 60 * 60 * 1000)) + 1);
   }
   const noticeDaysShortfall = exit.noticePeriodDays ? Math.max(0, exit.noticePeriodDays - noticeDaysServed) : 0;
   const noticeRecoveryAmount = Math.round(noticeDaysShortfall * dailyWagesRate * 100) / 100;
@@ -123,7 +125,7 @@ const calculateFNFSettlement = async (employeeId) => {
 
   // 7. Net Payout Calculation
   const totalDeductions = finalMonthSalary.totalDeductions + finalTDSDeduction;
-  const netSettlementAmount = Math.max(0, fnfGrossEarnings - noticeRecoveryAmount - totalDeductions);
+  const netSettlementAmount = fnfGrossEarnings - noticeRecoveryAmount - totalDeductions;
 
   return {
     employee: {
@@ -152,7 +154,8 @@ const calculateFNFSettlement = async (employeeId) => {
       serviceYears: serviceYears.toFixed(2),
       noticeShortfallDays: noticeDaysShortfall
     },
-    netSettlement: Math.round(netSettlementAmount * 100) / 100
+    netSettlement: Math.round(netSettlementAmount * 100) / 100,
+    settlementType: netSettlementAmount >= 0 ? 'PAYABLE' : 'RECOVERABLE'
   };
 };
 

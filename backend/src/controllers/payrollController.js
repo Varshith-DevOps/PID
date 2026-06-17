@@ -10,7 +10,9 @@ const prisma = require('../config/database');
 const salaryCalculator = require('../services/salaryService');
 const { logPayrollEvent } = require('../services/auditService');
 const { calculateArrears } = require('../services/arrearsService');
+const { createWorkflowInstance } = require('../services/platformService');
 const PDFDocument = require('pdfkit');
+const { canAccessEmployee } = require('../services/accessControl');
 
 const MANUAL_PAYROLL_STAGES = [
   { key: 'attendanceLocked', label: 'Attendance locked for previous month', required: true },
@@ -28,10 +30,94 @@ const MANUAL_PAYROLL_STAGES = [
 const isValidPAN = (pan) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(String(pan || '').toUpperCase());
 const isValidIFSC = (ifsc) => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(ifsc || '').toUpperCase());
 const isValidUAN = (uan) => /^[0-9]{12}$/.test(String(uan || '').replace(/\s/g, ''));
-const isEsiEnabledForPayroll = (employee) => employee.salaryStructure?.esiEnabled !== false
+const isEsiEnabledForPayroll = (employee) => Boolean(employee.salaryStructure)
+  && employee.salaryStructure.esiEnabled !== false
   && salaryCalculator.calculateGrossEarnings(employee.salaryStructure) <= 21000;
 
 const money = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
+const dayMs = 24 * 60 * 60 * 1000;
+const startOfDay = (dateLike) => {
+  const date = new Date(dateLike);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+const endOfDay = (dateLike) => {
+  const date = new Date(dateLike);
+  date.setHours(23, 59, 59, 999);
+  return date;
+};
+const inclusiveDays = (start, end) => Math.max(0, Math.floor((startOfDay(end) - startOfDay(start)) / dayMs) + 1);
+const overlapDays = (startA, endA, startB, endB) => {
+  const start = startOfDay(Math.max(startOfDay(startA).getTime(), startOfDay(startB).getTime()));
+  const end = startOfDay(Math.min(startOfDay(endA).getTime(), startOfDay(endB).getTime()));
+  return end < start ? 0 : inclusiveDays(start, end);
+};
+
+const salaryComponents = ['basicSalary', 'hra', 'da', 'conveyance', 'medical', 'specialAllowance', 'otherAllowance', 'insurance', 'otherDeduction'];
+
+const scaleStructureToMonthlyGross = (structure, monthlyGross) => {
+  const currentGross = salaryCalculator.calculateGrossEarnings(structure);
+  const factor = currentGross > 0 && monthlyGross > 0 ? monthlyGross / currentGross : 1;
+  const scaled = { ...structure };
+  for (const component of salaryComponents) {
+    if (scaled[component] !== undefined && scaled[component] !== null) {
+      scaled[component] = money(scaled[component] * factor);
+    }
+  }
+  return scaled;
+};
+
+const getStructureForDate = (baseStructure, revisions, date) => {
+  const target = startOfDay(date);
+  const sorted = [...(revisions || [])].sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
+  const activeRevision = [...sorted].reverse().find((revision) => startOfDay(revision.effectiveDate) <= target);
+  if (activeRevision) return scaleStructureToMonthlyGross(baseStructure, activeRevision.revisedSalary);
+
+  const nextRevision = sorted.find((revision) => startOfDay(revision.effectiveDate) > target);
+  if (nextRevision) return scaleStructureToMonthlyGross(baseStructure, nextRevision.previousSalary);
+
+  return baseStructure;
+};
+
+const buildEarnedStructure = ({ employee, startDate, endDate, workDays, payableDays }) => {
+  const eligibleStart = startOfDay(Math.max(startOfDay(startDate).getTime(), startOfDay(employee.joinDate || startDate).getTime()));
+  const exitDate = employee.exitDetails?.lastWorkingDate ? endOfDay(employee.exitDetails.lastWorkingDate) : endOfDay(endDate);
+  const eligibleEnd = startOfDay(Math.min(startOfDay(endDate).getTime(), startOfDay(exitDate).getTime()));
+  if (eligibleEnd < eligibleStart || payableDays <= 0) return null;
+
+  const revisions = (employee.salaryRevisions || [])
+    .filter((revision) => startOfDay(revision.effectiveDate) > eligibleStart && startOfDay(revision.effectiveDate) <= eligibleEnd)
+    .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
+
+  const rawSegments = [];
+  let cursor = eligibleStart;
+  for (const revision of revisions) {
+    const revisionStart = startOfDay(revision.effectiveDate);
+    const segmentEnd = new Date(revisionStart);
+    segmentEnd.setDate(segmentEnd.getDate() - 1);
+    if (segmentEnd >= cursor) rawSegments.push({ start: cursor, end: segmentEnd });
+    cursor = revisionStart;
+  }
+  rawSegments.push({ start: cursor, end: eligibleEnd });
+
+  const eligibleDays = inclusiveDays(eligibleStart, eligibleEnd);
+  const paidRatio = Math.min(1, payableDays / eligibleDays);
+  const earnedStructure = { ...employee.salaryStructure };
+  for (const component of salaryComponents) earnedStructure[component] = 0;
+
+  for (const segment of rawSegments) {
+    const segmentDays = inclusiveDays(segment.start, segment.end);
+    const segmentPayableDays = segmentDays * paidRatio;
+    const factor = segmentPayableDays / workDays;
+    const segmentStructure = getStructureForDate(employee.salaryStructure, employee.salaryRevisions, segment.start);
+    for (const component of salaryComponents) {
+      earnedStructure[component] = money((earnedStructure[component] || 0) + ((segmentStructure[component] || 0) * factor));
+    }
+  }
+
+  return { earnedStructure, eligibleStart, eligibleEnd, eligibleDays };
+};
 
 const getPeriod = (month, year) => {
   const now = new Date();
@@ -51,6 +137,9 @@ const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 const getSalaryStructure = async (req, res) => {
   try {
     const { employeeId } = req.params;
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for payroll structure' });
+    }
     const structure = await prisma.salaryStructure.findUnique({ where: { employeeId } });
     if (!structure) return res.json(null);
 
@@ -187,12 +276,19 @@ const getPayrollPreflight = async (req, res) => {
       where: { month_year: { month: targetMonth, year: targetYear } },
     });
     const employees = await prisma.employee.findMany({
-      where: { isActive: true },
+      where: {
+        joinDate: { lte: endDate },
+        OR: [
+          { isActive: true },
+          { exitDetails: { is: { lastWorkingDate: { gte: startDate } } } },
+        ],
+      },
       include: {
         salaryStructure: true,
         bankDetails: true,
         pfDetails: true,
         addresses: true,
+        exitDetails: true,
         salaryRevisions: { where: { effectiveDate: { lte: endDate } }, orderBy: { effectiveDate: 'desc' } },
       },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
@@ -301,12 +397,27 @@ const runPayroll = async (req, res) => {
     const { startDate, endDate } = getPeriodDates(targetMonth, targetYear);
 
     const employees = await prisma.employee.findMany({
-      where: { isActive: true },
-      include: { salaryStructure: true, addresses: true, pfDetails: true },
+      where: {
+        joinDate: { lte: endDate },
+        OR: [
+          { isActive: true },
+          { exitDetails: { is: { lastWorkingDate: { gte: startDate } } } },
+        ],
+      },
+      include: {
+        salaryStructure: true,
+        addresses: true,
+        pfDetails: true,
+        exitDetails: true,
+        salaryRevisions: {
+          where: { effectiveDate: { lte: endDate } },
+          orderBy: { effectiveDate: 'asc' },
+        },
+      },
     });
-    const missingSalary = employees.filter((employee) => !employee.salaryStructure);
-    if (missingSalary.length > 0) {
-      return res.status(400).json({ error: `${missingSalary.length} active employee(s) missing salary structure` });
+    const employeesWithSalary = employees.filter((employee) => employee.salaryStructure);
+    if (employeesWithSalary.length === 0) {
+      return res.status(400).json({ error: 'No payroll-eligible employees have salary structures configured' });
     }
 
     const attendances = await prisma.attendance.findMany({
@@ -324,6 +435,13 @@ const runPayroll = async (req, res) => {
 
     const approvedOvertime = await prisma.overtime.findMany({
       where: { status: 'APPROVED', date: { gte: startDate, lte: endDate } },
+    });
+    const approvedExpenseClaims = await prisma.expenseClaim.findMany({
+      where: {
+        status: 'APPROVED_BY_FINANCE',
+        payrollRecordId: null,
+        claimDate: { lte: endDate },
+      },
     });
     const settings = await prisma.payrollSettings.findFirst();
     if (settings) salaryCalculator.updateSettings(settings);
@@ -352,16 +470,73 @@ const runPayroll = async (req, res) => {
       let totalGratuity = 0;
       const records = [];
 
-      for (const employee of employees) {
-        if (!employee.salaryStructure) continue;
+      for (const employee of employeesWithSalary) {
 
         const structure = employee.salaryStructure;
         const empAttendance = attendances.filter((a) => a.employeeId === employee.id);
         const daysWorked = empAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
-        const unpaidLeavesRaw = leaveDeductions.filter((l) => l.employeeId === employee.id).reduce((sum, l) => sum + l.days, 0);
         const workDays = new Date(targetYear, targetMonth, 0).getDate();
+        const exitDate = employee.exitDetails?.lastWorkingDate ? employee.exitDetails.lastWorkingDate : endDate;
+        const eligibleStart = startOfDay(Math.max(startOfDay(startDate).getTime(), startOfDay(employee.joinDate || startDate).getTime()));
+        const eligibleEnd = startOfDay(Math.min(startOfDay(endDate).getTime(), startOfDay(exitDate).getTime()));
+        if (eligibleEnd < eligibleStart) continue;
+        const eligibleDays = inclusiveDays(eligibleStart, eligibleEnd);
+
+        // Fetch annual leave details to compute excess leave LOP docking (Bug 16)
+        const allYearApprovedLeaves = await tx.leave.findMany({
+          where: {
+            employeeId: employee.id,
+            status: 'APPROVED',
+            startDate: { gte: new Date(targetYear, 0, 1) },
+            endDate: { lte: new Date(targetYear, 11, 31, 23, 59, 59, 999) }
+          },
+          orderBy: { startDate: 'asc' }
+        });
+
+        const quotas = await tx.leaveQuota.findMany({
+          where: { employeeId: employee.id, year: targetYear }
+        });
+        const quotaMap = {};
+        for (const q of quotas) {
+          quotaMap[q.leaveType] = q.quota;
+        }
+
+        let extraLopDays = 0;
+        const leavesByType = {};
+        for (const l of allYearApprovedLeaves) {
+          if (l.leaveType === 'UNPAID') continue;
+          if (!leavesByType[l.leaveType]) leavesByType[l.leaveType] = [];
+          leavesByType[l.leaveType].push(l);
+        }
+
+        for (const [type, typeLeaves] of Object.entries(leavesByType)) {
+          const quotaLimit = quotaMap[type] || 0;
+          let runningSum = 0;
+          for (const l of typeLeaves) {
+            let curr = new Date(l.startDate);
+            const end = new Date(l.endDate);
+            let safety = 0;
+            while (curr <= end && safety < 100) {
+              safety++;
+              runningSum += 1;
+              if (runningSum > quotaLimit) {
+                const dStr = curr.toISOString().slice(0, 10);
+                const startStr = startDate.toISOString().slice(0, 10);
+                const endStr = endDate.toISOString().slice(0, 10);
+                if (dStr >= startStr && dStr <= endStr) {
+                  extraLopDays += 1;
+                }
+              }
+              curr.setDate(curr.getDate() + 1);
+            }
+          }
+        }
+
+        const unpaidLeavesRaw = leaveDeductions
+          .filter((l) => l.employeeId === employee.id)
+          .reduce((sum, l) => sum + overlapDays(l.startDate, l.endDate, eligibleStart, eligibleEnd), 0) + extraLopDays;
         const unpaidLeaves = Math.min(workDays, unpaidLeavesRaw); // Cap LOP days at maximum calendar days in the month
-        const payableDays = Math.max(0, workDays - unpaidLeaves);
+        const payableDays = Math.max(0, eligibleDays - unpaidLeaves);
         const employeeAdjustments = adjustments[employee.id] || {};
         let arrears = 0;
         if (employeeAdjustments.arrears !== undefined) {
@@ -371,6 +546,13 @@ const runPayroll = async (req, res) => {
           arrears = arrearsResult.netArrears;
         }
         const incentives = money(employeeAdjustments.incentives);
+        const employeeClaims = approvedExpenseClaims.filter((claim) => claim.employeeId === employee.id);
+        const reimbursements = money(
+          employeeAdjustments.reimbursements !== undefined
+            ? employeeAdjustments.reimbursements
+            : employeeClaims.reduce((sum, claim) => sum + claim.amount, 0)
+        );
+        const loanDeduction = money((employeeAdjustments.loanDeduction || 0) + (employeeAdjustments.advanceRecovery || 0));
         const otHours = approvedOvertime.filter((ot) => ot.employeeId === employee.id).reduce((sum, ot) => sum + ot.otHours, 0);
         const otPay = money(salaryCalculator.calculateOTPay(
           structure.basicSalary,
@@ -382,6 +564,9 @@ const runPayroll = async (req, res) => {
 
         const currentAddress = employee.addresses?.find(a => a.type === 'CURRENT') || employee.addresses?.[0];
         const stateName = currentAddress ? currentAddress.state : 'DEFAULT';
+        const earnedResult = buildEarnedStructure({ employee, startDate, endDate, workDays, payableDays });
+        if (!earnedResult) continue;
+        const earnedStructure = earnedResult.earnedStructure;
         const permanentGross = salaryCalculator.calculateGrossEarnings(structure);
         const esiCycleEligible = permanentGross <= 21000;
 
@@ -398,13 +583,13 @@ const runPayroll = async (req, res) => {
           taxOptions: { regime: 'NEW' }
         };
 
-        const calc = payableDays < workDays
-          ? await salaryCalculator.calculateProportionalSalary(structure, payableDays, workDays, calcOptions)
-          : await salaryCalculator.calculateNetSalary(structure, calcOptions);
+        const calc = await salaryCalculator.calculateNetSalary(earnedStructure, calcOptions);
         
-        calc.grossEarnings = money(calc.grossEarnings + arrears + incentives + otPay);
-        calc.netSalary = money(calc.netSalary + arrears + incentives + otPay);
-        calc.breakdowns.earnings.otherAllowance = money(calc.breakdowns.earnings.otherAllowance + arrears + incentives + otPay);
+        calc.grossEarnings = money(calc.grossEarnings + arrears + incentives + otPay + reimbursements);
+        calc.totalDeductions = money(calc.totalDeductions + loanDeduction);
+        calc.netSalary = money(calc.netSalary + arrears + incentives + otPay + reimbursements - loanDeduction);
+        calc.breakdowns.earnings.otherAllowance = money(calc.breakdowns.earnings.otherAllowance + arrears + incentives + otPay + reimbursements);
+        calc.breakdowns.deductions.otherDeductions = money((calc.breakdowns.deductions.otherDeductions || 0) + loanDeduction);
 
         const record = await tx.payrollRecord.create({
           data: {
@@ -443,10 +628,22 @@ const runPayroll = async (req, res) => {
             incentives,
             incomeTaxDeclaration: confirmations.incomeTaxDeclaration === true,
             investmentProofs: confirmations.investmentProofs === true,
-            complianceNotes: employeeAdjustments.notes || '',
+            complianceNotes: [
+              employeeAdjustments.notes || '',
+              `Eligible days: ${payableDays}/${eligibleDays}; period ${earnedResult.eligibleStart.toISOString().slice(0, 10)} to ${earnedResult.eligibleEnd.toISOString().slice(0, 10)}`,
+              reimbursements ? `Reimbursements included: ${reimbursements}` : '',
+              loanDeduction ? `Loan/advance recovery deducted: ${loanDeduction}` : '',
+            ].filter(Boolean).join(' | '),
             status: 'PROCESSED'
           },
         });
+
+        if (employeeClaims.length > 0) {
+          await tx.expenseClaim.updateMany({
+            where: { id: { in: employeeClaims.map((claim) => claim.id) } },
+            data: { payrollRecordId: record.id, status: 'PAID' },
+          });
+        }
 
         totalAmount += calc.netSalary;
         totalPf += calc.breakdowns.deductions.employerPf;
@@ -491,6 +688,28 @@ const runPayroll = async (req, res) => {
       newDetails: transactionResult.updated,
       ipAddress: req.ip
     });
+
+    const existingWorkflow = await prisma.workflowInstance.findFirst({
+      where: { module: 'PAYROLL', entityType: 'PayrollRun', entityId: transactionResult.updated.id },
+    });
+    if (!existingWorkflow) {
+      await createWorkflowInstance({
+        module: 'PAYROLL',
+        entityType: 'PayrollRun',
+        entityId: transactionResult.updated.id,
+        title: `Payroll close ${String(targetMonth).padStart(2, '0')}/${targetYear}`,
+        requester: req.user,
+        triggerEvent: 'PAYROLL_RUN_CREATED',
+        context: {
+          month: targetMonth,
+          year: targetYear,
+          employeeCount: transactionResult.records.length,
+          totalNetPay: transactionResult.updated.totalAmount,
+          totalPf: transactionResult.totalPf,
+          totalTds: transactionResult.totalTds,
+        },
+      });
+    }
 
     res.json({
       payrollRun: transactionResult.updated,
@@ -924,6 +1143,9 @@ const getPayrollExport = async (req, res) => {
 const calculateEmployeeSalary = async (req, res) => {
   try {
     const { employeeId } = req.params;
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for salary calculation' });
+    }
     const { month, year } = req.query;
 
     const structure = await prisma.salaryStructure.findUnique({ where: { employeeId } });

@@ -29,11 +29,8 @@ const canAccessEmployee = async (user, employeeId) => {
   if (ownEmployeeId === employeeId) return true;
 
   if (user?.role === 'MANAGER') {
-    const target = await prisma.employee.findUnique({
-      where: { id: employeeId },
-      select: { managerId: true },
-    });
-    return target?.managerId === ownEmployeeId;
+    const scopeIds = await getEmployeeScopeIds(user);
+    return scopeIds.includes(employeeId);
   }
 
   return false;
@@ -44,14 +41,42 @@ const getEmployeeScopeIds = async (user, { includeReports = true } = {}) => {
   const ids = ownEmployeeId ? [ownEmployeeId] : [];
 
   if (includeReports && user?.role === 'MANAGER' && ownEmployeeId) {
-    const reports = await prisma.employee.findMany({
-      where: { managerId: ownEmployeeId },
-      select: { id: true },
-    });
-    ids.push(...reports.map((employee) => employee.id));
+    let currentIds = [ownEmployeeId];
+    let allReportIds = [];
+    let depth = 0;
+    while (currentIds.length > 0 && depth < 10) {
+      const reports = await prisma.employee.findMany({
+        where: { managerId: { in: currentIds } },
+        select: { id: true },
+      });
+      currentIds = reports.map((emp) => emp.id);
+      if (currentIds.length === 0) break;
+      allReportIds.push(...currentIds);
+      depth++;
+    }
+    ids.push(...allReportIds);
   }
 
   return ids;
+};
+
+const isDirectManagerOf = async (user, employeeId) => {
+  if (!employeeId || user?.role !== 'MANAGER') return false;
+  const ownEmployeeId = await getLinkedEmployeeId(user);
+  if (!ownEmployeeId) return false;
+
+  const target = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { managerId: true },
+  });
+
+  return target?.managerId === ownEmployeeId;
+};
+
+const canApproveEmployeeWorkflow = async (user, employeeId) => {
+  if (!employeeId) return false;
+  if (isHr(user) || isAdmin(user)) return true;
+  return canAccessEmployee(user, employeeId);
 };
 
 module.exports = {
@@ -67,4 +92,6 @@ module.exports = {
   getLinkedEmployeeId,
   canAccessEmployee,
   getEmployeeScopeIds,
+  isDirectManagerOf,
+  canApproveEmployeeWorkflow,
 };

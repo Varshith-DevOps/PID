@@ -1,40 +1,76 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/authContext';
-import { getExecutiveSummary } from '@/lib/api';
-import Sidebar from '@/components/Sidebar';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import Sidebar from '@/components/Sidebar';
+import { useAuth } from '@/lib/authContext';
+import { getPersonalizedDashboard } from '@/lib/api';
+
+const money = (value: number) => `INR ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
+const shortDate = (value?: string) => {
+  if (!value) return 'No date';
+  return new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+};
+
+const toneColor = (tone: string) => {
+  if (tone === 'success') return '#10b981';
+  if (tone === 'warning') return '#f59e0b';
+  if (tone === 'danger') return '#ef4444';
+  if (tone === 'violet') return '#8b5cf6';
+  return '#3b82f6';
+};
+
+const availabilityLabel: Record<string, string> = {
+  AVAILABLE: 'Available',
+  LATE_ONLINE: 'Late, online',
+  ON_LEAVE: 'On leave',
+  SIGNED_OUT: 'Signed out',
+  NOT_CHECKED_IN: 'Not checked in',
+};
+
+const coaching = {
+  attendanceGood: 'Great consistency today. Keep the rhythm steady and acknowledge the team for showing up on time.',
+  attendanceLow: 'Attendance needs attention. Check leave coverage, late arrivals, and whether managers need to follow up.',
+  employeeHoursGood: 'You are pacing well this week. Nice work keeping your contribution visible through logged hours.',
+  employeeHoursLow: 'A small improvement is available here. Log project time daily so your effort is easy to recognize.',
+  tasksGood: 'Task load looks healthy. Keep closing work in small batches and update project status before handoff.',
+  tasksHigh: 'You have a heavy task queue. Reconfirm priorities with your manager and move blocked items out of the way.',
+  payrollGood: 'Payroll readiness is strong. Keep bank, salary, and statutory inputs locked before processing.',
+  payrollRisk: 'Payroll needs cleanup before closure. Focus on salary structures, bank details, and pending reimbursements.',
+};
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [stats, setStats] = useState<any>(null);
+  const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/');
-    }
-  }, [user, authLoading, router]);
+    if (!authLoading && !user) router.push('/');
+  }, [authLoading, user, router]);
 
   useEffect(() => {
-    if (user) {
-      loadStats();
-    }
+    if (user) loadDashboard();
   }, [user]);
 
-  const loadStats = async () => {
+  const loadDashboard = async () => {
     try {
-      const data = await getExecutiveSummary();
-      setStats(data);
+      setLoading(true);
+      const data = await getPersonalizedDashboard();
+      setDashboard(data);
     } catch (err) {
-      console.error('Failed to load executive summary:', err);
+      console.error('Failed to load personalized dashboard:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  const departmentData = useMemo(() => dashboard?.cards?.departments || [], [dashboard]);
+  const recruitmentData = useMemo(() => dashboard?.cards?.recruitment || [], [dashboard]);
+  const availabilityData = useMemo(() => dashboard?.cards?.teamAvailability || [], [dashboard]);
 
   if (authLoading || !user) {
     return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
@@ -43,348 +79,480 @@ export default function DashboardPage() {
   return (
     <div className="app-layout">
       <Sidebar />
-      <main className="main-content" style={{ padding: '2rem' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-          
-          {/* EXECUTIVE HEADER */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <main className="main-content dashboard-shell">
+        <style jsx>{`
+          .dashboard-shell { padding: 1.5rem; }
+          .dash-wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+          .dash-hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 1rem;
+            align-items: stretch;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.82));
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 8px;
+            padding: 1.2rem;
+          }
+          .dash-title { margin: 0; color: white; font-size: 1.55rem; line-height: 1.2; font-weight: 850; letter-spacing: 0; }
+          .dash-subtitle { margin: 0.35rem 0 0; color: var(--text-secondary); font-size: 0.82rem; max-width: 760px; }
+          .dash-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+          .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.8rem; }
+          .coach-card {
+            position: relative;
+            background: rgba(15, 23, 42, 0.78);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 8px;
+            padding: 1rem;
+            min-height: 120px;
+            transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+          }
+          .coach-card:hover { transform: translateY(-2px); border-color: rgba(96, 165, 250, 0.55); background: rgba(15, 23, 42, 0.94); }
+          .coach-tip {
+            position: absolute;
+            left: 0.75rem;
+            right: 0.75rem;
+            bottom: calc(100% + 0.5rem);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(6px);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            background: #0f172a;
+            border: 1px solid rgba(96, 165, 250, 0.38);
+            border-radius: 8px;
+            padding: 0.7rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.74rem;
+            line-height: 1.45;
+            z-index: 20;
+            box-shadow: 0 14px 38px rgba(0, 0, 0, 0.36);
+          }
+          .coach-card:hover .coach-tip { opacity: 1; transform: translateY(0); }
+          .metric-label { color: var(--text-secondary); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0; font-weight: 750; }
+          .metric-value { margin-top: 0.35rem; font-size: 1.65rem; color: white; font-weight: 850; line-height: 1.1; word-break: break-word; }
+          .metric-note { margin-top: 0.35rem; color: var(--text-muted); font-size: 0.72rem; }
+          .panel {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 8px;
+            padding: 1rem;
+            min-width: 0;
+          }
+          .panel-title { color: white; font-size: 0.98rem; font-weight: 800; margin: 0 0 0.75rem; }
+          .two-col { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); gap: 1rem; align-items: start; }
+          .three-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+          .list { display: flex; flex-direction: column; gap: 0.55rem; }
+          .row-card {
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.72rem;
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.025);
+          }
+          .row-card:hover { border-color: rgba(96, 165, 250, 0.42); }
+          .row-main { min-width: 0; }
+          .row-title { color: white; font-weight: 750; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .row-sub { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.12rem; }
+          .pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 0.22rem 0.5rem; font-size: 0.67rem; font-weight: 800; white-space: nowrap; }
+          .quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem; }
+          .quick-link {
+            color: white;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 0.65rem;
+            font-size: 0.76rem;
+            font-weight: 750;
+            text-align: center;
+          }
+          .quick-link:hover { border-color: rgba(96, 165, 250, 0.5); background: rgba(37, 99, 235, 0.12); }
+          .empty { color: var(--text-muted); font-size: 0.76rem; padding: 1rem; text-align: center; border: 1px dashed rgba(148,163,184,0.2); border-radius: 8px; }
+          @media (max-width: 980px) {
+            .dashboard-shell { padding: 1rem; }
+            .dash-hero, .two-col { grid-template-columns: 1fr; }
+            .dash-actions { justify-content: flex-start; }
+          }
+        `}</style>
+
+        <div className="dash-wrap">
+          <header className="dash-hero">
             <div>
-              <h1 style={{ fontSize: '1.8rem', fontWeight: 800, background: 'linear-gradient(135deg, #ffffff, #a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.25rem' }}>
-                Executive Briefing Overview
-              </h1>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Real-time operational health, headcount tracker, detailed attendance analysis, and active leave pipelines.
-              </p>
+              <h1 className="dash-title">{getTitle(dashboard, user)}</h1>
+              <p className="dash-subtitle">{getSubtitle(dashboard)}</p>
             </div>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.72rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', padding: '0.45rem 0.85rem', borderRadius: '8px', color: 'var(--text-secondary)' }}>
-                🕒 Last Update: {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            <div className="dash-actions">
+              <span className="pill" style={{ background: 'rgba(59,130,246,0.14)', color: '#93c5fd' }}>
+                {dashboard?.dashboardType || user.role} view
               </span>
-              <button 
-                onClick={() => { setLoading(true); loadStats(); }} 
-                style={{ background: 'linear-gradient(135deg, #a855f7, #c084fc)', border: 'none', color: 'white', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(168,85,247,0.2)' }}
-              >
-                🔄 Refresh Analytics
-              </button>
+              <button className="btn btn-neutral btn-sm" onClick={loadDashboard}>Refresh</button>
             </div>
-          </div>
+          </header>
 
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '350px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
               <div className="loading-spinner" />
             </div>
+          ) : dashboard?.dashboardType === 'EMPLOYEE' ? (
+            <EmployeeDashboardView dashboard={dashboard} />
+          ) : dashboard?.dashboardType === 'MANAGER' ? (
+            <ManagerDashboardView dashboard={dashboard} />
+          ) : dashboard?.dashboardType === 'PAYROLL' ? (
+            <PayrollDashboardView dashboard={dashboard} departmentData={departmentData} />
           ) : (
-            stats && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
-                
-                {/* PRIMARY HIGH-LEVEL KPIS */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
-                  
-                  {/* HEADCOUNT */}
-                  <div className="glass-card" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Headcount</span>
-                      <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '0.2rem 0', color: 'white' }}>{stats.workforce.total}</h2>
-                      <span style={{ fontSize: '0.68rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        🟢 {stats.workforce.active} Active · {stats.workforce.managers} Mgrs
-                      </span>
-                    </div>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>
-                      <svg style={{ width: '22px', height: '22px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                    </div>
-                  </div>
-
-                  {/* ATTENDANCE RATE */}
-                  <div className="glass-card" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance Rate (Today)</span>
-                      <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '0.2rem 0', color: stats.attendance.attendanceRate > 80 ? '#10b981' : '#f59e0b' }}>{stats.attendance.attendanceRate}%</h2>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                        {stats.attendance.presentCount} present · {stats.attendance.lateCount} late · {stats.attendance.absentCount} absent
-                      </span>
-                    </div>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
-                      <svg style={{ width: '22px', height: '22px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </div>
-                  </div>
-
-                  {/* PENDING LIABILITY (EXPENSES) */}
-                  <div className="glass-card" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pending Approvals Value</span>
-                      <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '0.2rem 0', color: '#f87171' }}>
-                        ₹{stats.expenses.pendingAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                      </h2>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                        {stats.expenses.pendingClaims} claims · {stats.leave.pendingApprovalsCount} leaves waiting
-                      </span>
-                    </div>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171' }}>
-                      <svg style={{ width: '22px', height: '22px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </div>
-                  </div>
-
-                  {/* TALENT PIPELINE */}
-                  <div className="glass-card" style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Talent Sourcing</span>
-                      <h2 style={{ fontSize: '2rem', fontWeight: 800, margin: '0.2rem 0', color: 'white' }}>{stats.recruitment.openPositions} Jobs</h2>
-                      <span style={{ fontSize: '0.68rem', color: '#06b6d4' }}>
-                        {stats.recruitment.totalApplicants} Applicants · {stats.recruitment.upcomingInterviews} interviews
-                      </span>
-                    </div>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(6,182,212,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#06b6d4' }}>
-                      <svg style={{ width: '22px', height: '22px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* DETAILED DOUBLE-COLUMN WORKFLOW HUB */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
-                  
-                  {/* LEFT COLUMN: DETAILED ATTENDANCE HUB */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    
-                    {/* ATTENDANCE HUB CARD */}
-                    <div className="glass-card" style={{ padding: '1.75rem', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          📅 Detailed Attendance Analysis (Today)
-                        </h3>
-                        <Link href="/attendance" style={{ fontSize: '0.72rem', color: '#c084fc', textDecoration: 'none', fontWeight: 600 }}>
-                          View Register →
-                        </Link>
-                      </div>
-
-                      {/* LATE CHECK-INS */}
-                      <div style={{ marginBottom: '1.5rem' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f59e0b', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>⏰ Today's Late Check-ins</span>
-                          <span style={{ fontSize: '0.75rem', background: 'rgba(245,158,11,0.08)', padding: '2px 8px', borderRadius: '4px' }}>
-                            {stats.attendance.lateArrivals.length} Late Arrivals
-                          </span>
-                        </div>
-
-                        {stats.attendance.lateArrivals.length === 0 ? (
-                          <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            🎉 Outstanding! No late arrivals recorded today.
-                          </div>
-                        ) : (
-                          <div style={{ overflowX: 'auto', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '8px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', textAlign: 'left' }}>
-                              <thead>
-                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', color: 'var(--text-secondary)' }}>
-                                  <th style={{ padding: '0.6rem 0.85rem' }}>Name</th>
-                                  <th style={{ padding: '0.6rem 0.85rem' }}>Department</th>
-                                  <th style={{ padding: '0.6rem 0.85rem' }}>In Time</th>
-                                  <th style={{ padding: '0.6rem 0.85rem', textAlign: 'right' }}>Late Minutes</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {stats.attendance.lateArrivals.map((a: any) => (
-                                  <tr key={a.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                                    <td style={{ padding: '0.55rem 0.85rem', fontWeight: 600, color: 'white' }}>{a.name}</td>
-                                    <td style={{ padding: '0.55rem 0.85rem', color: 'var(--text-secondary)' }}>{a.department}</td>
-                                    <td style={{ padding: '0.55rem 0.85rem', color: '#f59e0b' }}>{a.checkIn}</td>
-                                    <td style={{ padding: '0.55rem 0.85rem', color: '#ef4444', textAlign: 'right', fontWeight: 600 }}>{a.lateMinutes} mins</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* ABSENTEES */}
-                      <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#ef4444', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>🚫 Absent / Not Checked-In Today</span>
-                          <span style={{ fontSize: '0.75rem', background: 'rgba(239,68,68,0.08)', padding: '2px 8px', borderRadius: '4px' }}>
-                            {stats.attendance.absentees.length} Absent
-                          </span>
-                        </div>
-
-                        {stats.attendance.absentees.length === 0 ? (
-                          <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            ✅ Perfect! All staff members checked in or are accounted for today.
-                          </div>
-                        ) : (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.65rem' }}>
-                            {stats.attendance.absentees.map((e: any) => (
-                              <div key={e.id} style={{ display: 'flex', flexDirection: 'column', gap: '2px', background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.08)', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
-                                <span style={{ fontSize: '0.76rem', fontWeight: 600, color: 'white' }}>{e.name}</span>
-                                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{e.department}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                    </div>
-
-                    {/* OPERATIONS & TASKS PANEL */}
-                    <div className="glass-card" style={{ padding: '1.75rem', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white', marginBottom: '1.25rem' }}>
-                        📊 Operations & Project Progress
-                      </h3>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.25rem' }}>
-                        
-                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Active Projects</span>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white', margin: '0.25rem 0' }}>{stats.projects.active}</div>
-                          <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Under tracking in workspace</p>
-                        </div>
-
-                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Overdue Tasks</span>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: stats.projects.overdueTasks > 0 ? '#ef4444' : '#10b981', margin: '0.25rem 0' }}>
-                            {stats.projects.overdueTasks} Tasks
-                          </div>
-                          <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Require immediate oversight</p>
-                        </div>
-
-                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Task Completion Rate</span>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', margin: '0.25rem 0' }}>{stats.projects.taskCompletionRate}%</div>
-                          <div style={{ height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden', marginTop: '0.4rem' }}>
-                            <div style={{ width: `${stats.projects.taskCompletionRate}%`, height: '100%', background: '#10b981' }} />
-                          </div>
-                        </div>
-
-                      </div>
-                    </div>
-
-                  </div>
-
-                  {/* RIGHT COLUMN: DETAILED LEAVE HUB */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    
-                    {/* LEAVE HUB CARD */}
-                    <div className="glass-card" style={{ padding: '1.75rem', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          🌴 Out of Office & Leaves Tracker
-                        </h3>
-                        <Link href="/leave" style={{ fontSize: '0.72rem', color: '#c084fc', textDecoration: 'none', fontWeight: 600 }}>
-                          Manage Leaves →
-                        </Link>
-                      </div>
-
-                      {/* ON LEAVE TODAY */}
-                      <div style={{ marginBottom: '1.5rem' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#3b82f6', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>🏖️ Out of Office Today</span>
-                          <span style={{ fontSize: '0.75rem', background: 'rgba(59,130,246,0.08)', padding: '2px 8px', borderRadius: '4px' }}>
-                            {stats.leave.onLeaveToday.length} Active Leaves
-                          </span>
-                        </div>
-
-                        {stats.leave.onLeaveToday.length === 0 ? (
-                          <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            💼 Nobody is currently out of office on leave today.
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                            {stats.leave.onLeaveToday.map((l: any) => (
-                              <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '0.75rem 1rem', borderRadius: '8px' }}>
-                                <div>
-                                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'white' }}>{l.name}</span>
-                                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: '8px' }}>({l.department})</span>
-                                  <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                    📅 {l.range}
-                                  </div>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                  <span className="badge" style={{ background: 'rgba(59,130,246,0.08)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.15)', fontSize: '0.62rem' }}>
-                                    {l.leaveType}
-                                  </span>
-                                  <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginTop: '2px', fontWeight: 600 }}>{l.days} Days</div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* LEAVE APPLICATIONS AWAITING APPROVAL */}
-                      <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fbbf24', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>✍️ Awaiting Leave Approval (Signature Required)</span>
-                          <span style={{ fontSize: '0.75rem', background: 'rgba(245,158,11,0.08)', padding: '2px 8px', borderRadius: '4px' }}>
-                            {stats.leave.pendingApprovals.length} Pending
-                          </span>
-                        </div>
-
-                        {stats.leave.pendingApprovals.length === 0 ? (
-                          <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            ☕ No leave requests waiting for your approval! All caught up.
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            {stats.leave.pendingApprovals.map((l: any) => (
-                              <div key={l.id} style={{ display: 'flex', flexDirection: 'column', background: 'rgba(245,158,11,0.02)', border: '1px solid rgba(245,158,11,0.08)', padding: '0.85rem', borderRadius: '8px', gap: '0.4rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div>
-                                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'white' }}>{l.name}</span>
-                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: '8px' }}>({l.department})</span>
-                                  </div>
-                                  <span className="badge" style={{ background: 'rgba(245,158,11,0.08)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.15)', fontSize: '0.62rem' }}>
-                                    {l.leaveType} · {l.days} days
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
-                                  📅 Range: {l.range}
-                                </div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', background: 'rgba(255,255,255,0.01)', padding: '0.4rem 0.6rem', borderRadius: '4px', borderLeft: '2px solid rgba(245,158,11,0.3)' }}>
-                                  💬 "{l.reason}"
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                    </div>
-
-                    {/* OPERATIONAL CONTROL DECK */}
-                    <div className="glass-card" style={{ padding: '1.5rem', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: 'white', marginBottom: '1rem' }}>
-                        ⚡ Operational Control Deck
-                      </h3>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
-                        <Link href="/employees" style={{ padding: '0.6rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', textDecoration: 'none', color: 'white', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, display: 'block', transition: 'background 0.2s' }}>
-                          👥 Employees
-                        </Link>
-                        <Link href="/attendance" style={{ padding: '0.6rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', textDecoration: 'none', color: 'white', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, display: 'block' }}>
-                          📅 Attendance
-                        </Link>
-                        <Link href="/payroll" style={{ padding: '0.6rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', textDecoration: 'none', color: 'white', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, display: 'block' }}>
-                          💰 Payroll
-                        </Link>
-                        <Link href="/recruitment" style={{ padding: '0.6rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', textDecoration: 'none', color: 'white', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, display: 'block' }}>
-                          🎯 Recruitment
-                        </Link>
-                        <Link href="/projects" style={{ padding: '0.6rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', textDecoration: 'none', color: 'white', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, display: 'block' }}>
-                          📂 Projects
-                        </Link>
-                        <Link href="/checklists" style={{ padding: '0.6rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', textDecoration: 'none', color: 'white', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, display: 'block' }}>
-                          🚀 Checklist Path
-                        </Link>
-                      </div>
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </div>
-            )
+            <AdminHrDashboardView dashboard={dashboard} departmentData={departmentData} recruitmentData={recruitmentData} availabilityData={availabilityData} />
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function getTitle(dashboard: any, user: any) {
+  const name = dashboard?.user?.name || user?.name || 'there';
+  if (dashboard?.dashboardType === 'EMPLOYEE') return `Welcome back, ${name}`;
+  if (dashboard?.dashboardType === 'MANAGER') return `${name}'s team command center`;
+  if (dashboard?.dashboardType === 'PAYROLL') return 'Payroll control room';
+  if (dashboard?.dashboardType === 'HR') return 'HR people operations cockpit';
+  return 'Admin executive dashboard';
+}
+
+function getSubtitle(dashboard: any) {
+  if (dashboard?.dashboardType === 'EMPLOYEE') return 'Attendance, leave balance, assigned work, team availability, birthdays, and project progress in one focused view.';
+  if (dashboard?.dashboardType === 'MANAGER') return 'Team availability, individual workload, pending approvals, and task risk with hover insights for each person.';
+  if (dashboard?.dashboardType === 'PAYROLL') return 'Payroll readiness, current run status, statutory inputs, and finance blockers for the payroll team.';
+  if (dashboard?.dashboardType === 'HR') return 'Workforce health, hiring movement, people availability, leave pressure, and employee lifecycle signals.';
+  return 'Organization health, attendance, payroll, recruitment, projects, and governance signals for fast decisions.';
+}
+
+function SmartMetric({ label, value, note, tone = 'blue', coach }: { label: string; value: string | number; note?: string; tone?: string; coach: string }) {
+  return (
+    <div className="coach-card">
+      <div className="coach-tip">{coach}</div>
+      <div className="metric-label">{label}</div>
+      <div className="metric-value" style={{ color: toneColor(tone) }}>{value}</div>
+      {note && <div className="metric-note">{note}</div>}
+    </div>
+  );
+}
+
+function EmployeeDashboardView({ dashboard }: { dashboard: any }) {
+  const focus = dashboard.focus || {};
+  const cards = dashboard.cards || {};
+  const weeklyData = (cards.attendanceHistory || []).slice().reverse().map((row: any) => ({
+    date: shortDate(row.date),
+    hours: row.workHours || 0,
+  }));
+
+  const taskCoach = focus.assignedTasks <= 5 ? coaching.tasksGood : coaching.tasksHigh;
+  const hoursCoach = focus.weeklyHours >= 32 ? coaching.employeeHoursGood : coaching.employeeHoursLow;
+
+  return (
+    <>
+      <section className="metric-grid">
+        <SmartMetric label="Today attendance" value={focus.attendanceStatus || 'ABSENT'} tone={focus.attendanceStatus === 'PRESENT' ? 'success' : 'warning'} note={focus.checkIn ? `Checked in ${new Date(focus.checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'No check-in yet'} coach={focus.attendanceStatus === 'PRESENT' ? 'Great start today. Keep your checkout clean so payroll and attendance stay accurate.' : 'You still have a chance to recover the day. Check in, regularize if needed, and keep your manager informed.'} />
+        <SmartMetric label="This week hours" value={`${focus.weeklyHours || 0}h`} tone={focus.weeklyHours >= 32 ? 'success' : 'warning'} note="Timesheet based contribution" coach={hoursCoach} />
+        <SmartMetric label="Leave balance" value={`${focus.leaveBalance || 0} days`} tone={focus.leaveBalance > 5 ? 'blue' : 'warning'} note="Available quota across leave types" coach={focus.leaveBalance > 5 ? 'You have a healthy leave balance. Plan time off early so the team can cover smoothly.' : 'Your leave balance is getting tight. Check future plans before applying for longer breaks.'} />
+        <SmartMetric label="Assigned work" value={focus.assignedTasks || 0} tone={focus.assignedTasks <= 5 ? 'success' : 'danger'} note={`${focus.pendingTasks || 0} open tasks`} coach={taskCoach} />
+      </section>
+
+      <section className="two-col">
+        <div className="panel">
+          <h2 className="panel-title">Weekly attendance and effort</h2>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={weeklyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
+              <Bar dataKey="hours" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="panel">
+          <h2 className="panel-title">Team availability</h2>
+          <AvailabilityList rows={cards.teamAvailability || []} />
+        </div>
+      </section>
+
+      <section className="three-col">
+        <PanelList title="Assigned project status" rows={(cards.projects || []).map((project: any) => ({
+          title: project.name,
+          sub: `${project.progress}% complete | ${project.openTasks} open tasks`,
+          pill: project.status,
+          tone: project.progress >= 70 ? 'success' : 'warning',
+          coach: project.progress >= 70 ? 'This project is moving well. Keep status updates crisp so stakeholders stay confident.' : 'This project needs visible progress. Close small tasks first and flag dependencies early.',
+        }))} empty="No active project allocations." />
+        <PanelList title="Tasks needing attention" rows={(cards.tasks || []).map((task: any) => ({
+          title: task.title,
+          sub: `${task.project} | Due ${shortDate(task.deadline)}`,
+          pill: task.status.replaceAll('_', ' '),
+          tone: task.status === 'COMPLETED' ? 'success' : 'blue',
+          coach: task.actualHours >= task.estimatedHours && task.estimatedHours > 0 ? 'This task may exceed estimate. Add a note so expectations stay aligned.' : 'Good task hygiene. Update status as soon as progress changes.',
+        }))} empty="No active tasks assigned." />
+        <PanelList title="Birthdays nearby" rows={(cards.birthdays || []).map((person: any) => ({
+          title: person.name,
+          sub: person.department,
+          pill: person.dayLabel,
+          tone: 'violet',
+          coach: 'A thoughtful birthday note is a small culture win. HRMS can help people feel remembered.',
+        }))} empty="No birthdays in the next 30 days." />
+      </section>
+    </>
+  );
+}
+
+function ManagerDashboardView({ dashboard }: { dashboard: any }) {
+  const focus = dashboard.focus || {};
+  const cards = dashboard.cards || {};
+  const workload = cards.workload || [];
+
+  return (
+    <>
+      <section className="metric-grid">
+        <SmartMetric label="Team size" value={focus.teamSize || 0} tone="blue" note="Direct reports" coach="Your team map is the starting point. Hover individual cards below to see workload and follow-up suggestions." />
+        <SmartMetric label="Available now" value={`${focus.teamAvailability || 0}%`} tone={focus.teamAvailability >= 75 ? 'success' : 'warning'} note="Checked-in team members" coach={focus.teamAvailability >= 75 ? coaching.attendanceGood : coaching.attendanceLow} />
+        <SmartMetric label="Open team tasks" value={focus.openTeamTasks || 0} tone={focus.openTeamTasks <= 12 ? 'success' : 'danger'} note="Across direct reports" coach={focus.openTeamTasks <= 12 ? 'Team task volume is manageable. Keep blockers visible and protect focus time.' : 'Task load is high. Rebalance assignments and clarify the top three priorities today.'} />
+        <SmartMetric label="Pending approvals" value={(focus.pendingTeamLeaves || 0) + (focus.pendingOvertime || 0)} tone="warning" note="Leaves plus overtime" coach="Approvals are employee experience moments. Clear them quickly so payroll and planning stay accurate." />
+      </section>
+
+      <section className="two-col">
+        <div className="panel">
+          <h2 className="panel-title">Individual team insight</h2>
+          <div className="list">
+            {workload.length ? workload.map((member: any) => (
+              <div key={member.id} className="coach-card" style={{ minHeight: '86px' }}>
+                <div className="coach-tip">{member.health === 'STRONG' ? `${member.name} is meeting expectations. Recognize the consistency and keep priorities clear.` : member.health === 'AT_RISK' ? `${member.name} may be overloaded. Review deadlines, split work, or remove blockers.` : member.health === 'UNDER_UTILIZED' ? `${member.name} has capacity. Assign meaningful work or verify timesheets are current.` : `${member.name} is steady. A quick check-in can keep momentum clean.`}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <div className="row-main">
+                    <div className="row-title">{member.name}</div>
+                    <div className="row-sub">{member.title} | {member.department}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ color: toneColor(member.health === 'STRONG' ? 'success' : member.health === 'AT_RISK' ? 'danger' : 'warning'), fontWeight: 850 }}>{member.hours}h</div>
+                    <div className="row-sub">{member.openTasks} tasks</div>
+                  </div>
+                </div>
+              </div>
+            )) : <div className="empty">No direct reports found.</div>}
+          </div>
+        </div>
+
+        <div className="panel">
+          <h2 className="panel-title">Team availability today</h2>
+          <AvailabilityList rows={cards.teamAvailability || []} />
+        </div>
+      </section>
+
+      <section className="three-col">
+        <PanelList title="Task risk queue" rows={(cards.teamTasks || []).map((task: any) => ({
+          title: task.title,
+          sub: `${task.assignee} | ${task.project} | Due ${shortDate(task.deadline)}`,
+          pill: task.status.replaceAll('_', ' '),
+          tone: task.status === 'IN_PROGRESS' ? 'blue' : 'warning',
+          coach: `Hover insight: ${task.assignee} owns this task. Confirm the next update before ${shortDate(task.deadline)}.`,
+        }))} empty="No team tasks at risk." />
+        <PanelList title="Leave requests" rows={(cards.pendingLeaves || []).map((leave: any) => ({
+          title: leave.employee,
+          sub: `${shortDate(leave.startDate)} to ${shortDate(leave.endDate)} | ${leave.days} days`,
+          pill: leave.leaveType,
+          tone: 'warning',
+          coach: 'Review team coverage before approving. Fast approval improves trust and planning accuracy.',
+        }))} empty="No pending team leave requests." />
+        <PanelList title="Upcoming birthdays" rows={(cards.birthdays || []).map((person: any) => ({
+          title: person.name,
+          sub: person.department,
+          pill: person.dayLabel,
+          tone: 'violet',
+          coach: 'A quick manager note here can do more for morale than a long meeting.',
+        }))} empty="No birthdays in the next 30 days." />
+      </section>
+    </>
+  );
+}
+
+function PayrollDashboardView({ dashboard, departmentData }: { dashboard: any; departmentData: any[] }) {
+  const payroll = dashboard.payroll || {};
+  const focus = dashboard.focus || {};
+
+  return (
+    <>
+      <section className="metric-grid">
+        <SmartMetric label="Payroll status" value={payroll.status || 'NOT_RUN'} tone={payroll.status === 'APPROVED' || payroll.status === 'COMPLETED' ? 'success' : 'warning'} note={`${payroll.employeeCount || 0} records in latest run`} coach={payroll.status === 'NOT_RUN' ? 'Payroll has not run for the selected period. Complete readiness checks before generating salary.' : 'Payroll exists. Validate exceptions before approving or processing.'} />
+        <SmartMetric label="Net salary" value={money(payroll.net || 0)} tone="blue" note="Latest/current run" coach="Net salary should reconcile with bank advice, payslips, and statutory deductions before release." />
+        <SmartMetric label="Salary readiness" value={`${payroll.salaryReadiness || 0}%`} tone={payroll.salaryReadiness >= 95 ? 'success' : 'danger'} note="Active employees with structures" coach={payroll.salaryReadiness >= 95 ? coaching.payrollGood : coaching.payrollRisk} />
+        <SmartMetric label="Bank readiness" value={`${payroll.bankReadiness || 0}%`} tone={payroll.bankReadiness >= 95 ? 'success' : 'danger'} note="Active employees with bank details" coach={payroll.bankReadiness >= 95 ? 'Bank master readiness is strong. Keep account updates audit logged.' : 'Bank details are incomplete. Fix before generating payment files.'} />
+      </section>
+
+      <section className="two-col">
+        <div className="panel">
+          <h2 className="panel-title">Payroll readiness map</h2>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={[
+              { name: 'Salary', value: payroll.salaryReadiness || 0 },
+              { name: 'Bank', value: payroll.bankReadiness || 0 },
+              { name: 'Overall', value: focus.payrollReadiness || 0 },
+            ]}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
+              <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <PanelList title="Payroll action queue" rows={[
+          { title: 'Validate salary structures', sub: `${payroll.salaryReadiness || 0}% complete`, pill: payroll.salaryReadiness >= 95 ? 'Ready' : 'Fix', tone: payroll.salaryReadiness >= 95 ? 'success' : 'danger', coach: 'Every missing salary structure can block accurate payroll calculation.' },
+          { title: 'Validate bank details', sub: `${payroll.bankReadiness || 0}% complete`, pill: payroll.bankReadiness >= 95 ? 'Ready' : 'Fix', tone: payroll.bankReadiness >= 95 ? 'success' : 'danger', coach: 'Bank file errors create payment delays. Resolve before payroll approval.' },
+          { title: 'Pending reimbursements', sub: `${payroll.pendingReimbursements || 0} claims linked to finance flow`, pill: 'Review', tone: 'warning', coach: 'Approved reimbursements should be matched with payroll or payment run treatment.' },
+        ]} empty="No payroll actions." />
+      </section>
+
+      <section className="three-col">
+        <ChartPanel title="Department headcount" data={departmentData} dataKey="employees" nameKey="name" />
+        <QuickLinks links={[['Payroll', '/payroll'], ['Payslips', '/payslips'], ['Reports', '/dashboard/admin/reports'], ['Employees', '/employees']]} />
+        <PanelList title="Upcoming birthdays" rows={(dashboard.cards?.birthdays || []).map((person: any) => ({ title: person.name, sub: person.department, pill: person.dayLabel, tone: 'violet', coach: 'Payroll teams can help HR spot lifecycle events and communication moments.' }))} empty="No birthdays nearby." />
+      </section>
+    </>
+  );
+}
+
+function AdminHrDashboardView({ dashboard, departmentData, recruitmentData }: { dashboard: any; departmentData: any[]; recruitmentData: any[]; availabilityData: any[] }) {
+  const org = dashboard.organization || {};
+  const focus = dashboard.focus || {};
+
+  return (
+    <>
+      <section className="metric-grid">
+        <SmartMetric label="Attendance rate" value={`${org.attendanceRate || 0}%`} tone={org.attendanceRate >= 85 ? 'success' : 'warning'} note={`${org.presentToday || 0}/${org.activeEmployees || 0} present today`} coach={org.attendanceRate >= 85 ? coaching.attendanceGood : coaching.attendanceLow} />
+        <SmartMetric label="Pending leaves" value={focus.pendingLeaves || 0} tone={focus.pendingLeaves === 0 ? 'success' : 'warning'} note="Awaiting approval" coach={focus.pendingLeaves === 0 ? 'Leave approvals are clean. Nice operational discipline.' : 'Pending leave approvals affect payroll, staffing, and employee trust. Clear the queue today.'} />
+        <SmartMetric label="Active projects" value={focus.activeProjects || 0} tone="blue" note={`${focus.openTasks || 0} open tasks`} coach="Project and people data are connected. Watch workload before it becomes attrition risk." />
+        <SmartMetric label="Payroll readiness" value={`${focus.payrollReadiness || 0}%`} tone={focus.payrollReadiness >= 95 ? 'success' : 'danger'} note={dashboard.payroll?.status || 'NOT_RUN'} coach={focus.payrollReadiness >= 95 ? coaching.payrollGood : coaching.payrollRisk} />
+      </section>
+
+      <section className="two-col">
+        <div className="panel">
+          <h2 className="panel-title">Workforce by department</h2>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={departmentData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
+              <Bar dataKey="employees" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="panel">
+          <h2 className="panel-title">Recruitment pipeline</h2>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={recruitmentData} dataKey="count" nameKey="stage" innerRadius={58} outerRadius={88}>
+                {recruitmentData.map((_: any, index: number) => <Cell key={index} fill={['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'][index % 5]} />)}
+              </Pie>
+              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+
+      <section className="three-col">
+        <PanelList title="Recent hires" rows={(dashboard.cards?.recentHires || []).map((hire: any) => ({
+          title: hire.name,
+          sub: `${hire.title} | ${hire.department}`,
+          pill: shortDate(hire.joinDate),
+          tone: 'success',
+          coach: 'New hire experience is fragile. Check onboarding progress and manager connection.',
+        }))} empty="No recent hires found." />
+        <PanelList title="Upcoming birthdays" rows={(dashboard.cards?.birthdays || []).map((person: any) => ({
+          title: person.name,
+          sub: person.department,
+          pill: person.dayLabel,
+          tone: 'violet',
+          coach: 'Recognition moments improve belonging. A small note from HR or leadership lands well.',
+        }))} empty="No birthdays in the next 30 days." />
+        <QuickLinks links={[['Employees', '/employees'], ['Attendance', '/attendance'], ['Leave', '/leave'], ['Payroll', '/payroll'], ['Audit Center', '/dashboard/admin/reports'], ['Projects', '/projects']]} />
+      </section>
+    </>
+  );
+}
+
+function AvailabilityList({ rows }: { rows: any[] }) {
+  if (!rows.length) return <div className="empty">No team members to show.</div>;
+  return (
+    <div className="list">
+      {rows.map((row) => {
+        const ok = row.status === 'AVAILABLE' || row.status === 'LATE_ONLINE';
+        const tone = row.status === 'ON_LEAVE' ? 'warning' : ok ? 'success' : 'danger';
+        return (
+          <div key={row.id} className="row-card">
+            <div className="row-main">
+              <div className="row-title">{row.name}</div>
+              <div className="row-sub">{row.role} | {row.department}</div>
+            </div>
+            <span className="pill" style={{ background: `${toneColor(tone)}22`, color: toneColor(tone) }}>
+              {availabilityLabel[row.status] || row.status}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PanelList({ title, rows, empty }: { title: string; rows: any[]; empty: string }) {
+  return (
+    <div className="panel">
+      <h2 className="panel-title">{title}</h2>
+      <div className="list">
+        {rows.length ? rows.map((row, index) => (
+          <div key={`${row.title}-${index}`} className="coach-card" style={{ minHeight: '86px' }}>
+            <div className="coach-tip">{row.coach}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+              <div className="row-main">
+                <div className="row-title">{row.title}</div>
+                <div className="row-sub">{row.sub}</div>
+              </div>
+              <span className="pill" style={{ background: `${toneColor(row.tone)}22`, color: toneColor(row.tone) }}>{row.pill}</span>
+            </div>
+          </div>
+        )) : <div className="empty">{empty}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ChartPanel({ title, data, dataKey, nameKey }: { title: string; data: any[]; dataKey: string; nameKey: string }) {
+  return (
+    <div className="panel">
+      <h2 className="panel-title">{title}</h2>
+      <ResponsiveContainer width="100%" height={230}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
+          <XAxis dataKey={nameKey} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+          <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
+          <Bar dataKey={dataKey} fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function QuickLinks({ links }: { links: string[][] }) {
+  return (
+    <div className="panel">
+      <h2 className="panel-title">Quick actions</h2>
+      <div className="quick-grid">
+        {links.map(([label, href]) => (
+          <Link key={href} className="quick-link" href={href}>{label}</Link>
+        ))}
+      </div>
     </div>
   );
 }

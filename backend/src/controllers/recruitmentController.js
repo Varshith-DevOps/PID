@@ -204,6 +204,15 @@ const applyForJob = async (req, res) => {
       return res.status(400).json({ error: 'Required applicant details missing' });
     }
 
+    const job = await prisma.jobOpening.findUnique({
+      where: { id: jobOpeningId },
+      select: { id: true, status: true },
+    });
+    if (!job) return res.status(404).json({ error: 'Job opening not found' });
+    if (job.status !== 'OPEN') {
+      return res.status(400).json({ error: 'This job opening is not accepting applications.' });
+    }
+
     // Check for duplicate applicant for this specific job opening by email or phone number
     const existingApplicant = await prisma.jobApplicant.findFirst({
       where: {
@@ -221,7 +230,7 @@ const applyForJob = async (req, res) => {
 
     let resumeUrl = null;
     if (req.file) {
-      resumeUrl = `/uploads/resumes/${req.file.filename}`;
+      resumeUrl = `resumes/${req.file.filename}`;
     }
 
     const applicant = await prisma.jobApplicant.create({
@@ -275,7 +284,8 @@ const updateApplicantStage = async (req, res) => {
 
       if (fullApplicant) {
         const existingEmp = await prisma.employee.findUnique({ where: { email: fullApplicant.email } });
-        if (!existingEmp) {
+        const existingUser = await prisma.user.findUnique({ where: { email: fullApplicant.email } });
+        if (!existingEmp && !existingUser) {
           const bcrypt = require('bcryptjs');
           const tempPassword = 'employee123';
           const hashedPassword = await bcrypt.hash(tempPassword, 10);

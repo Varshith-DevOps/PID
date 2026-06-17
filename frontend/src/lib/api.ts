@@ -6,6 +6,7 @@
  */
 
 import axios from 'axios';
+import { getActionErrorMessage, getActionSuccessMessage } from './userMessages';
 
 type Listener<T> = (data: T) => void;
 
@@ -28,94 +29,6 @@ class ApiEventEmitter {
 }
 
 export const apiEvents = new ApiEventEmitter();
-
-function getFriendlySuccessMessage(method: string, url: string): string | null {
-  if (method !== 'post' && method !== 'put' && method !== 'delete') {
-    return null;
-  }
-  if (!url) return null;
-  const lowercaseUrl = url.toLowerCase();
-  
-  if (lowercaseUrl.includes('/auth/login')) {
-    return 'Logged in successfully';
-  }
-  if (lowercaseUrl.includes('/auth/change-password')) {
-    return 'Password changed successfully';
-  }
-  if (lowercaseUrl.includes('/auth/reset-password')) {
-    return 'Password reset successfully';
-  }
-  if (lowercaseUrl.includes('/leave')) {
-    if (method === 'post') return 'Leave applied successfully';
-    if (lowercaseUrl.includes('/approve')) return 'Leave request approved';
-    if (lowercaseUrl.includes('/reject')) return 'Leave request rejected';
-    if (lowercaseUrl.includes('/cancel')) return 'Leave request cancelled';
-    return 'Leave updated successfully';
-  }
-  if (lowercaseUrl.includes('/attendance/check-in')) {
-    return 'Checked in successfully';
-  }
-  if (lowercaseUrl.includes('/attendance/check-out')) {
-    return 'Checked out successfully';
-  }
-  if (lowercaseUrl.includes('/attendance/mark')) {
-    return 'Attendance marked successfully';
-  }
-  if (lowercaseUrl.includes('/payroll/run')) {
-    return 'Payroll run processed successfully';
-  }
-  if (lowercaseUrl.includes('/recruitment/offers')) {
-    return 'Job offer created successfully';
-  }
-  if (lowercaseUrl.includes('/projects/tasks')) {
-    if (method === 'post') return 'Task created successfully';
-    if (method === 'delete') return 'Task deleted successfully';
-    return 'Task updated successfully';
-  }
-  if (lowercaseUrl.includes('/projects')) {
-    if (method === 'post') return 'Project created successfully';
-    if (method === 'delete') return 'Project deleted successfully';
-    return 'Project updated successfully';
-  }
-  if (lowercaseUrl.includes('/employees')) {
-    if (method === 'post') return 'Employee profile created';
-    if (method === 'delete') return 'Employee profile deleted';
-    return 'Employee profile updated';
-  }
-  if (lowercaseUrl.includes('/expenses/claims')) {
-    if (method === 'post') return 'Expense claim submitted successfully';
-    if (lowercaseUrl.includes('/approve')) return 'Expense claim approved';
-    if (lowercaseUrl.includes('/reject')) return 'Expense claim rejected';
-    return 'Expense claim updated';
-  }
-  if (lowercaseUrl.includes('/shifts/assignments')) {
-    if (method === 'post') return 'Shift assigned successfully';
-    if (method === 'delete') return 'Shift assignment removed';
-    return 'Shift assignment updated';
-  }
-
-  if (method === 'post') return 'Record created successfully';
-  if (method === 'put') return 'Record updated successfully';
-  if (method === 'delete') return 'Record deleted successfully';
-  return null;
-}
-
-function getFriendlyErrorMessage(method: string, url: string, errorResponse: any): string | null {
-  if (method !== 'post' && method !== 'put' && method !== 'delete') {
-    return null;
-  }
-  if (!url) return 'An error occurred';
-  const lowercaseUrl = url.toLowerCase();
-  
-  if (lowercaseUrl.includes('/auth/login')) {
-    return 'Login error';
-  }
-  
-  const serverMsg = errorResponse?.data?.error || errorResponse?.data?.message;
-  if (serverMsg) return serverMsg;
-  
-  return 'Action failed';
-}
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
@@ -141,7 +54,7 @@ api.interceptors.response.use(
   (response) => {
     apiEvents.emit('request-end', response.config.url || '');
     const method = response.config.method?.toLowerCase() || '';
-    const successMsg = getFriendlySuccessMessage(method, response.config.url || '');
+    const successMsg = getActionSuccessMessage(method, response.config.url || '');
     if (successMsg) {
       apiEvents.emit('toast-success', successMsg);
     }
@@ -150,7 +63,7 @@ api.interceptors.response.use(
   (error) => {
     apiEvents.emit('request-end', error.config?.url || '');
     const method = error.config?.method?.toLowerCase() || '';
-    const errorMsg = getFriendlyErrorMessage(method, error.config?.url || '', error.response);
+    const errorMsg = getActionErrorMessage(method, error.config?.url || '', error.response);
     if (errorMsg) {
       apiEvents.emit('toast-error', errorMsg);
     }
@@ -996,6 +909,11 @@ export const getExecutiveSummary = async () => {
   return data;
 };
 
+export const getPersonalizedDashboard = async () => {
+  const { data } = await api.get('/dashboard/me');
+  return data;
+};
+
 // ──── HRMS Reports & Analytics Module API Callers ────
 export const getStatutoryReport = async (type: string) => {
   const { data } = await api.get(`/reports/statutory/${type}`);
@@ -1022,12 +940,45 @@ export const queryEmployeesReport = async (payload: { columns?: string[]; filter
   return data;
 };
 
-export const downloadReportExport = async (payload: { reportType: string; filters?: any }) => {
+export const downloadReportExport = async (payload: { reportType: string; format?: 'xlsx' | 'csv' | 'pdf'; filters?: any }) => {
   const response = await api.post('/reports/export', payload, { responseType: 'blob' });
+  const format = payload.format || 'xlsx';
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement('a');
   link.href = url;
-  link.setAttribute('download', `report-${Date.now()}.xlsx`);
+  link.setAttribute('download', `report-${payload.reportType.replace(/[^a-z0-9-]+/gi, '-')}-${Date.now()}.${format}`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const getAuditReportCatalog = async () => {
+  const { data } = await api.get('/reports/audit/catalog');
+  return data;
+};
+
+export const getAuditReportCenter = async (params?: { month?: number; year?: number; financialYear?: string }) => {
+  const { data } = await api.get('/reports/audit/center', { params });
+  return data;
+};
+
+export const generateAuditPack = async (payload: { packType: string; month?: number; year?: number; financialYear?: string }) => {
+  const { data } = await api.post('/reports/audit/generate', payload);
+  return data;
+};
+
+export const updateAuditPackStatus = async (id: string, payload: { status: string; remarks?: string }) => {
+  const { data } = await api.patch(`/reports/audit/runs/${id}/status`, payload);
+  return data;
+};
+
+export const downloadAuditPackExport = async (payload: { packType: string; month?: number; year?: number; financialYear?: string }) => {
+  const response = await api.post('/reports/audit/export', payload, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `audit-pack-${payload.packType}-${Date.now()}.xlsx`);
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1106,6 +1057,206 @@ export const createNotification = async (payload: { employeeId?: string; title: 
 
 export const markNotificationRead = async (id: string) => {
   const { data } = await api.put(`/notifications/${id}/read`);
+  return data;
+};
+
+// Platform architecture, policy, workflow, compliance and integration APIs
+export const getPlatformOverview = async () => {
+  const { data } = await api.get('/platform/overview');
+  return data;
+};
+
+export const bootstrapPlatform = async () => {
+  const { data } = await api.post('/platform/bootstrap');
+  return data;
+};
+
+export const getOrganizationSetup = async () => {
+  const { data } = await api.get('/platform/organization');
+  return data;
+};
+
+export const createLegalEntity = async (payload: any) => {
+  const { data } = await api.post('/platform/organization/legal-entities', payload);
+  return data;
+};
+
+export const createBranch = async (payload: any) => {
+  const { data } = await api.post('/platform/organization/branches', payload);
+  return data;
+};
+
+export const createWorkLocation = async (payload: any) => {
+  const { data } = await api.post('/platform/organization/locations', payload);
+  return data;
+};
+
+export const getPolicyDefinitions = async (params?: { policyType?: string; status?: string }) => {
+  const { data } = await api.get('/platform/policies', { params });
+  return data;
+};
+
+export const createPolicyDefinition = async (payload: any) => {
+  const { data } = await api.post('/platform/policies', payload);
+  return data;
+};
+
+export const getWorkflowDefinitions = async (params?: { module?: string }) => {
+  const { data } = await api.get('/platform/workflows', { params });
+  return data;
+};
+
+export const createWorkflowDefinition = async (payload: any) => {
+  const { data } = await api.post('/platform/workflows', payload);
+  return data;
+};
+
+export const startWorkflowInstance = async (payload: any) => {
+  const { data } = await api.post('/platform/workflows/start', payload);
+  return data;
+};
+
+export const getApprovalInbox = async (params?: { status?: string; assignedRole?: string }) => {
+  const { data } = await api.get('/platform/approvals/inbox', { params });
+  return data;
+};
+
+export const actionApprovalTask = async (taskId: string, payload: { action: 'APPROVE' | 'REJECT'; comments?: string }) => {
+  const { data } = await api.post(`/platform/approvals/tasks/${taskId}/action`, payload);
+  return data;
+};
+
+export const getComplianceObligations = async (params?: { month?: number; year?: number; status?: string }) => {
+  const { data } = await api.get('/platform/compliance/obligations', { params });
+  return data;
+};
+
+export const generateComplianceCalendar = async (payload: { month?: number; year?: number; legalEntityId?: string; ownerRole?: string }) => {
+  const { data } = await api.post('/platform/compliance/calendar', payload);
+  return data;
+};
+
+export const updateComplianceObligation = async (id: string, payload: any) => {
+  const { data } = await api.put(`/platform/compliance/obligations/${id}`, payload);
+  return data;
+};
+
+export const getIntegrationConnections = async (params?: { category?: string }) => {
+  const { data } = await api.get('/platform/integrations', { params });
+  return data;
+};
+
+export const upsertIntegrationConnection = async (payload: any) => {
+  const { data } = await api.post('/platform/integrations', payload);
+  return data;
+};
+
+export const testIntegrationConnection = async (id: string) => {
+  const { data } = await api.post(`/platform/integrations/${id}/test`);
+  return data;
+};
+
+// ──── SaaS APIs ────────────────────────────────────────────────────────────
+export const signup = async (payload: any) => {
+  const { data } = await api.post('/auth/signup', payload);
+  return data;
+};
+
+export const getBillingPlans = async () => {
+  const { data } = await api.get('/billing/plans');
+  return data;
+};
+
+export const getBillingSubscription = async () => {
+  const { data } = await api.get('/billing/subscription');
+  return data;
+};
+
+export const billingCheckout = async (planId: string) => {
+  const { data } = await api.post('/billing/checkout', { planId });
+  return data;
+};
+
+export const billingConfirmPayment = async (payload: { transactionId: string; planId: string; status: 'SUCCESS' | 'FAILED' }) => {
+  const { data } = await api.post('/billing/confirm-payment', payload);
+  return data;
+};
+
+export const getBillingTransactions = async () => {
+  const { data } = await api.get('/billing/transactions');
+  return data;
+};
+
+export const submitContactRequest = async (payload: { name: string; email: string; phone?: string; companyName?: string; message: string }) => {
+  const { data } = await api.post('/contact', payload);
+  return data;
+};
+
+export const getContactRequests = async () => {
+  const { data } = await api.get('/contact');
+  return data;
+};
+
+export const getPlatformCompanies = async () => {
+  const { data } = await api.get('/platform-admin/companies');
+  return data;
+};
+
+export const updatePlatformCompanyStatus = async (id: string, status: string) => {
+  const { data } = await api.put(`/platform-admin/companies/${id}/status`, { status });
+  return data;
+};
+
+export const createCustomPlan = async (companyId: string, payload: { name: string; description?: string; price: number; employeeLimit: number; featureLimits: any; durationDays?: number }) => {
+  const { data } = await api.post(`/platform-admin/companies/${companyId}/custom-plan`, payload);
+  return data;
+};
+
+export const getPlatformSubscriptions = async () => {
+  const { data } = await api.get('/platform-admin/subscriptions');
+  return data;
+};
+
+export const updatePlatformSubscription = async (id: string, payload: any) => {
+  const { data } = await api.put(`/platform-admin/subscriptions/${id}`, payload);
+  return data;
+};
+
+export const getPlatformMetrics = async () => {
+  const { data } = await api.get('/platform-admin/metrics');
+  return data;
+};
+
+// ──── AI Agents APIs ────────────────────────────────────────────────────────
+export const auditTdsProof = async (formData: FormData) => {
+  const { data } = await api.post('/ai/sherlock/audit-proof', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return data;
+};
+
+export const auditPayrollCompliance = async (month: number, year: number) => {
+  const { data } = await api.post('/ai/jarvis/audit-payroll', { month, year });
+  return data;
+};
+
+export const regularizeAttendanceWinston = async (payload: { dateStr: string; timeIn?: string; timeOut?: string }) => {
+  const { data } = await api.post('/ai/winston/regularize', payload);
+  return data;
+};
+
+export const askAthenaPolicy = async (question: string) => {
+  const { data } = await api.post('/ai/athena/ask', { question });
+  return data;
+};
+
+export const updateCompanyKYC = async (payload: any) => {
+  const { data } = await api.put('/platform/organization/company', payload);
+  return data;
+};
+
+export const verifyCompanyKYC = async (companyId: string, payload: { status: 'APPROVED' | 'REJECTED'; remarks?: string }) => {
+  const { data } = await api.put(`/platform-admin/companies/${companyId}/kyc`, payload);
   return data;
 };
 

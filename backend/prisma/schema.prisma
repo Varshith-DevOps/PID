@@ -14,6 +14,13 @@ model User {
   name         String
   role         String       @default("EMPLOYEE")
   isActive     Boolean      @default(true)
+  companyId    String?
+  company      Company?     @relation(fields: [companyId], references: [id])
+  lastLoginAt  DateTime?
+  mfaEnabled   Boolean      @default(false)
+  mfaSecret    String?
+  mfaRecoveryCodes String?
+  mfaLastVerifiedAt DateTime?
   permissions  Permission[] @relation("UserPermissions")
   employee     Employee?    @relation("UserEmployee")
   createdAt    DateTime     @default(now())
@@ -36,7 +43,9 @@ model Permission {
 
 model Department {
   id          String     @id @default(uuid())
-  name        String     @unique
+  companyId   String?
+  company     Company?   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
   description String?
   isActive    Boolean    @default(true)
   employees   Employee[]
@@ -44,12 +53,13 @@ model Department {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  @@unique([companyId, name])
   @@map("departments")
 }
 
 model Employee {
   id              String        @id @default(uuid())
-  employeeId      String        @unique
+  employeeId      String
   firstName       String
   lastName        String
   email           String        @unique
@@ -61,6 +71,14 @@ model Employee {
   address         String?
   nationality     String?
   location        String?
+  company         Company?      @relation(fields: [companyId], references: [id])
+  companyId       String?
+  legalEntity     LegalEntity?  @relation(fields: [legalEntityId], references: [id])
+  legalEntityId   String?
+  branch          Branch?       @relation(fields: [branchId], references: [id])
+  branchId        String?
+  workLocation    Location?     @relation(fields: [workLocationId], references: [id])
+  workLocationId  String?
 
   // Personal details
   bloodGroup      String?
@@ -68,6 +86,7 @@ model Employee {
   personalEmail   String?
   panNumber       String?
   aadharNumber    String?
+  esicNumber      String?
 
   // Emergency contact
   emergencyContactName     String?
@@ -136,6 +155,7 @@ model Employee {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
+  @@unique([companyId, employeeId])
   @@map("employees")
 }
 
@@ -491,6 +511,8 @@ model PayrollRun {
   id              String         @id @default(uuid())
   month           Int
   year            Int
+  legalEntity     LegalEntity?   @relation(fields: [legalEntityId], references: [id])
+  legalEntityId   String?
   status          String         @default("DRAFT")
   totalAmount     Float?
   totalPf         Float?         @default(0)
@@ -1004,22 +1026,257 @@ model ComplianceReport {
 
 model Branch {
   id        String   @id @default(uuid())
-  name      String   @unique
+  name      String
+  company   Company? @relation(fields: [companyId], references: [id])
+  companyId String?
+  legalEntity LegalEntity? @relation(fields: [legalEntityId], references: [id])
+  legalEntityId String?
+  code      String?
+  state     String?
   timezone  String   @default("Asia/Kolkata")
+  employees Employee[]
+  locations Location[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, name])
   @@map("branches")
 }
 
 model Location {
   id        String   @id @default(uuid())
-  name      String   @unique
+  name      String
+  company   Company? @relation(fields: [companyId], references: [id])
+  companyId String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+  branchId  String?
+  state     String?
+  city      String?
+  address   String?
+  pincode   String?
   timezone  String   @default("Asia/Kolkata")
+  employees Employee[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, name])
   @@map("locations")
+}
+
+model Company {
+  id             String          @id @default(uuid())
+  name           String
+  code           String          @unique
+  email          String?
+  phone          String?
+  address        String?
+  industry       String?
+  companySize    String?
+  status         String          @default("ACTIVE")
+  subscriptionId String?
+  
+  // Customization fields
+  logoUrl        String?
+  customInfo     String?
+
+  // KYC Verification fields
+  cin            String?
+  gstin          String?
+  directorName   String?
+  directorPan    String?
+  directorDin    String?
+  signingAuthorityName  String?
+  signingAuthorityEmail String?
+  signingAuthorityPhone String?
+  contactPersonName     String?
+  contactPersonEmail    String?
+  contactPersonPhone    String?
+  kycStatus      String          @default("PENDING") // PENDING, APPROVED, REJECTED
+  kycRemarks     String?
+  demoCallScheduledAt DateTime?
+
+  // Free Trial Management
+  hasUsedFreeTrial Boolean       @default(false)
+  freeTrialExpiresAt DateTime?
+
+  users          User[]
+  departments    Department[]
+  legalEntities  LegalEntity[]
+  branches       Branch[]
+  locations      Location[]
+  employees      Employee[]
+  policies       PolicyDefinition[]
+  workflows      WorkflowDefinition[]
+  integrations   IntegrationConnection[]
+  compliance     ComplianceObligation[]
+  subscriptions  Subscription[]
+  payments       PaymentTransaction[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@map("companies")
+}
+
+model LegalEntity {
+  id                   String                 @id @default(uuid())
+  company              Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId            String
+  name                 String
+  code                 String
+  legalName            String?
+  pan                  String?
+  tan                  String?
+  gstin                String?
+  cin                  String?
+  pfEstablishmentCode  String?
+  esiEmployerCode      String?
+  ptRegistrationNumber String?
+  lwfRegistrationNumber String?
+  registeredAddress    String?
+  state                String?
+  city                 String?
+  pincode              String?
+  status               String                 @default("ACTIVE")
+  employees            Employee[]
+  branches             Branch[]
+  payrollRuns          PayrollRun[]
+  compliance           ComplianceObligation[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@unique([companyId, code])
+  @@map("legal_entities")
+}
+
+model PolicyDefinition {
+  id             String    @id @default(uuid())
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId      String?
+  scopeType      String    @default("COMPANY")
+  scopeId        String?
+  policyType     String
+  name           String
+  description    String?
+  version        Int       @default(1)
+  status         String    @default("DRAFT")
+  effectiveFrom  DateTime  @default(now())
+  effectiveTo    DateTime?
+  rulesJson      String    @default("{}")
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([policyType, status])
+  @@map("policy_definitions")
+}
+
+model WorkflowDefinition {
+  id             String             @id @default(uuid())
+  company        Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId      String?
+  module         String
+  name           String
+  description    String?
+  triggerEvent   String
+  scopeType      String             @default("COMPANY")
+  scopeId        String?
+  status         String             @default("ACTIVE")
+  stepsJson      String             @default("[]")
+  createdBy      String?
+  instances      WorkflowInstance[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([module, triggerEvent, status])
+  @@map("workflow_definitions")
+}
+
+model WorkflowInstance {
+  id             String              @id @default(uuid())
+  definition     WorkflowDefinition? @relation(fields: [definitionId], references: [id], onDelete: SetNull)
+  definitionId   String?
+  module         String
+  entityType     String
+  entityId       String
+  title          String
+  requesterId    String?
+  requesterEmail String?
+  status         String              @default("PENDING")
+  currentStep    Int                 @default(1)
+  contextJson    String              @default("{}")
+  tasks          WorkflowTask[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([module, entityType, entityId, status])
+  @@map("workflow_instances")
+}
+
+model WorkflowTask {
+  id              String            @id @default(uuid())
+  instance        WorkflowInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  instanceId      String
+  stepNumber      Int
+  title           String
+  assignedRole    String?
+  assignedUserId  String?
+  assignedEmail   String?
+  status          String            @default("PENDING")
+  action          String?
+  comments        String?
+  dueAt           DateTime?
+  actedAt         DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([assignedRole, assignedUserId, status])
+  @@map("workflow_tasks")
+}
+
+model IntegrationConnection {
+  id              String    @id @default(uuid())
+  company         Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId       String?
+  provider        String
+  category        String
+  displayName     String
+  status          String    @default("DRAFT")
+  configJson      String    @default("{}")
+  secretsRef      String?
+  lastSyncAt      DateTime?
+  lastSyncStatus  String?
+  lastSyncMessage String?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([category, provider, status])
+  @@map("integration_connections")
+}
+
+model ComplianceObligation {
+  id             String       @id @default(uuid())
+  company        Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId      String?
+  legalEntity    LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
+  legalEntityId  String?
+  obligationType String
+  name           String
+  periodMonth    Int?
+  periodYear     Int?
+  financialYear  String?
+  dueDate        DateTime
+  ownerRole      String?
+  ownerUserId    String?
+  status         String       @default("OPEN")
+  riskLevel      String       @default("MEDIUM")
+  evidenceUrl    String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([obligationType, dueDate, status])
+  @@map("compliance_obligations")
 }
 
 model Holiday {
@@ -1128,4 +1385,70 @@ model Notification {
   readAt     DateTime?
 
   @@map("notifications")
+}
+
+model Plan {
+  id            String         @id @default(uuid())
+  name          String
+  description   String?
+  price         Float
+  billingCycle  String         @default("MONTHLY") // MONTHLY, YEARLY
+  employeeLimit Int            @default(50)
+  featureLimits String         @default("{}") // Store as JSON string
+  isActive      Boolean        @default(true)
+  subscriptions Subscription[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                     String               @id @default(uuid())
+  companyId              String
+  company                Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planId                 String
+  plan                   Plan                 @relation(fields: [planId], references: [id])
+  status                 String               @default("INACTIVE") // ACTIVE, INACTIVE, EXPIRED, CANCELLED
+  startDate              DateTime             @default(now())
+  endDate                DateTime
+  renewalDate            DateTime?
+  paymentProvider        String?              // RAZORPAY, STRIPE, MOCK
+  providerSubscriptionId String?
+  payments               PaymentTransaction[]
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@map("subscriptions")
+}
+
+model PaymentTransaction {
+  id                String        @id @default(uuid())
+  companyId         String
+  company           Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subscriptionId    String?
+  subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  amount            Float
+  currency          String        @default("INR")
+  status            String        @default("PENDING") // PENDING, SUCCESS, FAILED
+  paymentProvider   String        @default("MOCK") // RAZORPAY, STRIPE, MOCK
+  providerPaymentId String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@map("payment_transactions")
+}
+
+model ContactRequest {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  phone       String?
+  companyName String?
+  message     String
+  status      String   @default("PENDING") // PENDING, RESOLVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("contact_requests")
 }

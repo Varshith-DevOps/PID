@@ -8,6 +8,26 @@
 const prisma = require('../config/database');
 const { canAccessEmployee, getEmployeeScopeIds, isHr } = require('../services/accessControl');
 
+const getDayRange = (date) => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+};
+
+const recomputeTaskActualHours = async (taskId, tx = prisma) => {
+  if (!taskId) return;
+  const total = await tx.timesheet.aggregate({
+    where: { taskId },
+    _sum: { hoursWorked: true },
+  });
+  await tx.task.update({
+    where: { id: taskId },
+    data: { actualHours: total._sum.hoursWorked || 0 },
+  });
+};
+
 const logTimesheet = async (req, res) => {
   try {
     const { employeeId, taskId, date, hoursWorked, description } = req.body;
@@ -27,29 +47,49 @@ const logTimesheet = async (req, res) => {
     targetDate.setHours(0, 0, 0, 0);
 
     const safeTaskId = taskId || null;
-
-    const existing = await prisma.timesheet.findFirst({
-      where: { employeeId, taskId: safeTaskId, date: targetDate }
-    });
-
-    let timesheet;
-    if (existing) {
-      timesheet = await prisma.timesheet.update({
-        where: { id: existing.id },
-        data: { hoursWorked: parsedHours, description },
-        include: { task: { select: { title: true } }, employee: { select: { firstName: true, lastName: true } } },
+    if (safeTaskId) {
+      const task = await prisma.task.findUnique({
+        where: { id: safeTaskId },
+        select: { id: true, assigneeId: true },
       });
-    } else {
-      timesheet = await prisma.timesheet.create({
-        data: { employeeId, taskId: safeTaskId, date: targetDate, hoursWorked: parsedHours, description: description || null },
-        include: { task: { select: { title: true } }, employee: { select: { firstName: true, lastName: true } } },
-      });
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+      if (task.assigneeId !== employeeId) {
+        return res.status(400).json({ error: 'Timesheets can only be logged against tasks assigned to the employee.' });
+      }
     }
 
-    const overtimeController = require('./overtimeController');
-    await overtimeController.detectAndCreateOvertime(employeeId, targetDate, parsedHours);
+    const { start, end } = getDayRange(targetDate);
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.timesheet.findFirst({
+        where: { employeeId, taskId: safeTaskId, date: targetDate }
+      });
 
-    res.json(timesheet);
+      const timesheet = existing
+        ? await tx.timesheet.update({
+          where: { id: existing.id },
+          data: { hoursWorked: parsedHours, description: description || null },
+          include: { task: { select: { id: true, title: true } }, employee: { select: { firstName: true, lastName: true } } },
+        })
+        : await tx.timesheet.create({
+          data: { employeeId, taskId: safeTaskId, date: targetDate, hoursWorked: parsedHours, description: description || null },
+          include: { task: { select: { id: true, title: true } }, employee: { select: { firstName: true, lastName: true } } },
+        });
+
+      await recomputeTaskActualHours(safeTaskId, tx);
+      const totalForDay = await tx.timesheet.aggregate({
+        where: { employeeId, date: { gte: start, lte: end } },
+        _sum: { hoursWorked: true },
+      });
+
+      return { timesheet, totalHoursForDay: totalForDay._sum.hoursWorked || parsedHours };
+    });
+
+    const overtimeController = require('./overtimeController');
+    await overtimeController.detectAndCreateOvertime(employeeId, targetDate, result.totalHoursForDay);
+
+    res.json(result.timesheet);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
@@ -115,6 +155,13 @@ const getAllTimesheets = async (req, res) => {
       if (startDate) where.date.gte = new Date(startDate);
       if (endDate) where.date.lte = new Date(endDate);
     }
+    if (projectId) {
+      where.task = { projectId };
+    }
+    if (!isHr(req.user)) {
+      const scopeIds = await getEmployeeScopeIds(req.user);
+      where.employeeId = { in: scopeIds.length ? scopeIds : ['__no_employee_scope__'] };
+    }
 
     const timesheets = await prisma.timesheet.findMany({
       where,
@@ -125,7 +172,12 @@ const getAllTimesheets = async (req, res) => {
       orderBy: { date: 'desc' },
     });
 
-    const employees = await prisma.employee.findMany({ where: { isActive: true }, include: { department: true } });
+    const empWhere = { isActive: true };
+    if (!isHr(req.user)) {
+      const scopeIds = await getEmployeeScopeIds(req.user);
+      empWhere.id = { in: scopeIds.length ? scopeIds : ['__no_employee_scope__'] };
+    }
+    const employees = await prisma.employee.findMany({ where: empWhere, include: { department: true } });
     const activeEmployeeIds = new Set(employees.map(e => e.id));
 
     const aggregated = {};
@@ -148,6 +200,15 @@ const getAllTimesheets = async (req, res) => {
       if (!activeEmployeeIds.has(tid)) {
         delete aggregated[tid];
       }
+    }
+
+    const missingEmployees = employees.filter((employee) => !aggregated[employee.id]);
+    for (const employee of missingEmployees) {
+      aggregated[employee.id] = {
+        employee,
+        totalHours: 0,
+        daily: {},
+      };
     }
 
     res.json({ timesheets, aggregated });
@@ -236,8 +297,8 @@ const getDailySummary = async (req, res) => {
       where: { date: { gte: targetDate, lte: endDate } },
       include: { employee: { select: { firstName: true, lastName: true } }, task: { select: { title: true } } },
     });
-    if (!isHr(req.user)) {
-      const employeeIds = new Set(await getEmployeeScopeIds(req.user));
+    const employeeIds = !isHr(req.user) ? new Set(await getEmployeeScopeIds(req.user)) : null;
+    if (employeeIds) {
       timesheets.splice(0, timesheets.length, ...timesheets.filter((t) => employeeIds.has(t.employeeId)));
     }
 
@@ -248,11 +309,18 @@ const getDailySummary = async (req, res) => {
       employeeSummary[name] += t.hoursWorked;
     }
 
+    const empWhere = { isActive: true };
+    if (employeeIds) {
+      empWhere.id = { in: employeeIds.size ? Array.from(employeeIds) : ['__no_employee_scope__'] };
+    }
+    const activeEmployees = await prisma.employee.findMany({ where: empWhere, select: { id: true } });
+
     const totalHours = timesheets.reduce(function(sum, t) { return sum + t.hoursWorked; }, 0);
     const presentKeys = Object.keys(employeeSummary).filter(function(name) { return employeeSummary[name] >= 8; });
     const partialKeys = Object.keys(employeeSummary).filter(function(name) { return employeeSummary[name] > 0 && employeeSummary[name] < 8; });
+    const absent = Math.max(activeEmployees.length - presentKeys.length - partialKeys.length, 0);
 
-    res.json({ date: targetDate.toISOString(), totalHours: totalHours, present: presentKeys.length, partial: partialKeys.length, absent: 0, breakdown: employeeSummary });
+    res.json({ date: targetDate.toISOString(), totalHours: totalHours, present: presentKeys.length, partial: partialKeys.length, absent, breakdown: employeeSummary });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });

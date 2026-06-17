@@ -6,7 +6,8 @@
  */
 
 const prisma = require('../config/database');
-const { canAccessEmployee, isManagerOrAdmin } = require('../services/accessControl');
+const { canAccessEmployee, canApproveEmployeeWorkflow, getEmployeeScopeIds, isHr, isPayroll } = require('../services/accessControl');
+const { assertPayrollRangeOpen } = require('../services/payrollPeriodGuard');
 
 const DEFAULT_LEAVE_QUOTAS = [
   { leaveType: 'ANNUAL', quota: 20 },
@@ -39,7 +40,7 @@ const buildLeaveBalance = async (employeeId, year) => {
     by: ['leaveType'],
     where: {
       employeeId,
-      status: 'APPROVED',
+      status: { in: ['APPROVED', 'PENDING'] },
       startDate: { gte: new Date(year, 0, 1) },
       endDate: { lte: new Date(year, 11, 31, 23, 59, 59, 999) },
     },
@@ -77,6 +78,7 @@ const createLeaveRequest = async (req, res) => {
     if (end < start) {
       return res.status(400).json({ error: 'End date cannot be before start date' });
     }
+    await assertPayrollRangeOpen(start, end, 'Leave request');
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
 
     if (leaveType !== 'UNPAID') {
@@ -95,7 +97,8 @@ const createLeaveRequest = async (req, res) => {
 
     res.status(201).json(leave);
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    console.error('[CREATE LEAVE REQUEST ERROR]:', error);
+    res.status(500).json({ error: 'Server error', message: error.message });
   }
 };
 
@@ -108,8 +111,9 @@ const getLeaveRequests = async (req, res) => {
     if (employeeId && !(await canAccessEmployee(req.user, employeeId))) {
       return res.status(403).json({ error: 'Access denied for requested employee leave records' });
     }
-    if (!employeeId && req.user?.role === 'EMPLOYEE') {
-      where.employeeId = req.user.employeeId;
+    if (!employeeId && !(isHr(req.user) || isPayroll(req.user))) {
+      const scopeIds = await getEmployeeScopeIds(req.user);
+      where.employeeId = { in: scopeIds.length ? scopeIds : ['__no_employee_scope__'] };
     }
     if (status) where.status = status;
 
@@ -133,8 +137,9 @@ const approveLeave = async (req, res) => {
     const { id } = req.params;
     const leave = await prisma.leave.findUnique({ where: { id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
-    if (!isManagerOrAdmin(req.user)) return res.status(403).json({ error: 'Only managers or admins can approve leave' });
+    if (!(await canApproveEmployeeWorkflow(req.user, leave.employeeId))) return res.status(403).json({ error: 'Access denied. You can only approve leave for your authorized team.' });
     if (leave.status !== 'PENDING') return res.status(400).json({ error: 'Leave request is already processed' });
+    await assertPayrollRangeOpen(leave.startDate, leave.endDate, 'Leave approval');
 
     if (leave.leaveType !== 'UNPAID') {
       const year = new Date(leave.startDate).getFullYear();
@@ -163,7 +168,8 @@ const rejectLeave = async (req, res) => {
     const { rejectReason } = req.body;
     const leave = await prisma.leave.findUnique({ where: { id } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
-    if (!isManagerOrAdmin(req.user)) return res.status(403).json({ error: 'Only managers or admins can reject leave' });
+    if (!(await canApproveEmployeeWorkflow(req.user, leave.employeeId))) return res.status(403).json({ error: 'Access denied. You can only reject leave for your authorized team.' });
+    await assertPayrollRangeOpen(leave.startDate, leave.endDate, 'Leave rejection');
 
     const updated = await prisma.leave.update({
       where: { id },
@@ -185,6 +191,7 @@ const cancelLeave = async (req, res) => {
     if (!(await canAccessEmployee(req.user, leave.employeeId))) {
       return res.status(403).json({ error: 'Access denied. You can only cancel authorized leave requests.' });
     }
+    await assertPayrollRangeOpen(leave.startDate, leave.endDate, 'Leave cancellation');
 
     if (leave.status !== 'PENDING') {
       return res.status(400).json({ error: 'Can only cancel pending leaves' });
@@ -240,8 +247,9 @@ const getLeaveBalance = async (req, res) => {
 const getAllLeaveBalances = async (req, res) => {
   try {
     const targetYear = parseInt(req.query.year || new Date().getFullYear());
+    const scopeIds = (isHr(req.user) || isPayroll(req.user)) ? null : await getEmployeeScopeIds(req.user);
     const employees = await prisma.employee.findMany({
-      where: { isActive: true },
+      where: { isActive: true, ...(scopeIds ? { id: { in: scopeIds.length ? scopeIds : ['__no_employee_scope__'] } } : {}) },
       select: {
         id: true,
         employeeId: true,
@@ -282,6 +290,10 @@ const getLeaveCalendar = async (req, res) => {
       endDate: { gte: start },
       ...(employeeId ? { employeeId } : {}),
     };
+    if (!employeeId && !(isHr(req.user) || isPayroll(req.user))) {
+      const scopeIds = await getEmployeeScopeIds(req.user);
+      where.employeeId = { in: scopeIds.length ? scopeIds : ['__no_employee_scope__'] };
+    }
 
     const leaves = await prisma.leave.findMany({
       where,

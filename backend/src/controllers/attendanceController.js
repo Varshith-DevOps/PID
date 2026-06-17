@@ -1,6 +1,8 @@
 const prisma = require('../config/database');
 const { detectAndCreateOvertime } = require('./overtimeController');
 const { toZonedTime, fromZonedTime, format } = require('date-fns-tz');
+const { canAccessEmployee, getEmployeeScopeIds, canApproveEmployeeWorkflow, isHr, isPayroll } = require('../services/accessControl');
+const { assertPayrollPeriodOpen } = require('../services/payrollPeriodGuard');
 
 /** Resolves shift assignment for a specific employee on a target date with timezone support */
 const resolveShiftForDate = async (employeeId, date, timezone = 'Asia/Kolkata') => {
@@ -186,12 +188,19 @@ const getTodayAttendance = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const employeeScopeIds = (isHr(req.user) || isPayroll(req.user))
+      ? null
+      : await getEmployeeScopeIds(req.user);
+    const scopeWhere = employeeScopeIds ? { employeeId: { in: employeeScopeIds.length ? employeeScopeIds : ['__no_employee_scope__'] } } : {};
+
     const attendances = await prisma.attendance.findMany({
-      where: { date: { gte: today } },
+      where: { date: { gte: today }, ...scopeWhere },
       include: { employee: { select: { id: true, firstName: true, lastName: true, jobTitle: true, department: true } } },
     });
 
-    const employees = await prisma.employee.findMany({ where: { isActive: true } });
+    const employees = await prisma.employee.findMany({
+      where: { isActive: true, ...(employeeScopeIds ? { id: { in: employeeScopeIds.length ? employeeScopeIds : ['__no_employee_scope__'] } } : {}) },
+    });
     const presentIds = attendances.map((a) => a.employeeId);
 
     // Fetch shift assignments in bulk to remove N+1 queries
@@ -259,6 +268,9 @@ const getEmployeeAttendance = async (req, res) => {
   try {
     const { employeeId } = req.params;
     const { startDate, endDate, page = 1, limit = 31 } = req.query;
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied for requested employee attendance' });
+    }
 
     const where = { employeeId };
     if (startDate || endDate) {
@@ -277,7 +289,7 @@ const getEmployeeAttendance = async (req, res) => {
     const total = await prisma.attendance.count({ where });
     res.json({ attendances, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(error.status || 500).json({ error: error.message || 'Server error' });
   }
 };
 
@@ -296,7 +308,13 @@ const getMonthlyReport = async (req, res) => {
     const totalDays = endDate.getDate();
 
     // 1. Fetch employees in scope
-    const empWhere = departmentId ? { departmentId } : {};
+    const employeeScopeIds = (isHr(req.user) || isPayroll(req.user))
+      ? null
+      : await getEmployeeScopeIds(req.user);
+    const empWhere = {
+      ...(departmentId ? { departmentId } : {}),
+      ...(employeeScopeIds ? { id: { in: employeeScopeIds.length ? employeeScopeIds : ['__no_employee_scope__'] } } : {}),
+    };
     const totalEmployees = await prisma.employee.count({ where: empWhere });
     const employees = await prisma.employee.findMany({
       where: empWhere,
@@ -463,9 +481,13 @@ const markAttendance = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await canApproveEmployeeWorkflow(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You can only mark attendance for your own authorized team.' });
+    }
 
     const targetDate = date ? new Date(date) : new Date();
     targetDate.setHours(0, 0, 0, 0);
+    await assertPayrollPeriodOpen(targetDate, 'Manual attendance update');
 
     const attendance = await prisma.attendance.upsert({
       where: { employeeId_date: { employeeId, date: targetDate } },
@@ -481,7 +503,7 @@ const markAttendance = async (req, res) => {
 
     res.json(attendance);
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(error.status || 500).json({ error: error.message || 'Server error' });
   }
 };
 

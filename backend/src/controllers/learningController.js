@@ -31,6 +31,9 @@ const assignCourse = async (req, res) => {
   try {
     const { courseId, employeeId, dueDate } = req.body;
     if (!courseId || !employeeId) return res.status(400).json({ error: 'Course and employee are required' });
+    if (!(await canAccessEmployee(req.user, employeeId))) {
+      return res.status(403).json({ error: 'Access denied. You cannot assign courses to this employee.' });
+    }
     const enrollment = await prisma.learningEnrollment.upsert({
       where: { courseId_employeeId: { courseId, employeeId } },
       update: { dueDate: dueDate ? new Date(dueDate) : undefined, status: 'ASSIGNED' },

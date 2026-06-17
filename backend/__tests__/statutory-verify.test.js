@@ -129,10 +129,10 @@ describe('Indian Statutory Calculations Verification', () => {
       // Leave encashment pay: 10 * ((20000 + 2000) / 30) = 7333.33
       expect(result.earnings.leaveEncashment).toBeCloseTo(10 * (22000 / 30), 0);
 
-      // Notice period shortfall: 30 - 14 = 16 days
-      // Notice recovery amount: 16 * (22000 / 30) = 11733.33
-      expect(result.balances.noticeShortfallDays).toBe(16);
-      expect(result.deductions.noticeRecovery).toBeCloseTo(16 * (22000 / 30), 2);
+      // Notice period shortfall: 30 - 15 = 15 days
+      // Notice recovery amount: 15 * (22000 / 30) = 11000.00
+      expect(result.balances.noticeShortfallDays).toBe(15);
+      expect(result.deductions.noticeRecovery).toBeCloseTo(15 * (22000 / 30), 2);
 
     } finally {
       // 5. Cleanup database
