@@ -296,7 +296,7 @@ const addRowsSheet = (workbook, title, rows) => {
 
 const buildAuditWorkbook = async (snapshot, packType) => {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'NexusHR Compliance and Audit Report Center';
+  workbook.creator = 'PID hcms Compliance and Audit Report Center';
   workbook.created = new Date();
 
   addRowsSheet(workbook, 'Executive Summary', [

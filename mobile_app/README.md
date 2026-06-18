@@ -1,6 +1,6 @@
-# NexusHR Mobile App
+# PID hcms Mobile App
 
-Flutter Employee Self Service app for NexusHR.
+Flutter Employee Self Service app for PID hcms.
 
 ## Features Included
 
@@ -75,7 +75,7 @@ After backend seed:
 Company code can be any local tenant label for now, for example:
 
 ```text
-nexushr
+pid-hcms
 ```
 
 ## Notes

@@ -203,7 +203,7 @@ export default function AppraisalsPage() {
                         </span>
                       )}
                     </div>
-                    <span className="badge" style={{ background: app.status === 'COMPLETED' ? '#10b981' : app.status === 'SUBMITTED_SELF' ? '#06b6d4' : '#ec4899', color: 'white', fontSize: '0.65rem' }}>
+                    <span className="badge" style={{ background: app.status === 'COMPLETED' ? '#10b981' : app.status === 'SUBMITTED_SELF' ? '#00A7B5' : '#ec4899', color: 'white', fontSize: '0.65rem' }}>
                       {app.status.replace('_', ' ')}
                     </span>
                   </div>

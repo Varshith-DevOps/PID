@@ -179,7 +179,7 @@ export default function OrgChartPage() {
               width: '48px',
               height: '48px',
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6366f1, #a78bfa)',
+              background: 'linear-gradient(135deg, #0B7890, #00A7B5)',
               boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
               display: 'flex',
               alignItems: 'center',
@@ -291,7 +291,7 @@ export default function OrgChartPage() {
                 zIndex: 15,
                 transition: 'all 0.2s'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#8b5cf6'}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#182B6D'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.9)'}
             >
               {isCollapsed ? '+' : '−'}
@@ -306,7 +306,7 @@ export default function OrgChartPage() {
             <div className="org-connector-line" style={{
               width: '2px',
               height: '40px',
-              background: exactMatch || hasMatch ? 'linear-gradient(to bottom, #6366f1, #a78bfa)' : 'rgba(255,255,255,0.08)',
+              background: exactMatch || hasMatch ? 'linear-gradient(to bottom, #0B7890, #00A7B5)' : 'rgba(255,255,255,0.08)',
               position: 'absolute',
               top: '80px',
               zIndex: 1
@@ -326,7 +326,7 @@ export default function OrgChartPage() {
                   left: 'calc(130px + 1.25rem)',
                   right: 'calc(130px + 1.25rem)',
                   height: '2px',
-                  background: exactMatch || hasMatch ? 'linear-gradient(to right, #6366f1, #a78bfa)' : 'rgba(255,255,255,0.08)',
+                  background: exactMatch || hasMatch ? 'linear-gradient(to right, #0B7890, #00A7B5)' : 'rgba(255,255,255,0.08)',
                   zIndex: 1
                 }} />
               )}
@@ -337,7 +337,7 @@ export default function OrgChartPage() {
                   <div style={{
                     width: '2px',
                     height: '20px',
-                    background: searchQuery && isMatchOrHasMatchingChild(child, searchQuery) ? 'linear-gradient(to bottom, #6366f1, #a78bfa)' : 'rgba(255,255,255,0.08)',
+                    background: searchQuery && isMatchOrHasMatchingChild(child, searchQuery) ? 'linear-gradient(to bottom, #0B7890, #00A7B5)' : 'rgba(255,255,255,0.08)',
                     position: 'absolute',
                     top: '-20px',
                     zIndex: 1
@@ -490,7 +490,7 @@ export default function OrgChartPage() {
 
       <style jsx global>{`
         .search-highlight {
-          border: 2px solid #6366f1 !important;
+          border: 2px solid #0B7890 !important;
           background: rgba(99, 102, 241, 0.12) !important;
           box-shadow: 0 0 25px rgba(99, 102, 241, 0.45) !important;
           transform: scale(1.03);

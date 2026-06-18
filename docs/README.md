@@ -1,6 +1,6 @@
-# NexusHR documentation Hub — Master Index & Glossary
+# PID hcms documentation Hub — Master Index & Glossary
 
-Welcome to the **NexusHR** documentation package. This repository contains structured documentation detailing the application discovery results, functional requirements, technical specifications, client navigation assets, visual design guidelines, database dictionary, and the post-audit action roadmap.
+Welcome to the **PID hcms** documentation package. This repository contains structured documentation detailing the application discovery results, functional requirements, technical specifications, client navigation assets, visual design guidelines, database dictionary, and the post-audit action roadmap.
 
 ---
 

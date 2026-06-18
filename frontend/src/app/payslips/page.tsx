@@ -134,7 +134,7 @@ export default function PayslipsPage() {
       <main className="main-content">
         <div className="page-header">
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #06b6d4, #3b82f6)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #00A7B5, #00A7B5)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
             <div><h1 className="page-title">Payslips</h1><p className="page-subtitle">View & download salary slips</p></div>

@@ -62,12 +62,12 @@ const getPF_ECR = async (req, res) => {
         status: 'GENERATED',
         month: parseInt(month),
         year: parseInt(year),
-        generatedBy: req.user?.email || 'admin@nexushr.com'
+        generatedBy: req.user?.email || 'admin@pid-hcms.com'
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'ECR_EXPORT',
       entity: 'ComplianceReport',
       ipAddress: req.ip
@@ -115,12 +115,12 @@ const getESICReportController = async (req, res) => {
         status: 'GENERATED',
         month: parseInt(month),
         year: parseInt(year),
-        generatedBy: req.user?.email || 'admin@nexushr.com'
+        generatedBy: req.user?.email || 'admin@pid-hcms.com'
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'ESIC_EXPORT',
       entity: 'ComplianceReport',
       ipAddress: req.ip
@@ -186,7 +186,7 @@ const getForm16Controller = async (req, res) => {
     const pdfBuffer = await generateForm16(employee, taxDetails, financialYear);
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'FORM_16_DOWNLOAD',
       entity: 'Employee',
       entityId: employee.id,
@@ -272,12 +272,12 @@ const bulkGenerateForm16Controller = async (req, res) => {
         type: 'FORM16',
         status: 'GENERATED',
         financialYear,
-        generatedBy: req.user?.email || 'admin@nexushr.com'
+        generatedBy: req.user?.email || 'admin@pid-hcms.com'
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'FORM_16_BULK_EXPORT',
       entity: 'ComplianceReport',
       ipAddress: req.ip

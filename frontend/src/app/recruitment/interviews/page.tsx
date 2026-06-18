@@ -105,7 +105,7 @@ export default function GlobalInterviewsPage() {
         {/* Header */}
         <div className="page-header">
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #00A7B5, #0B7890)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
@@ -140,7 +140,7 @@ export default function GlobalInterviewsPage() {
                 </div>
               ) : (
                 upcomingInterviews.map(iv => (
-                  <div key={iv.id} className="glass-card" style={{ padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: '4px solid #06b6d4' }}>
+                  <div key={iv.id} className="glass-card" style={{ padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: '4px solid #00A7B5' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                         <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'white' }}>{iv.applicant.fullName}</span>
@@ -154,7 +154,7 @@ export default function GlobalInterviewsPage() {
                       </div>
                     </div>
 
-                    <button onClick={() => setShowFeedbackModal(iv)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)', border: 'none', fontSize: '0.72rem', padding: '0.4rem 0.8rem' }}>
+                    <button onClick={() => setShowFeedbackModal(iv)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #00A7B5, #0B7890)', border: 'none', fontSize: '0.72rem', padding: '0.4rem 0.8rem' }}>
                       Log Feedback
                     </button>
                   </div>
@@ -227,7 +227,7 @@ export default function GlobalInterviewsPage() {
                   <button type="button" onClick={() => setShowFeedbackModal(null)} className="btn btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)', border: 'none' }}>
+                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #00A7B5, #0B7890)', border: 'none' }}>
                     Publish Review
                   </button>
                 </div>

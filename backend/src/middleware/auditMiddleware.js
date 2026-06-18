@@ -64,7 +64,7 @@ const auditPayrollMiddleware = (req, res, next) => {
     if (action) {
       try {
         await logPayrollEvent({
-          userEmail: req.user?.email || 'admin@nexushr.com',
+          userEmail: req.user?.email || 'admin@pid-hcms.com',
           action,
           entity,
           entityId: entityId || req.body.employeeId || req.body.runId || null,

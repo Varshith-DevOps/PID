@@ -84,7 +84,7 @@ export default function EmployeesPage() {
       <main className="main-content">
         <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #0B7890, #182B6D)' }}>
               {/* 3D-style people icon */}
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -96,7 +96,7 @@ export default function EmployeesPage() {
             </div>
           </div>
           {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (
-            <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', boxShadow: '0 4px 15px rgba(99,102,241,0.35)', cursor: 'pointer' }}>
+            <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #0B7890, #182B6D)', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', boxShadow: '0 4px 15px rgba(11,120,144,0.35)', cursor: 'pointer' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add Employee
             </button>
@@ -141,7 +141,7 @@ export default function EmployeesPage() {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           {/* 3D avatar */}
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #a78bfa)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'white', boxShadow: '0 3px 8px rgba(99,102,241,0.35)', flexShrink: 0, overflow: 'hidden' }}>
+                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #0B7890, #00A7B5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'white', boxShadow: '0 3px 8px rgba(11,120,144,0.35)', flexShrink: 0, overflow: 'hidden' }}>
                             {emp.photoUrl ? <img src={`http://localhost:5000/${emp.photoUrl}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
                           </div>
                           <div>
@@ -237,7 +237,7 @@ export default function EmployeesPage() {
                   <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}>
+                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #0B7890, #182B6D)', border: 'none' }}>
                     Create Profile
                   </button>
                 </div>

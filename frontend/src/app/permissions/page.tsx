@@ -124,7 +124,7 @@ export default function PermissionsPage() {
             <h3 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1rem' }}>Access Controls</h3>
             <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
               {roles.map((role) => (
-                <div key={role.id} onClick={() => setSelectedRole(role)} style={{ padding: '0.75rem', cursor: 'pointer', background: selectedRole?.id === role.id ? 'rgba(59,130,246,0.15)' : 'transparent', borderRadius: 'var(--radius-sm)', marginBottom: '0.25rem', transition: 'var(--transition)' }}>
+                <div key={role.id} onClick={() => setSelectedRole(role)} style={{ padding: '0.75rem', cursor: 'pointer', background: selectedRole?.id === role.id ? 'rgba(0,167,181,0.15)' : 'transparent', borderRadius: 'var(--radius-sm)', marginBottom: '0.25rem', transition: 'var(--transition)' }}>
                   <div style={{ fontWeight: 600, color: selectedRole?.id === role.id ? 'var(--accent-blue)' : 'var(--text-primary)', fontSize: '0.9rem' }}>{role.name}</div>
                   <span className={`badge ${role.role === 'SUPER_ADMIN' ? 'badge-danger' : role.role === 'ADMIN' ? 'badge-warning' : role.role === 'MANAGER' ? 'badge-info' : 'badge-neutral'}`} style={{ marginTop: '0.25rem' }}>{role.role}</span>
                 </div>

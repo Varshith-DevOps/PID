@@ -20,7 +20,7 @@ interface ProjectDashboard {
   taskStatus: { TODO: number; IN_PROGRESS: number; COMPLETED: number };
 }
 
-const COLORS = ['#6b7280', '#3b82f6', '#10b981'];
+const COLORS = ['#6b7280', '#00A7B5', '#10b981'];
 
 export default function ProjectDashboardPage() {
   const params = useParams();

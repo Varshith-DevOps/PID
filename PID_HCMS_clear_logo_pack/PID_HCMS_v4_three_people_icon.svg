@@ -1,0 +1,21 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1024" height="1024" rx="226" fill="#FFFFFF"/>
+
+    <defs>
+      <linearGradient id="pidIconGradient" x1="122" y1="122" x2="902" y2="902" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#182B6D"/>
+        <stop offset="0.62" stop-color="#0B7890"/>
+        <stop offset="1" stop-color="#00A7B5"/>
+      </linearGradient>
+      
+    </defs>
+    <rect x="122" y="122" width="780" height="780" rx="58" fill="url(#pidIconGradient)" />
+    <path d="M 512.0 356.0 L 341.0 506.0 L 683.0 506.0 L 512.0 356.0" fill="none" stroke="#D7F8FB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>
+    <circle cx="341.0" cy="506.0" r="24" fill="#BFEFF4"/>
+    <path d="M 224.0 758.0 C 239.0 650.0, 281.0 581.0, 341.0 581.0 C 404.0 581.0, 446.0 650.0, 461.0 758.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="683.0" cy="506.0" r="24" fill="#BFEFF4"/>
+    <path d="M 563.0 758.0 C 581.0 650.0, 623.0 581.0, 683.0 581.0 C 746.0 581.0, 788.0 650.0, 800.0 758.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="512.0" cy="356.0" r="29" fill="#FFFFFF"/>
+    <path d="M 356.0 758.0 C 374.0 626.0, 434.0 488.0, 512.0 488.0 C 593.0 488.0, 650.0 626.0, 668.0 758.0 Z" fill="#FFFFFF"/>
+    
+</svg>

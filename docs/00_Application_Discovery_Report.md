@@ -1,8 +1,8 @@
-# 00. Application Discovery Report — NexusHR HRMS
+# 00. Application Discovery Report — PID hcms
 
 ## 1. Executive Summary
 
-NexusHR is a comprehensive, production-grade Human Resource Management System (HRMS) designed specifically for the Indian business environment. The application handles end-to-end employee lifecycle management, including core HR operations, dynamic role-based permissions, recruitment pipelines (Applicant Tracking System), leave workflows, shifts/roster management, attendance regularization (including biometric device and mobile geolocation validation), expense claims, project timesheets, performance appraisals, statutory payroll compliance, and full-and-final settlements (F&F).
+PID hcms is a comprehensive, production-grade Human Resource Management System (HRMS) designed specifically for the Indian business environment. The application handles end-to-end employee lifecycle management, including core HR operations, dynamic role-based permissions, recruitment pipelines (Applicant Tracking System), leave workflows, shifts/roster management, attendance regularization (including biometric device and mobile geolocation validation), expense claims, project timesheets, performance appraisals, statutory payroll compliance, and full-and-final settlements (F&F).
 
 ---
 

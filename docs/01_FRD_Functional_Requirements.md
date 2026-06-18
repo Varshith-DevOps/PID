@@ -1,14 +1,14 @@
-# 01. Functional Requirements Document (FRD) — NexusHR HRMS
+# 01. Functional Requirements Document (FRD) — PID hcms
 
 ## 1. Document Overview & Purpose
 
-This Functional Requirements Document (FRD) defines the functional specifications and business rules of the NexusHR HRMS application. This document translates the code structures and API behaviors of the active application into clear business terms for stakeholders, developers, designers, and testers.
+This Functional Requirements Document (FRD) defines the functional specifications and business rules of the PID hcms application. This document translates the code structures and API behaviors of the active application into clear business terms for stakeholders, developers, designers, and testers.
 
 ---
 
 ## 2. Project Overview & Business Goals
 
-NexusHR is an enterprise-oriented, India-compliant Human Resource Management System (HRMS). Its primary goals are to:
+PID hcms is an enterprise-oriented, India-compliant Human Resource Management System (HRMS). Its primary goals are to:
 1. **Consolidate HR Records:** Provide a single source of truth for employee personal, professional, and statutory data.
 2. **Automate Attendance & Rosters:** Support multi-mode clock-ins (web, biometric, mobile geo-location) with shift assignments.
 3. **Streamline Payroll & India Statutory Compliance:** Handle automated calculation and tax projections of employee salaries under Indian laws, generating compliance returns (EPFO ECR, ESIC reports, Form 16, Professional Tax, Labor Welfare Fund).

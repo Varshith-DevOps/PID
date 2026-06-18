@@ -7,7 +7,7 @@ const { detectAndCreateOvertime } = require('./overtimeController');
  * Validates mobile punch signature if clientType is mobile
  */
 const verifyMobilePunchSignature = (punch) => {
-  const secret = process.env.MOBILE_APP_SECRET || 'nexus-hrms-secret-key-123';
+  const secret = process.env.MOBILE_APP_SECRET || 'pid-hcms-secret-key-123';
   const { employeeId, timestamp, deviceId, signature } = punch;
   
   if (!signature) return false;

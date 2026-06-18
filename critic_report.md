@@ -120,7 +120,7 @@ This master report presents a thorough, expert-level audit of the codebase, focu
 
 ### Bug 21: Secret Mismatch for Biometric Punch Verification
 * **Location:** [`attendanceSyncController.js`](file:///e:/HRMS_application/backend/src/controllers/attendanceSyncController.js#L22)
-* **Description:** For mobile signatures, `attendanceSyncController.js` defaults the fallback secret to `'supersecret'`. However, `validateAttendancePunch` (middleware) defaults the secret to `'nexus-hrms-secret-key-123'`.
+* **Description:** For mobile signatures, `attendanceSyncController.js` defaults the fallback secret to `'supersecret'`. However, `validateAttendancePunch` (middleware) defaults the secret to `'pid-hcms-secret-key-123'`.
 * **Impact:** In the absence of an explicit `MOBILE_APP_SECRET` env variable, biometric sync punches fail signature verification.
 
 ### Bug 22: Biometric Sync Transaction Silent Commits

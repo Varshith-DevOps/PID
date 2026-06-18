@@ -371,7 +371,7 @@ export default function ShiftsDashboard() {
         {/* Header */}
         <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #a855f7, #c084fc)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v4"/><path d="M8 16h8"/>
               </svg>
@@ -401,7 +401,7 @@ export default function ShiftsDashboard() {
             onClick={() => setActiveTab('employee_roster')} 
             className="btn" 
             style={{ 
-              background: activeTab === 'employee_roster' ? 'linear-gradient(135deg, #a855f7, #c084fc)' : 'rgba(255,255,255,0.04)',
+              background: activeTab === 'employee_roster' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.25rem',
@@ -418,7 +418,7 @@ export default function ShiftsDashboard() {
             onClick={() => setActiveTab('calendar_view')} 
             className="btn" 
             style={{ 
-              background: activeTab === 'calendar_view' ? 'linear-gradient(135deg, #a855f7, #c084fc)' : 'rgba(255,255,255,0.04)',
+              background: activeTab === 'calendar_view' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.25rem',
@@ -435,7 +435,7 @@ export default function ShiftsDashboard() {
             onClick={() => setActiveTab('available_shifts')} 
             className="btn" 
             style={{ 
-              background: activeTab === 'available_shifts' ? 'linear-gradient(135deg, #a855f7, #c084fc)' : 'rgba(255,255,255,0.04)',
+              background: activeTab === 'available_shifts' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.25rem',
@@ -452,7 +452,7 @@ export default function ShiftsDashboard() {
             onClick={() => setActiveTab('roster_history')} 
             className="btn" 
             style={{ 
-              background: activeTab === 'roster_history' ? 'linear-gradient(135deg, #a855f7, #c084fc)' : 'rgba(255,255,255,0.04)',
+              background: activeTab === 'roster_history' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.25rem',
@@ -569,7 +569,7 @@ export default function ShiftsDashboard() {
                               <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
                                 {emp.location || 'HQ'}
                               </span>
-                              <span style={{ fontSize: '0.6rem', color: '#c084fc', background: 'rgba(168,85,247,0.05)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
+                              <span style={{ fontSize: '0.6rem', color: '#FFB23F', background: 'rgba(168,85,247,0.05)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
                                 {emp.department?.name || 'Staff'}
                               </span>
                             </div>
@@ -596,7 +596,7 @@ export default function ShiftsDashboard() {
                                     background: currentShiftId === 'GENERAL' 
                                       ? 'rgba(255,255,255,0.02)' 
                                       : 'rgba(168,85,247,0.15)',
-                                    color: currentShiftId === 'GENERAL' ? 'var(--text-secondary)' : '#c084fc'
+                                    color: currentShiftId === 'GENERAL' ? 'var(--text-secondary)' : '#FFB23F'
                                   }}
                                 >
                                   <option value="GENERAL">General</option>
@@ -634,7 +634,7 @@ export default function ShiftsDashboard() {
 
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#c084fc' }} /> Allocation counts visible per active shift
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#FFB23F' }} /> Allocation counts visible per active shift
                 </span>
                 <span>💡 Click on any day to filter and view assigned employees.</span>
               </div>
@@ -672,10 +672,10 @@ export default function ShiftsDashboard() {
                         transition: 'all 0.2s',
                         minHeight: '85px'
                       }}
-                      onMouseEnter={e => e.currentTarget.style.border = '1px solid #c084fc'}
+                      onMouseEnter={e => e.currentTarget.style.border = '1px solid #FFB23F'}
                       onMouseLeave={e => e.currentTarget.style.border = isToday ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.04)'}
                     >
-                      <div style={{ fontWeight: 800, fontSize: '0.85rem', color: isToday ? '#c084fc' : 'white', textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.85rem', color: isToday ? '#FFB23F' : 'white', textAlign: 'right' }}>
                         {date.getDate()}
                       </div>
 
@@ -728,7 +728,7 @@ export default function ShiftsDashboard() {
                     <div key={type.id} className="glass-card" style={{ padding: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <h3 style={{ fontSize: '0.92rem', fontWeight: 700, color: 'white' }}>{type.name}</h3>
-                        <span className="badge" style={{ background: 'rgba(168,85,247,0.1)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)', fontSize: '0.65rem' }}>
+                        <span className="badge" style={{ background: 'rgba(168,85,247,0.1)', color: '#FFB23F', border: '1px solid rgba(168,85,247,0.2)', fontSize: '0.65rem' }}>
                           {type.startTime} - {type.endTime}
                         </span>
                       </div>
@@ -765,7 +765,7 @@ export default function ShiftsDashboard() {
                           </span>
                         )}
                         {type.ipRestricted && (
-                          <span style={{ fontSize: '0.65rem', background: 'rgba(59,130,246,0.1)', color: '#60a5fa', padding: '0.15rem 0.35rem', borderRadius: '4px' }}>
+                          <span style={{ fontSize: '0.65rem', background: 'rgba(0,167,181,0.1)', color: '#73E0E7', padding: '0.15rem 0.35rem', borderRadius: '4px' }}>
                             🌐 IP Restricted
                           </span>
                         )}
@@ -800,7 +800,7 @@ export default function ShiftsDashboard() {
                   <input type="text" value={simulator.clientIp} onChange={e => setSimulator({ ...simulator, clientIp: e.target.value })} className="input-field" />
                 </div>
 
-                <button type="button" onClick={runSimulation} disabled={simulating} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #c084fc)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                <button type="button" onClick={runSimulation} disabled={simulating} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
                   {simulating ? 'Auditing Boundary...' : 'Verify Boundary Constraints'}
                 </button>
               </div>
@@ -866,7 +866,7 @@ export default function ShiftsDashboard() {
                             </span>
                           </td>
                           <td>
-                            <span className="badge badge-primary" style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.25)', fontSize: '0.68rem' }}>
+                            <span className="badge badge-primary" style={{ background: 'rgba(168,85,247,0.15)', color: '#FFB23F', border: '1px solid rgba(168,85,247,0.25)', fontSize: '0.68rem' }}>
                               {ass.shiftType?.name}
                             </span>
                           </td>
@@ -1026,7 +1026,7 @@ export default function ShiftsDashboard() {
                       </div>
 
                       <div style={{ textAlign: 'right' }}>
-                        <span className="badge" style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)' }}>
+                        <span className="badge" style={{ background: 'rgba(168,85,247,0.15)', color: '#FFB23F', border: '1px solid rgba(168,85,247,0.2)' }}>
                           {ass.shiftType.name}
                         </span>
                         <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
@@ -1175,7 +1175,7 @@ export default function ShiftsDashboard() {
                   <button type="button" onClick={() => setShowTypeModal(false)} className="btn btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #c084fc)', border: 'none' }}>
+                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)', border: 'none' }}>
                     Create Shift
                   </button>
                 </div>

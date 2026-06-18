@@ -175,7 +175,7 @@ export default function AttendancePage() {
       <main className="main-content">
         <div className="page-header">
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #10b981, #00A7B5)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
             <div><h1 className="page-title">Attendance</h1><p className="page-subtitle">{isEmployee ? 'View your attendance records' : 'Track daily attendance'}</p></div>
@@ -255,7 +255,7 @@ export default function AttendancePage() {
                 <button 
                   onClick={() => setShowRegModal(true)} 
                   className="btn btn-primary" 
-                  style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', border: 'none', fontWeight: 600 }}
+                  style={{ background: 'linear-gradient(135deg, #10b981, #00A7B5)', border: 'none', fontWeight: 600 }}
                 >
                   ➕ Request Punch Correction
                 </button>
@@ -472,7 +472,7 @@ export default function AttendancePage() {
                       <button 
                         type="submit" 
                         className="btn btn-primary" 
-                        style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', border: 'none' }}
+                        style={{ background: 'linear-gradient(135deg, #10b981, #00A7B5)', border: 'none' }}
                       >
                         Submit Request
                       </button>

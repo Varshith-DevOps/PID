@@ -254,7 +254,7 @@ export default function ExpensesDashboard() {
                         </td>
                         <td>
                           <span className="badge" style={{
-                            background: claim.status === 'PAID' ? '#10b981' : claim.status.startsWith('APPROVED') ? '#06b6d4' : claim.status === 'REJECTED' ? '#ef4444' : '#eab308',
+                            background: claim.status === 'PAID' ? '#10b981' : claim.status.startsWith('APPROVED') ? '#00A7B5' : claim.status === 'REJECTED' ? '#ef4444' : '#eab308',
                             color: 'white', fontSize: '0.65rem'
                           }}>
                             {claim.status.replace(/_/g, ' ')}
@@ -279,14 +279,14 @@ export default function ExpensesDashboard() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {advances.map(adv => (
-                  <div key={adv.id} className="glass-card" style={{ padding: '1.25rem', borderLeft: adv.status === 'SETTLED' ? '4px solid #10b981' : adv.status === 'APPROVED' ? '4px solid #06b6d4' : '4px solid #eab308', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div key={adv.id} className="glass-card" style={{ padding: '1.25rem', borderLeft: adv.status === 'SETTLED' ? '4px solid #10b981' : adv.status === 'APPROVED' ? '4px solid #00A7B5' : '4px solid #eab308', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'white' }}>{adv.purpose}</h3>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Timeline: Requested {new Date(adv.claimDate).toLocaleDateString()}</span>
                       </div>
                       <span className="badge" style={{
-                        background: adv.status === 'SETTLED' ? '#10b981' : adv.status === 'APPROVED' ? '#06b6d4' : '#eab308',
+                        background: adv.status === 'SETTLED' ? '#10b981' : adv.status === 'APPROVED' ? '#00A7B5' : '#eab308',
                         color: 'white', fontSize: '0.65rem'
                       }}>
                         {adv.status}
@@ -295,7 +295,7 @@ export default function ExpensesDashboard() {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                       <div>Requested: <strong>INR {adv.amountRequested.toLocaleString()}</strong></div>
-                      {adv.amountApproved && <div>Approved: <strong style={{ color: '#06b6d4' }}>INR {adv.amountApproved.toLocaleString()}</strong></div>}
+                      {adv.amountApproved && <div>Approved: <strong style={{ color: '#00A7B5' }}>INR {adv.amountApproved.toLocaleString()}</strong></div>}
                     </div>
 
                     {adv.advanceRemarks && (

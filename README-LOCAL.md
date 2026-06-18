@@ -1,6 +1,6 @@
-# NexusHR HRMS - Local Run Guide
+# PID hcms - Local Run Guide
 
-This guide explains how to run the current NexusHR HRMS application locally from this workspace.
+This guide explains how to run the current PID hcms application locally from this workspace.
 
 ## 1. Current Local Stack
 

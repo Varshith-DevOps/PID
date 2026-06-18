@@ -81,14 +81,14 @@ export default function TenantBillingPage() {
               <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff' }}>SaaS Subscription & Billing</h1>
               <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem' }}>Monitor active plans, employee thresholds, and transaction history.</p>
             </div>
-            <Link href="/pricing" style={{ textDecoration: 'none', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', color: '#fff', fontSize: '0.85rem', fontWeight: 700, padding: '0.65rem 1.25rem', borderRadius: '8px', boxShadow: '0 4px 15px rgba(59,130,246,0.3)' }}>
+            <Link href="/pricing" style={{ textDecoration: 'none', background: 'linear-gradient(135deg, #00A7B5, #182B6D)', color: '#fff', fontSize: '0.85rem', fontWeight: 700, padding: '0.65rem 1.25rem', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,167,181,0.3)' }}>
               Upgrade Plan
             </Link>
           </div>
 
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
-              <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#3b82f6', animation: 'spin 1s linear infinite' }} />
+              <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#00A7B5', animation: 'spin 1s linear infinite' }} />
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
@@ -108,7 +108,7 @@ export default function TenantBillingPage() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                         <div>
                           <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Plan Name</span>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#60a5fa', marginTop: '2px' }}>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#73E0E7', marginTop: '2px' }}>
                             {subData.subscription.plan.name}
                           </div>
                         </div>

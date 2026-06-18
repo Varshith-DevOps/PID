@@ -21,9 +21,9 @@ const getOrCreateDefaultCompany = async () => {
   if (!company) {
     company = await prisma.company.create({
       data: {
-        name: 'NexusHR Demo Company',
-        code: 'NEXUS',
-        domain: 'nexushr.local',
+        name: 'PID hcms Demo Company',
+        code: 'PID',
+        domain: 'pid-hcms.local',
       },
     });
   }

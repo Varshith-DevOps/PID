@@ -421,7 +421,7 @@ export default function OnOffboardingDashboard() {
         {/* Header */}
         <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #a855f7, #c084fc)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
                 <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
               </svg>
@@ -471,7 +471,7 @@ export default function OnOffboardingDashboard() {
             onClick={() => setActiveTab('onboarding')} 
             className="btn" 
             style={{ 
-              background: activeTab === 'onboarding' ? 'linear-gradient(135deg, #a855f7, #c084fc)' : 'rgba(255,255,255,0.04)',
+              background: activeTab === 'onboarding' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.25rem',
@@ -488,7 +488,7 @@ export default function OnOffboardingDashboard() {
             onClick={() => setActiveTab('offboarding')} 
             className="btn" 
             style={{ 
-              background: activeTab === 'offboarding' ? 'linear-gradient(135deg, #a855f7, #c084fc)' : 'rgba(255,255,255,0.04)',
+              background: activeTab === 'offboarding' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.25rem',
@@ -505,7 +505,7 @@ export default function OnOffboardingDashboard() {
             onClick={() => setActiveTab('templates')} 
             className="btn" 
             style={{ 
-              background: activeTab === 'templates' ? 'linear-gradient(135deg, #a855f7, #c084fc)' : 'rgba(255,255,255,0.04)',
+              background: activeTab === 'templates' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
               color: 'white',
               border: 'none',
               padding: '0.6rem 1.25rem',
@@ -640,7 +640,7 @@ export default function OnOffboardingDashboard() {
                                 width: '32px', 
                                 height: '32px', 
                                 borderRadius: '50%', 
-                                background: 'linear-gradient(135deg, #a855f7, #c084fc)', 
+                                background: 'linear-gradient(135deg, #a855f7, #FFB23F)', 
                                 color: 'white', 
                                 display: 'flex', 
                                 alignItems: 'center', 
@@ -658,7 +658,7 @@ export default function OnOffboardingDashboard() {
                           </td>
                           <td style={{ padding: '0.75rem 1rem' }}>
                             <div style={{ fontWeight: 600, color: 'white' }}>{emp.jobTitle}</div>
-                            <div style={{ fontSize: '0.65rem', color: '#c084fc' }}>{emp.department?.name || 'Staff'}</div>
+                            <div style={{ fontSize: '0.65rem', color: '#FFB23F' }}>{emp.department?.name || 'Staff'}</div>
                           </td>
                           <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
                             {emp.location || 'Pune Office'}
@@ -675,7 +675,7 @@ export default function OnOffboardingDashboard() {
                                 EMPLOYEE: { label: '✅ Onboarded', bg: 'rgba(16,185,129,0.06)', color: '#10b981', border: '1px solid rgba(16,185,129,0.15)' },
                                 TERMINATED: { label: '📜 Separated', bg: 'rgba(107,114,128,0.06)', color: '#9ca3af', border: '1px solid rgba(107,114,128,0.15)' },
                               };
-                              const cfg = stageConfig[stage] || { label: stage, bg: 'rgba(168,85,247,0.06)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.12)' };
+                              const cfg = stageConfig[stage] || { label: stage, bg: 'rgba(168,85,247,0.06)', color: '#FFB23F', border: '1px solid rgba(168,85,247,0.12)' };
                               return (
                                 <span className="badge" style={{ background: cfg.bg, color: cfg.color, border: cfg.border, fontSize: '0.62rem' }}>
                                   {cfg.label}
@@ -690,7 +690,7 @@ export default function OnOffboardingDashboard() {
                               style={{ 
                                 padding: '0.35rem 0.65rem', 
                                 fontSize: '0.68rem', 
-                                background: 'linear-gradient(135deg, #a855f7, #c084fc)', 
+                                background: 'linear-gradient(135deg, #a855f7, #FFB23F)', 
                                 border: 'none',
                                 cursor: 'pointer',
                                 borderRadius: '6px'
@@ -728,7 +728,7 @@ export default function OnOffboardingDashboard() {
                         <div style={{ display: 'flex', gap: '0.6rem' }}>
                           <button 
                             onClick={() => handleEditTemplate(tpl)}
-                            style={{ background: 'transparent', border: 'none', color: '#c084fc', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+                            style={{ background: 'transparent', border: 'none', color: '#FFB23F', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
                           >
                             Edit ✏️
                           </button>
@@ -751,7 +751,7 @@ export default function OnOffboardingDashboard() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                           {tpl.tasks.map((t, idx) => (
                             <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                              <span style={{ fontSize: '0.7rem', color: '#c084fc', fontWeight: 'bold' }}>{idx + 1}.</span>
+                              <span style={{ fontSize: '0.7rem', color: '#FFB23F', fontWeight: 'bold' }}>{idx + 1}.</span>
                               <div>
                                 <div style={{ fontSize: '0.72rem', color: 'white', fontWeight: 600 }}>{t.title}</div>
                                 {t.description && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t.description}</div>}
@@ -809,7 +809,7 @@ export default function OnOffboardingDashboard() {
                         onClick={handleInstantiate} 
                         disabled={!selectedTemplateId}
                         className="btn btn-primary" 
-                        style={{ background: 'linear-gradient(135deg, #a855f7, #c084fc)', border: 'none', padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
+                        style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)', border: 'none', padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
                       >
                         Initialize
                       </button>
@@ -1031,7 +1031,7 @@ export default function OnOffboardingDashboard() {
                   <button type="button" onClick={() => setShowTemplateModal(false)} className="btn btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" disabled={templateForm.tasks.length === 0 || !templateForm.name} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #c084fc)', border: 'none' }}>
+                  <button type="submit" disabled={templateForm.tasks.length === 0 || !templateForm.name} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)', border: 'none' }}>
                     Save Template
                   </button>
                 </div>
@@ -1064,7 +1064,7 @@ export default function OnOffboardingDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Work Email</label>
-                    <input type="email" placeholder="john.doe@nexus.com" required value={onboardingForm.email} onChange={e => setOnboardingForm({ ...onboardingForm, email: e.target.value })} className="input-field" />
+                    <input type="email" placeholder="john.doe@pid-hcms.com" required value={onboardingForm.email} onChange={e => setOnboardingForm({ ...onboardingForm, email: e.target.value })} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Mobile Number</label>

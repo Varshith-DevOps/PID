@@ -1,5 +1,5 @@
 /**
- * User-facing action messages for NexusHR.
+ * User-facing action messages for PID hcms.
  *
  * Keep every message short, plain, and action-related. The API may return
  * technical details, but users should see what happened and what to do next.
@@ -120,6 +120,7 @@ const errorRules: MessageRule[] = [
   { id: 'dashboard-fail', match: '/dashboard', message: 'Dashboard could not load. Refresh the page or check your access.' },
   { id: 'permission-fail', match: '/permissions', message: 'Permission update failed. Check role access and permission values.' },
   { id: 'platform-fail', match: '/platform', message: 'Platform action failed. Check company, KYC, subscription, and admin access.' },
+  { id: 'billing-plans-fail', methods: ['get'], match: '/billing/plans', message: 'Could not load live billing plans. Using fallback plan options for now.' },
   { id: 'billing-fail', match: '/billing', message: 'Billing action failed. Check the plan, payment status, and subscription access.' },
   { id: 'contact-fail', match: '/contact', message: 'Contact request failed. Check the required fields and try again.' },
 ];

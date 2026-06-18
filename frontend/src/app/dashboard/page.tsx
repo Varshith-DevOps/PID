@@ -19,8 +19,8 @@ const toneColor = (tone: string) => {
   if (tone === 'success') return '#10b981';
   if (tone === 'warning') return '#f59e0b';
   if (tone === 'danger') return '#ef4444';
-  if (tone === 'violet') return '#8b5cf6';
-  return '#3b82f6';
+  if (tone === 'violet') return '#182B6D';
+  return '#00A7B5';
 };
 
 const availabilityLabel: Record<string, string> = {
@@ -184,7 +184,7 @@ export default function DashboardPage() {
               <p className="dash-subtitle">{getSubtitle(dashboard)}</p>
             </div>
             <div className="dash-actions">
-              <span className="pill" style={{ background: 'rgba(59,130,246,0.14)', color: '#93c5fd' }}>
+              <span className="pill" style={{ background: 'rgba(0,167,181,0.14)', color: '#BFEFF4' }}>
                 {dashboard?.dashboardType || user.role} view
               </span>
               <button className="btn btn-neutral btn-sm" onClick={loadDashboard}>Refresh</button>
@@ -267,7 +267,7 @@ function EmployeeDashboardView({ dashboard }: { dashboard: any }) {
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
               <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
               <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-              <Bar dataKey="hours" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="hours" fill="#00A7B5" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -443,7 +443,7 @@ function AdminHrDashboardView({ dashboard, departmentData, recruitmentData }: { 
               <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
               <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-              <Bar dataKey="employees" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="employees" fill="#00A7B5" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -453,7 +453,7 @@ function AdminHrDashboardView({ dashboard, departmentData, recruitmentData }: { 
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie data={recruitmentData} dataKey="count" nameKey="stage" innerRadius={58} outerRadius={88}>
-                {recruitmentData.map((_: any, index: number) => <Cell key={index} fill={['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'][index % 5]} />)}
+                {recruitmentData.map((_: any, index: number) => <Cell key={index} fill={['#00A7B5', '#10b981', '#f59e0b', '#182B6D', '#ef4444'][index % 5]} />)}
               </Pie>
               <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
             </PieChart>
@@ -537,7 +537,7 @@ function ChartPanel({ title, data, dataKey, nameKey }: { title: string; data: an
           <XAxis dataKey={nameKey} tick={{ fontSize: 10, fill: '#94a3b8' }} />
           <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
           <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-          <Bar dataKey={dataKey} fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+          <Bar dataKey={dataKey} fill="#182B6D" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

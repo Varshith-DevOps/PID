@@ -70,9 +70,9 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  APPLIED: '#3b82f6',
-  SCREENING: '#a78bfa',
-  INTERVIEW: '#06b6d4',
+  APPLIED: '#00A7B5',
+  SCREENING: '#00A7B5',
+  INTERVIEW: '#00A7B5',
   OFFER: '#eab308',
   REJECTED: '#ef4444',
   HIRED: '#10b981',
@@ -407,7 +407,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <div style={{ color: 'var(--text-secondary)' }}>📞 {selectedApplicant.phone}</div>
                 {selectedApplicant.resumeUrl && (
                   <div style={{ marginTop: '0.25rem' }}>
-                    <a href={`http://localhost:5000${selectedApplicant.resumeUrl}`} target="_blank" rel="noreferrer" style={{ color: '#06b6d4', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <a href={`http://localhost:5000${selectedApplicant.resumeUrl}`} target="_blank" rel="noreferrer" style={{ color: '#00A7B5', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                       📄 View Candidate Resume file
                     </a>
                   </div>
@@ -538,7 +538,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                   <button type="button" onClick={() => setShowScheduleInterview(false)} className="btn btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #3b82f6, #06b6d4)', border: 'none' }}>
+                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #00A7B5, #00A7B5)', border: 'none' }}>
                     Confirm Schedule
                   </button>
                 </div>

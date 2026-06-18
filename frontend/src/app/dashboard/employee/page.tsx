@@ -51,7 +51,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       <div style={{ background: 'rgba(17,24,39,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.75rem 1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
         <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{label}</p>
         {payload.map((entry: any, idx: number) => (
-          <p key={idx} style={{ color: entry.color || '#8b5cf6', fontWeight: 700, fontSize: '0.9rem' }}>{entry.value}h</p>
+          <p key={idx} style={{ color: entry.color || '#182B6D', fontWeight: 700, fontSize: '0.9rem' }}>{entry.value}h</p>
         ))}
       </div>
     );
@@ -207,7 +207,7 @@ export default function EmployeeDashboard() {
       <main className="main-content">
         <div className="page-header">
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #182B6D, #0B7890)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
             <div><h1 className="page-title">My Dashboard</h1><p className="page-subtitle">Your tasks, hours & attendance</p></div>
@@ -223,7 +223,7 @@ export default function EmployeeDashboard() {
         {view === 'dashboard' && (
           <>
             {/* Time Clock Card */}
-            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(99,102,241,0.08))', border: '1px solid rgba(139,92,246,0.2)' }}>
+            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', background: 'linear-gradient(135deg, rgba(24,43,109,0.08), rgba(11,120,144,0.08))', border: '1px solid rgba(24,43,109,0.2)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                   <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -298,7 +298,7 @@ export default function EmployeeDashboard() {
                     <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'rgba(255,255,255,0.5)' }} axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.5)' }} axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} tickLine={false} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="hours" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="hours" fill="#182B6D" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

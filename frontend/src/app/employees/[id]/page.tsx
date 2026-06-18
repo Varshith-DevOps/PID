@@ -96,7 +96,7 @@ export default function EmployeeDetailPage() {
 
         {/* Profile Header with 3D avatar and live status */}
         <div className="profile-header">
-          <div className="avatar-lg" style={{ boxShadow: '0 6px 24px rgba(99,102,241,0.4)', background: 'linear-gradient(135deg, #6366f1, #a78bfa)' }}>
+          <div className="avatar-lg" style={{ boxShadow: '0 6px 24px rgba(11,120,144,0.4)', background: 'linear-gradient(135deg, #0B7890, #00A7B5)' }}>
             {employee.photoUrl ? <img src={`http://localhost:5000/${employee.photoUrl}`} alt="" /> : initials}
           </div>
           <div className="profile-info">

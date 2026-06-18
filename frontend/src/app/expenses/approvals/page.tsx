@@ -229,7 +229,7 @@ export default function ApprovalsCenter() {
                           <td style={{ fontWeight: 600, color: 'white' }}>{claim.currency} {claim.amount.toLocaleString()}</td>
                           <td>
                             <span className="badge" style={{
-                              background: claim.status === 'APPROVED_BY_MANAGER' ? '#06b6d4' : '#eab308',
+                              background: claim.status === 'APPROVED_BY_MANAGER' ? '#00A7B5' : '#eab308',
                               color: 'white', fontSize: '0.65rem'
                             }}>
                               {claim.status.replace(/_/g, ' ')}
@@ -282,14 +282,14 @@ export default function ApprovalsCenter() {
                           <td style={{ fontWeight: 600, color: 'white' }}>INR {adv.amountRequested.toLocaleString()}</td>
                           <td>
                             <span className="badge" style={{
-                              background: adv.status === 'APPROVED' ? '#06b6d4' : '#eab308',
+                              background: adv.status === 'APPROVED' ? '#00A7B5' : '#eab308',
                               color: 'white', fontSize: '0.65rem'
                             }}>
                               {adv.status}
                             </span>
                           </td>
                           <td>
-                            <button onClick={() => { setSelectedAdvance(adv); setSelectedClaim(null); }} className="btn btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', background: '#06b6d4', border: 'none' }}>
+                            <button onClick={() => { setSelectedAdvance(adv); setSelectedClaim(null); }} className="btn btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', background: '#00A7B5', border: 'none' }}>
                               Audit
                             </button>
                           </td>
@@ -330,7 +330,7 @@ export default function ApprovalsCenter() {
 
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {selectedClaim.status === 'PENDING' && (
-                    <button onClick={() => handleManagerApprove(selectedClaim.id)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)', border: 'none', flex: 1, fontSize: '0.72rem' }}>
+                    <button onClick={() => handleManagerApprove(selectedClaim.id)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #00A7B5, #0B7890)', border: 'none', flex: 1, fontSize: '0.72rem' }}>
                       Manager Approve
                     </button>
                   )}
@@ -359,7 +359,7 @@ export default function ApprovalsCenter() {
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.03)', padding: '0.5rem 0', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                   <div>Purpose: <strong style={{ color: 'white' }}>"{selectedAdvance.purpose}"</strong></div>
                   <div>Requested Amount: <strong style={{ color: 'white' }}>INR {selectedAdvance.amountRequested.toLocaleString()}</strong></div>
-                  {selectedAdvance.amountApproved && <div>Approved Limit: <strong style={{ color: '#06b6d4' }}>INR {selectedAdvance.amountApproved.toLocaleString()}</strong></div>}
+                  {selectedAdvance.amountApproved && <div>Approved Limit: <strong style={{ color: '#00A7B5' }}>INR {selectedAdvance.amountApproved.toLocaleString()}</strong></div>}
                 </div>
 
                 {selectedAdvance.status === 'PENDING' ? (
@@ -374,7 +374,7 @@ export default function ApprovalsCenter() {
                       <input type="text" placeholder="e.g. Settle flight directly in portal" value={remarks} onChange={e => setRemarks(e.target.value)} className="input-field" />
                     </div>
 
-                    <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)', border: 'none', fontSize: '0.75rem' }}>
+                    <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #00A7B5, #0B7890)', border: 'none', fontSize: '0.75rem' }}>
                       Release Cash Advance
                     </button>
                   </form>

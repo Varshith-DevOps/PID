@@ -1,5 +1,5 @@
-name: nexus_hr_mobile
-description: "NexusHR Mobile Employee Self Service Portal"
+name: pid_hcms_mobile
+description: "PID hcms Mobile Employee Self Service Portal"
 version: 1.0.0+1
 
 environment:
@@ -18,3 +18,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/brand/pid_hcms_logo.png
+    - assets/brand/pid_hcms_icon.png

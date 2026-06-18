@@ -27,7 +27,7 @@ const logPayrollEvent = async ({
   try {
     await prisma.payrollAuditLog.create({
       data: {
-        userEmail: userEmail || 'system@nexushr.com',
+        userEmail: userEmail || 'system@pid-hcms.com',
         action,
         entity,
         entityId,

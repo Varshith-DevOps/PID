@@ -223,7 +223,7 @@ export default function ReportsDashboard() {
     background: activeTab === tab ? 'rgba(37, 99, 235, 0.16)' : 'transparent',
     border: activeTab === tab ? '1px solid rgba(96, 165, 250, 0.55)' : '1px solid rgba(148, 163, 184, 0.18)',
     borderRadius: '8px',
-    color: activeTab === tab ? '#93c5fd' : 'var(--text-secondary)',
+    color: activeTab === tab ? '#BFEFF4' : 'var(--text-secondary)',
     cursor: 'pointer',
     fontSize: '0.8rem',
     fontWeight: 700,
@@ -330,7 +330,7 @@ export default function ReportsDashboard() {
                     {selectedPackMeta && (
                       <div style={{ border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: '8px', padding: '0.9rem', marginBottom: '1rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                          <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.14)', color: '#93c5fd' }}>{selectedPackMeta.category}</span>
+                          <span className="badge" style={{ background: 'rgba(0, 167, 181, 0.14)', color: '#BFEFF4' }}>{selectedPackMeta.category}</span>
                           <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.14)', color: '#fbbf24' }}>{selectedPackMeta.frequency}</span>
                           <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.14)', color: '#fca5a5' }}>{selectedPackMeta.riskLevel}</span>
                         </div>

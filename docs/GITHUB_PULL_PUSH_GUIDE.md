@@ -1,4 +1,4 @@
-# NexusHR - GitHub Pull and Push Guide
+# PID hcms - GitHub Pull and Push Guide
 
 Use this file when you want to extract the project from GitHub, update your local copy, commit changes, and push them back.
 
@@ -6,7 +6,7 @@ Use this file when you want to extract the project from GitHub, update your loca
 
 | Item | Value |
 | --- | --- |
-| GitHub Remote | `https://github.com/Ax-Tr/Nexus-HR.git` |
+| GitHub Remote | `https://github.com/Ax-Tr/PID-HCMS.git` |
 | Current Local Branch | `codex/hrms-fullstack-bugfixes` |
 | Local Workspace | `e:\HRMS_application` |
 
@@ -16,7 +16,7 @@ Use this when the project is not yet available on your machine.
 
 ```powershell
 cd e:\
-git clone https://github.com/Ax-Tr/Nexus-HR.git HRMS_application
+git clone https://github.com/Ax-Tr/PID-HCMS.git HRMS_application
 cd e:\HRMS_application
 git branch
 git status
@@ -146,7 +146,7 @@ git push -u origin codex/hrms-fullstack-bugfixes
 After pushing, open GitHub:
 
 ```text
-https://github.com/Ax-Tr/Nexus-HR
+https://github.com/Ax-Tr/PID-HCMS
 ```
 
 Create a pull request from:

@@ -255,9 +255,9 @@ export default function PlatformAdminPanel() {
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
                 style={{
-                  background: activeTab === tab ? 'rgba(59,130,246,0.1)' : 'none',
+                  background: activeTab === tab ? 'rgba(0,167,181,0.1)' : 'none',
                   border: 'none',
-                  color: activeTab === tab ? '#60a5fa' : 'rgba(255,255,255,0.6)',
+                  color: activeTab === tab ? '#73E0E7' : 'rgba(255,255,255,0.6)',
                   padding: '0.5rem 1.25rem',
                   borderRadius: '6px',
                   fontWeight: 600,
@@ -273,7 +273,7 @@ export default function PlatformAdminPanel() {
 
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
-              <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#3b82f6', animation: 'spin 1s linear infinite' }} />
+              <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#00A7B5', animation: 'spin 1s linear infinite' }} />
             </div>
           ) : (
             <div>
@@ -295,11 +295,11 @@ export default function PlatformAdminPanel() {
                     </div>
                     <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
                       <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 600 }}>Pending Leads</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#a78bfa', marginTop: '4px' }}>{metrics.pendingContactRequests}</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#00A7B5', marginTop: '4px' }}>{metrics.pendingContactRequests}</div>
                     </div>
                     <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
                       <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 600 }}>Total Revenue</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#60a5fa', marginTop: '4px' }}>₹{metrics.totalRevenue.toLocaleString()}</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#73E0E7', marginTop: '4px' }}>₹{metrics.totalRevenue.toLocaleString()}</div>
                     </div>
                   </div>
                   
@@ -324,7 +324,7 @@ export default function PlatformAdminPanel() {
                             <td style={{ padding: '14px 12px', fontWeight: 600, color: '#fff' }}>
                               {row.name} <code style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>({row.code})</code>
                             </td>
-                            <td style={{ padding: '14px 12px', color: '#60a5fa', fontWeight: 700 }}>{row.employeeCount}</td>
+                            <td style={{ padding: '14px 12px', color: '#73E0E7', fontWeight: 700 }}>{row.employeeCount}</td>
                             <td style={{ padding: '14px 12px' }}>{row.activeUserCount}</td>
                             <td style={{ padding: '14px 12px' }}>{row.attendanceCount}</td>
                             <td style={{ padding: '14px 12px' }}>{row.leaveCount}</td>
@@ -365,7 +365,7 @@ export default function PlatformAdminPanel() {
                             <td style={{ padding: '16px 12px', fontWeight: 600, color: '#fff' }}>{c.name}</td>
                             <td style={{ padding: '16px 12px' }}><code>{c.code}</code></td>
                             <td style={{ padding: '16px 12px' }}>{new Date(c.createdAt).toLocaleDateString()}</td>
-                            <td style={{ padding: '16px 12px', color: '#60a5fa' }}>{sub?.plan?.name || 'No Active Plan'}</td>
+                            <td style={{ padding: '16px 12px', color: '#73E0E7' }}>{sub?.plan?.name || 'No Active Plan'}</td>
                             <td style={{ padding: '16px 12px' }}>
                               <span style={{
                                 padding: '3px 8px',
@@ -422,7 +422,7 @@ export default function PlatformAdminPanel() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                         <div>
                           <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Identification</span>
-                          <div style={{ fontSize: '0.9rem', color: '#fff' }}>CIN: <code style={{ color: '#60a5fa' }}>{c.cin || 'N/A'}</code></div>
+                          <div style={{ fontSize: '0.9rem', color: '#fff' }}>CIN: <code style={{ color: '#73E0E7' }}>{c.cin || 'N/A'}</code></div>
                           <div style={{ fontSize: '0.9rem', color: '#fff', marginTop: '2px' }}>GST: <code>{c.gstin || 'N/A'}</code></div>
                         </div>
 
@@ -500,7 +500,7 @@ export default function PlatformAdminPanel() {
                       {subscriptions.map((s) => (
                         <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.9rem' }}>
                           <td style={{ padding: '16px 12px', fontWeight: 600, color: '#fff' }}>{s.company.name}</td>
-                          <td style={{ padding: '16px 12px', color: '#60a5fa' }}>{s.plan.name}</td>
+                          <td style={{ padding: '16px 12px', color: '#73E0E7' }}>{s.plan.name}</td>
                           <td style={{ padding: '16px 12px' }}>{s.status}</td>
                           <td style={{ padding: '16px 12px' }}>{new Date(s.endDate).toLocaleDateString()}</td>
                           <td style={{ padding: '16px 12px' }}>
@@ -645,7 +645,7 @@ export default function PlatformAdminPanel() {
                                 const newFeatures = { ...customPlanForm.features, [featureKey]: e.target.checked };
                                 setCustomPlanForm({ ...customPlanForm, features: newFeatures });
                               }}
-                              style={{ accentColor: '#3b82f6' }}
+                              style={{ accentColor: '#00A7B5' }}
                             />
                             <span style={{ textTransform: 'capitalize' }}>
                               {featureKey.replace(/([A-Z])/g, ' $1').trim()}
@@ -661,7 +661,7 @@ export default function PlatformAdminPanel() {
                       style={{ 
                         marginTop: '0.5rem', 
                         padding: '0.75rem', 
-                        background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', 
+                        background: 'linear-gradient(135deg, #00A7B5, #1d4ed8)', 
                         border: 'none', 
                         borderRadius: '6px', 
                         color: '#fff', 

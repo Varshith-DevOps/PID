@@ -56,7 +56,7 @@ const finalizeFNFSettlement = async (req, res) => {
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'FNF_FINALIZED',
       entity: 'Employee',
       entityId: employeeId,

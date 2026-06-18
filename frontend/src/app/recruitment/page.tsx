@@ -102,7 +102,7 @@ export default function RecruitmentDashboard() {
         {/* Header */}
         <div className="page-header">
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #06b6d4)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #00A7B5, #00A7B5)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 11v6"/><path d="M16 14h6"/>
               </svg>
@@ -112,7 +112,7 @@ export default function RecruitmentDashboard() {
               <p className="page-subtitle">Manage jobs, requisitions, and applicant pipeline stages</p>
             </div>
           </div>
-          <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #3b82f6, #06b6d4)', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', boxShadow: '0 4px 15px rgba(59,130,246,0.35)' }}>
+          <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #00A7B5, #00A7B5)', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', boxShadow: '0 4px 15px rgba(0,167,181,0.35)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Create Job Requisition
           </button>
@@ -173,11 +173,11 @@ export default function RecruitmentDashboard() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                  <span className="badge badge-info" style={{ fontSize: '0.65rem', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: 'none' }}>
+                  <span className="badge badge-info" style={{ fontSize: '0.65rem', background: 'rgba(0,167,181,0.1)', color: '#00A7B5', border: 'none' }}>
                     {job.employmentType.replace('_', ' ')}
                   </span>
                   {job.salaryRange && (
-                    <span className="badge badge-info" style={{ fontSize: '0.65rem', background: 'rgba(6,182,212,0.1)', color: '#06b6d4', border: 'none' }}>
+                    <span className="badge badge-info" style={{ fontSize: '0.65rem', background: 'rgba(0,167,181,0.1)', color: '#00A7B5', border: 'none' }}>
                       {job.salaryRange}
                     </span>
                   )}
@@ -264,7 +264,7 @@ export default function RecruitmentDashboard() {
                   <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary">
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #3b82f6, #06b6d4)', border: 'none' }}>
+                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #00A7B5, #00A7B5)', border: 'none' }}>
                     Publish Requisition
                   </button>
                 </div>

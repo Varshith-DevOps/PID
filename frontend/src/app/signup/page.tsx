@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getBillingPlans, signup } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
+import BrandLogo from '@/components/BrandLogo';
 
 interface Plan {
   id: string;
@@ -104,7 +105,7 @@ function SignupContent() {
 
       <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>1. Company Configuration</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#73E0E7', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>1. Company Configuration</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Company Name *</label>
@@ -136,7 +137,7 @@ function SignupContent() {
         </div>
 
         <div>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#8b5cf6', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>2. Account Owner Access</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#182B6D', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>2. Account Owner Access</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Admin Name *</label>
@@ -171,14 +172,14 @@ function SignupContent() {
           </select>
         </div>
 
-        <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.9rem', marginTop: '1rem', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', color: 'white', border: 'none', borderRadius: '10px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.95rem', boxShadow: '0 4px 16px rgba(59,130,246,0.3)' }}>
+        <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.9rem', marginTop: '1rem', background: 'linear-gradient(135deg, #00A7B5, #182B6D)', color: 'white', border: 'none', borderRadius: '10px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.95rem', boxShadow: '0 4px 16px rgba(0,167,181,0.3)' }}>
           {loading ? 'Registering Workspace...' : 'Create Account & Continue'}
         </button>
       </form>
 
       <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
         <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>Already registered? </span>
-        <Link href="/login" style={{ fontSize: '0.85rem', color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>Sign In</Link>
+        <Link href="/login" style={{ fontSize: '0.85rem', color: '#00A7B5', textDecoration: 'none', fontWeight: 600 }}>Sign In</Link>
       </div>
     </div>
   );
@@ -187,20 +188,15 @@ function SignupContent() {
 export default function SignupPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0a0e1a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem', fontFamily: 'system-ui, sans-serif', relative: 'true', overflowX: 'hidden' } as any}>
-      <div style={{ position: 'absolute', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.1), transparent 70%)', top: '-10%', right: '-10%', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.08), transparent 70%)', bottom: '-10%', left: '-10%', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,167,181,0.1), transparent 70%)', top: '-10%', right: '-10%', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(24,43,109,0.08), transparent 70%)', bottom: '-10%', left: '-10%', pointerEvents: 'none' }} />
 
       <div style={{ width: '100%', maxWidth: '650px', position: 'relative', zIndex: 1 }}>
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <Link href="/" style={{ textDecoration: 'none', display: 'inline-block' }}>
-            <div style={{ width: 56, height: 56, margin: '0 auto 1rem', borderRadius: '14px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(59,130,246,0.25)' }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-              </svg>
-            </div>
+          <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', justifyContent: 'center', marginBottom: '1rem' }}>
+            <BrandLogo variant="dark" height={70} />
           </Link>
-          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>Create Your NexusHR Organization</h1>
+          <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>Create Your PID hcms Organization</h1>
           <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem' }}>Setup tenant workspaces, scoping variables, and administrative access</p>
         </div>
 

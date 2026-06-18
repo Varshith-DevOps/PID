@@ -459,7 +459,7 @@ const runPayroll = async (req, res) => {
           month: targetMonth,
           year: targetYear,
           status: 'DRAFT',
-          processedBy: req.user?.email || 'admin@nexushr.com',
+          processedBy: req.user?.email || 'admin@pid-hcms.com',
           processedAt: new Date()
         },
       });
@@ -672,7 +672,7 @@ const runPayroll = async (req, res) => {
           payrollRunId: payrollRun.id,
           action: 'DRAFT',
           actorId: req.user?.id || 'admin-id',
-          actorEmail: req.user?.email || 'admin@nexushr.com',
+          actorEmail: req.user?.email || 'admin@pid-hcms.com',
           comments: 'Payroll run generated as DRAFT.'
         }
       });
@@ -681,7 +681,7 @@ const runPayroll = async (req, res) => {
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'PAYROLL_DRAFT_CREATED',
       entity: 'PayrollRun',
       entityId: transactionResult.updated.id,
@@ -744,7 +744,7 @@ const reviewPayroll = async (req, res) => {
       where: { id: runId },
       data: {
         status: 'REVIEWED',
-        reviewedBy: req.user?.email || 'reviewer@nexushr.com',
+        reviewedBy: req.user?.email || 'reviewer@pid-hcms.com',
         reviewedAt: new Date()
       }
     });
@@ -754,13 +754,13 @@ const reviewPayroll = async (req, res) => {
         payrollRunId: runId,
         action: 'REVIEWED',
         actorId: req.user?.id || 'reviewer-id',
-        actorEmail: req.user?.email || 'reviewer@nexushr.com',
+        actorEmail: req.user?.email || 'reviewer@pid-hcms.com',
         comments: comments || 'Payroll run reviewed.'
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'reviewer@nexushr.com',
+      userEmail: req.user?.email || 'reviewer@pid-hcms.com',
       action: 'PAYROLL_REVIEWED',
       entity: 'PayrollRun',
       entityId: runId,
@@ -793,7 +793,7 @@ const approvePayroll = async (req, res) => {
       where: { id: runId },
       data: {
         status: 'APPROVED',
-        approvedBy: req.user?.email || 'approver@nexushr.com',
+        approvedBy: req.user?.email || 'approver@pid-hcms.com',
         approvedAt: new Date()
       }
     });
@@ -803,13 +803,13 @@ const approvePayroll = async (req, res) => {
         payrollRunId: runId,
         action: 'APPROVED',
         actorId: req.user?.id || 'approver-id',
-        actorEmail: req.user?.email || 'approver@nexushr.com',
+        actorEmail: req.user?.email || 'approver@pid-hcms.com',
         comments: comments || 'Payroll run approved.'
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'approver@nexushr.com',
+      userEmail: req.user?.email || 'approver@pid-hcms.com',
       action: 'PAYROLL_APPROVED',
       entity: 'PayrollRun',
       entityId: runId,
@@ -873,7 +873,7 @@ const processPayroll = async (req, res) => {
       where: { id: runId },
       data: {
         status: 'PROCESSED',
-        processedBy: req.user?.email || 'admin@nexushr.com',
+        processedBy: req.user?.email || 'admin@pid-hcms.com',
         processedAt: new Date()
       }
     });
@@ -883,13 +883,13 @@ const processPayroll = async (req, res) => {
         payrollRunId: runId,
         action: 'PROCESSED',
         actorId: req.user?.id || 'admin-id',
-        actorEmail: req.user?.email || 'admin@nexushr.com',
+        actorEmail: req.user?.email || 'admin@pid-hcms.com',
         comments: comments || 'Payroll run finalized and processed.'
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'PAYROLL_PROCESSED',
       entity: 'PayrollRun',
       entityId: runId,
@@ -929,13 +929,13 @@ const rejectPayroll = async (req, res) => {
         payrollRunId: runId,
         action: 'REJECTED',
         actorId: req.user?.id || 'reviewer-id',
-        actorEmail: req.user?.email || 'reviewer@nexushr.com',
+        actorEmail: req.user?.email || 'reviewer@pid-hcms.com',
         comments: comments || 'Payroll run rejected/returned to DRAFT.'
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'reviewer@nexushr.com',
+      userEmail: req.user?.email || 'reviewer@pid-hcms.com',
       action: 'PAYROLL_REJECTED',
       entity: 'PayrollRun',
       entityId: runId,
@@ -988,7 +988,7 @@ const reversePayroll = async (req, res) => {
         where: { id: runId },
         data: {
           status: 'REVERSED',
-          reversedBy: req.user?.email || 'admin@nexushr.com',
+          reversedBy: req.user?.email || 'admin@pid-hcms.com',
           reversalReason: justification,
           reversedAt: new Date()
         }
@@ -1000,13 +1000,13 @@ const reversePayroll = async (req, res) => {
         payrollRunId: runId,
         action: 'REVERSED',
         actorId: req.user?.id || 'admin-id',
-        actorEmail: req.user?.email || 'admin@nexushr.com',
+        actorEmail: req.user?.email || 'admin@pid-hcms.com',
         comments: `Payroll run reversed. Reason: ${justification}`
       }
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'PAYROLL_REVERSED',
       entity: 'PayrollRun',
       entityId: runId,

@@ -1096,7 +1096,7 @@ const streamXlsx = async (res, dataset, fileBase) => {
   const rows = flattenRows(dataset.rows);
   const headers = rows.length ? Object.keys(rows[0]) : ['message'];
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'NexusHR';
+  workbook.creator = 'PID hcms';
   workbook.created = new Date();
   const worksheet = workbook.addWorksheet(dataset.title.slice(0, 31));
   worksheet.columns = headers.map((header) => ({ header, key: header, width: Math.min(Math.max(header.length + 6, 14), 34) }));

@@ -266,9 +266,9 @@ async function main() {
   console.log('🌱 Creating default Tenant Company...');
   const defaultCompany = await prisma.company.create({
     data: {
-      name: 'NexusHR Corp',
-      code: 'nexushr',
-      email: 'contact@nexushr.com',
+      name: 'PID hcms Corp',
+      code: 'pid-hcms',
+      email: 'contact@pid-hcms.com',
       phone: '+919876543210',
       address: '101 Corporate Towers, Tech Park, Bangalore, India',
       industry: 'Technology',
@@ -485,7 +485,7 @@ async function main() {
   console.log('✅ Salary revisions created');
 
   // Projects
-  const project1 = await prisma.project.create({ data:{ name:'NexusHR Mobile App', description:'Cross-platform mobile app for NexusHR', startDate:new Date('2026-02-15'), deadline:new Date('2026-07-31'), budget:2500000, status:'ACTIVE', managerId:employees[0].id } });
+  const project1 = await prisma.project.create({ data:{ name:'PID hcms Mobile App', description:'Cross-platform mobile app for PID hcms', startDate:new Date('2026-02-15'), deadline:new Date('2026-07-31'), budget:2500000, status:'ACTIVE', managerId:employees[0].id } });
   const project2 = await prisma.project.create({ data:{ name:'Customer Portal Revamp', description:'Complete portal redesign', startDate:new Date('2026-03-01'), deadline:new Date('2026-08-15'), budget:1800000, status:'ACTIVE', managerId:employees[14].id } });
   console.log('✅ Projects created');
 
@@ -981,7 +981,7 @@ async function main() {
       category: 'MEALS',
       amount: 4800.00,
       currency: 'INR',
-      description: 'Dinner with NexusHR core stakeholders.',
+      description: 'Dinner with PID hcms core stakeholders.',
       status: 'APPROVED_BY_MANAGER',
       managerId: empRajesh.id,
       managerRemarks: 'Pre-approved business dinner expense.',

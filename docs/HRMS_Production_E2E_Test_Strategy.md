@@ -1,9 +1,9 @@
-# NexusHR HRMS - Production End-to-End Test Strategy
+# PID hcms - Production End-to-End Test Strategy
 
 ## Clarifying Questions And Assumptions
 
 ### Clarifying Questions
-- What is the final product name for release branding? Current repo/docs use `NexusHR`.
+- What is the final product name for release branding? Current repo/docs use `PID hcms`.
 - Is production intended for web only, or web plus the Flutter mobile app?
 - Which deployment target is final: cloud, on-premise, or hybrid?
 - Which integrations are real in production versus mocked: email, payment gateway, biometric devices, bank files, job portals, SSO, WhatsApp/SMS?
@@ -11,7 +11,7 @@
 - What are expected production scale targets: tenants, employees per tenant, monthly payroll size, concurrent users?
 
 ### Working Assumptions
-- Application name: NexusHR HRMS.
+- Application name: PID hcms.
 - Platform: Web application with mobile app code present.
 - Stack: Next.js frontend, Express.js backend, Prisma ORM, SQLite in local/dev.
 - Enterprise mode: multi-company SaaS with KYC, subscriptions, RBAC, and tenant-aware access.
@@ -21,7 +21,7 @@
 
 ## A. HRMS Application Summary
 
-NexusHR is an enterprise HRMS intended to centralize employee data, attendance, leave, payroll, statutory compliance, recruitment, projects, expenses, performance, learning, assets, helpdesk, notifications, and SaaS tenant administration.
+PID hcms is an enterprise HRMS intended to centralize employee data, attendance, leave, payroll, statutory compliance, recruitment, projects, expenses, performance, learning, assets, helpdesk, notifications, and SaaS tenant administration.
 
 Core business problems solved:
 - Replaces fragmented HR spreadsheets and disconnected payroll records.
@@ -911,7 +911,7 @@ This section defines realistic sample data that QA can use for manual testing, A
 
 | Tenant ID | Company Name | CIN | KYC Status | Subscription | Plan | Expected Access |
 | --- | --- | --- | --- | --- | --- | --- |
-| TEN-APPROVED-001 | NexusHR Technologies Pvt Ltd | U72200KA2020PTC123456 | APPROVED | ACTIVE | Professional | Full tenant access |
+| TEN-APPROVED-001 | PID hcms Technologies Pvt Ltd | U72200KA2020PTC123456 | APPROVED | ACTIVE | Professional | Full tenant access |
 | TEN-PENDING-001 | BrightWave Consulting Pvt Ltd | U74999MH2022PTC987654 | PENDING | TRIAL_ACTIVE | Starter | Attendance and Leave only |
 | TEN-REJECTED-001 | UrbanLeaf Retail Pvt Ltd | U52100DL2021PTC456789 | REJECTED | TRIAL_ACTIVE | Starter | Restricted, KYC correction required |
 | TEN-EXPIRED-001 | Apex Payroll Services Pvt Ltd | U93000TN2019PTC334455 | APPROVED | EXPIRED | Professional | Billing/KYC recovery only |
@@ -921,20 +921,20 @@ This section defines realistic sample data that QA can use for manual testing, A
 
 | User Code | Role | Email | Password | Linked Employee | Primary Purpose |
 | --- | --- | --- | --- | --- | --- |
-| USR-SA-001 | SUPER_ADMIN | superadmin@nexushr.test | Test@12345 | None | Platform admin, KYC, all permissions |
-| USR-ADMIN-001 | ADMIN | admin@nexushr.test | Test@12345 | EMP-HR-001 | Tenant admin, payroll run, settings |
-| USR-HR-001 | HR | hr.manager@nexushr.test | Test@12345 | EMP-HR-001 | Employee master, leave/attendance exceptions |
-| USR-MGR-001 | MANAGER | ananya.rao@nexushr.test | Test@12345 | EMP-MGR-001 | Team approvals, project management |
-| USR-EMP-001 | EMPLOYEE | rajesh.kumar@nexushr.test | Test@12345 | EMP-ENG-001 | ESS happy path |
-| USR-EMP-002 | EMPLOYEE | priya.sharma@nexushr.test | Test@12345 | EMP-ENG-002 | Leave/attendance edge cases |
-| USR-REC-001 | RECRUITER | recruiter@nexushr.test | Test@12345 | EMP-HR-002 | Recruitment pipeline |
-| USR-ONB-001 | ONBOARDING | onboarding@nexushr.test | Test@12345 | EMP-HR-003 | Checklist workflows |
-| USR-ACC-001 | ACCOUNTS | accounts@nexushr.test | Test@12345 | EMP-FIN-001 | Payroll preparation |
-| USR-FIN-001 | FINANCE | finance@nexushr.test | Test@12345 | EMP-FIN-002 | Expense finance approval |
-| USR-REV-001 | PAYROLL_REVIEWER | payroll.reviewer@nexushr.test | Test@12345 | EMP-FIN-003 | Payroll review |
-| USR-APR-001 | PAYROLL_APPROVER | payroll.approver@nexushr.test | Test@12345 | EMP-FIN-004 | Payroll approval |
-| USR-SALES-001 | SALES | sales@nexushr.test | Test@12345 | None | Custom plan assignment |
-| USR-INACTIVE-001 | EMPLOYEE | inactive.employee@nexushr.test | Test@12345 | EMP-INACTIVE-001 | Inactive account denial |
+| USR-SA-001 | SUPER_ADMIN | superadmin@pid-hcms.test | Test@12345 | None | Platform admin, KYC, all permissions |
+| USR-ADMIN-001 | ADMIN | admin@pid-hcms.test | Test@12345 | EMP-HR-001 | Tenant admin, payroll run, settings |
+| USR-HR-001 | HR | hr.manager@pid-hcms.test | Test@12345 | EMP-HR-001 | Employee master, leave/attendance exceptions |
+| USR-MGR-001 | MANAGER | ananya.rao@pid-hcms.test | Test@12345 | EMP-MGR-001 | Team approvals, project management |
+| USR-EMP-001 | EMPLOYEE | rajesh.kumar@pid-hcms.test | Test@12345 | EMP-ENG-001 | ESS happy path |
+| USR-EMP-002 | EMPLOYEE | priya.sharma@pid-hcms.test | Test@12345 | EMP-ENG-002 | Leave/attendance edge cases |
+| USR-REC-001 | RECRUITER | recruiter@pid-hcms.test | Test@12345 | EMP-HR-002 | Recruitment pipeline |
+| USR-ONB-001 | ONBOARDING | onboarding@pid-hcms.test | Test@12345 | EMP-HR-003 | Checklist workflows |
+| USR-ACC-001 | ACCOUNTS | accounts@pid-hcms.test | Test@12345 | EMP-FIN-001 | Payroll preparation |
+| USR-FIN-001 | FINANCE | finance@pid-hcms.test | Test@12345 | EMP-FIN-002 | Expense finance approval |
+| USR-REV-001 | PAYROLL_REVIEWER | payroll.reviewer@pid-hcms.test | Test@12345 | EMP-FIN-003 | Payroll review |
+| USR-APR-001 | PAYROLL_APPROVER | payroll.approver@pid-hcms.test | Test@12345 | EMP-FIN-004 | Payroll approval |
+| USR-SALES-001 | SALES | sales@pid-hcms.test | Test@12345 | None | Custom plan assignment |
+| USR-INACTIVE-001 | EMPLOYEE | inactive.employee@pid-hcms.test | Test@12345 | EMP-INACTIVE-001 | Inactive account denial |
 
 ### 3. Organization Structure
 

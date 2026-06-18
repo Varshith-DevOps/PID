@@ -115,7 +115,7 @@ export default function AIAgentsPage() {
       {/* Header */}
       <div style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-          <span style={{ padding: '0.4rem 0.8rem', background: 'rgba(59,130,246,0.1)', color: '#60A5FA', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
+          <span style={{ padding: '0.4rem 0.8rem', background: 'rgba(0,167,181,0.1)', color: '#73E0E7', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
             INTELLIGENT LAYER ACTIVE
           </span>
         </div>
@@ -123,7 +123,7 @@ export default function AIAgentsPage() {
           AI Command Center
         </h1>
         <p style={{ color: '#94A3B8', marginTop: '0.5rem', fontSize: '1rem' }}>
-          Orchestrate and query NexusHR's four master-level autonomous AI compliance agents.
+          Orchestrate and query PID hcms's four master-level autonomous AI compliance agents.
         </p>
       </div>
 
@@ -135,14 +135,14 @@ export default function AIAgentsPage() {
           style={{ 
             padding: '1.5rem', 
             borderRadius: '16px', 
-            background: activeAgent === 'athena' ? 'rgba(59,130,246,0.1)' : '#0F172A',
-            border: activeAgent === 'athena' ? '2px solid #3B82F6' : '1px solid #1E293B',
+            background: activeAgent === 'athena' ? 'rgba(0,167,181,0.1)' : '#0F172A',
+            border: activeAgent === 'athena' ? '2px solid #00A7B5' : '1px solid #1E293B',
             cursor: 'pointer',
             transition: 'all 0.2s ease'
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ width: '40px', height: '40px', background: 'rgba(139,92,246,0.1)', color: '#A78BFA', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '40px', height: '40px', background: 'rgba(24,43,109,0.1)', color: '#00A7B5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               💬
             </div>
             <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
@@ -157,8 +157,8 @@ export default function AIAgentsPage() {
           style={{ 
             padding: '1.5rem', 
             borderRadius: '16px', 
-            background: activeAgent === 'jarvis' ? 'rgba(59,130,246,0.1)' : '#0F172A',
-            border: activeAgent === 'jarvis' ? '2px solid #3B82F6' : '1px solid #1E293B',
+            background: activeAgent === 'jarvis' ? 'rgba(0,167,181,0.1)' : '#0F172A',
+            border: activeAgent === 'jarvis' ? '2px solid #00A7B5' : '1px solid #1E293B',
             cursor: 'pointer',
             transition: 'all 0.2s ease'
           }}
@@ -179,8 +179,8 @@ export default function AIAgentsPage() {
           style={{ 
             padding: '1.5rem', 
             borderRadius: '16px', 
-            background: activeAgent === 'sherlock' ? 'rgba(59,130,246,0.1)' : '#0F172A',
-            border: activeAgent === 'sherlock' ? '2px solid #3B82F6' : '1px solid #1E293B',
+            background: activeAgent === 'sherlock' ? 'rgba(0,167,181,0.1)' : '#0F172A',
+            border: activeAgent === 'sherlock' ? '2px solid #00A7B5' : '1px solid #1E293B',
             cursor: 'pointer',
             transition: 'all 0.2s ease'
           }}
@@ -201,8 +201,8 @@ export default function AIAgentsPage() {
           style={{ 
             padding: '1.5rem', 
             borderRadius: '16px', 
-            background: activeAgent === 'winston' ? 'rgba(59,130,246,0.1)' : '#0F172A',
-            border: activeAgent === 'winston' ? '2px solid #3B82F6' : '1px solid #1E293B',
+            background: activeAgent === 'winston' ? 'rgba(0,167,181,0.1)' : '#0F172A',
+            border: activeAgent === 'winston' ? '2px solid #00A7B5' : '1px solid #1E293B',
             cursor: 'pointer',
             transition: 'all 0.2s ease'
           }}
@@ -238,7 +238,7 @@ export default function AIAgentsPage() {
                   <div style={{
                     padding: '1rem',
                     borderRadius: '12px',
-                    background: msg.sender === 'user' ? '#3B82F6' : '#1E293B',
+                    background: msg.sender === 'user' ? '#00A7B5' : '#1E293B',
                     color: '#FFFFFF',
                     fontSize: '0.9rem',
                     lineHeight: '1.5'
@@ -248,7 +248,7 @@ export default function AIAgentsPage() {
                   {msg.citations && msg.citations.length > 0 && (
                     <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {msg.citations.map((c, i) => (
-                        <span key={i} style={{ fontSize: '10px', color: '#60A5FA', background: 'rgba(59,130,246,0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                        <span key={i} style={{ fontSize: '10px', color: '#73E0E7', background: 'rgba(0,167,181,0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
                           📜 {c}
                         </span>
                       ))}
@@ -275,7 +275,7 @@ export default function AIAgentsPage() {
               <button 
                 type="submit"
                 disabled={athenaLoading}
-                style={{ padding: '0 2rem', background: '#3B82F6', border: 'none', borderRadius: '10px', color: '#FFFFFF', fontWeight: 'bold', cursor: 'pointer' }}
+                style={{ padding: '0 2rem', background: '#00A7B5', border: 'none', borderRadius: '10px', color: '#FFFFFF', fontWeight: 'bold', cursor: 'pointer' }}
               >
                 Send
               </button>
@@ -450,7 +450,7 @@ export default function AIAgentsPage() {
                   </div>
                   <div style={{ padding: '0.75rem', background: '#0F172A', borderRadius: '6px' }}>
                     <span style={{ color: '#64748B', fontSize: '11px', fontWeight: 'bold', display: 'block' }}>COMPUTED TAX EXEMPTION</span>
-                    <span style={{ color: '#3B82F6', fontSize: '18px', fontWeight: 'bold' }}>
+                    <span style={{ color: '#00A7B5', fontSize: '18px', fontWeight: 'bold' }}>
                       ₹{sherlockReport.extractedDetails.computedExemption}
                     </span>
                   </div>

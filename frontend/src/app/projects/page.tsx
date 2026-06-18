@@ -206,7 +206,7 @@ export default function ProjectsPage() {
       <main className="main-content">
         <div className="page-header">
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #ec4899, #8b5cf6)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #ec4899, #182B6D)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             </div>
             <div><h1 className="page-title">Projects</h1><p className="page-subtitle">Manage projects & tasks</p></div>

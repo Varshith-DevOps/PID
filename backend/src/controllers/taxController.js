@@ -49,7 +49,7 @@ const savePreviousEmployerIncome = async (req, res) => {
 
     // Log audit event
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'PREV_EMPLOYER_INCOME_UPDATE',
       entity: 'PreviousEmployerIncome',
       entityId: prevIncome.id,
@@ -108,7 +108,7 @@ const saveTaxDeclaration = async (req, res) => {
     });
 
     await logPayrollEvent({
-      userEmail: req.user?.email || 'admin@nexushr.com',
+      userEmail: req.user?.email || 'admin@pid-hcms.com',
       action: 'TAX_DECLARATION_UPDATE',
       entity: 'EmployeeTaxDeclaration',
       entityId: declaration.id,

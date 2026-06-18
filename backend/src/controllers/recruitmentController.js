@@ -504,7 +504,7 @@ const downloadOfferLetter = async (req, res) => {
     doc.pipe(res);
 
     // PDF Layout Styling
-    doc.fillColor('#0A2540').fontSize(24).text('NEXUS HRMS', { align: 'center' }).moveDown();
+    doc.fillColor('#0A2540').fontSize(24).text('PID HCMS', { align: 'center' }).moveDown();
     doc.strokeColor('#0A2540').lineWidth(2).moveTo(50, 80).lineTo(562, 80).stroke().moveDown(2);
 
     doc.fillColor('#333333').fontSize(14).text(`Date: ${new Date().toLocaleDateString()}`);
@@ -515,7 +515,7 @@ const downloadOfferLetter = async (req, res) => {
 
     doc.fillColor('#333333').fontSize(12).lineGap(6);
     doc.text(`Dear ${offer.applicant.fullName},`);
-    doc.text(`We are pleased to offer you employment with NexusHR for the position of ` +
+    doc.text(`We are pleased to offer you employment with PID hcms for the position of ` +
       `"${offer.applicant.jobOpening.title}". We were incredibly impressed by your background ` +
       `and interviews, and we are thrilled at the prospect of having you join our team.`);
     
@@ -532,7 +532,7 @@ const downloadOfferLetter = async (req, res) => {
     doc.moveDown(3);
     doc.text('Sincerely,', { align: 'left' });
     doc.text('HR Department', { align: 'left' });
-    doc.text('NexusHR Management System', { align: 'left' });
+    doc.text('PID hcms Management System', { align: 'left' });
 
     doc.end();
   } catch (error) {

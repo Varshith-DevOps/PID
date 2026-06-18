@@ -131,7 +131,7 @@ function CheckoutContent() {
         
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div>
-            <div style={{ fontWeight: 600, color: '#fff' }}>NexusHR {selectedPlan.name} Plan</div>
+            <div style={{ fontWeight: 600, color: '#fff' }}>PID hcms {selectedPlan.name} Plan</div>
             <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>Monthly billing</div>
           </div>
           <div style={{ fontWeight: 600, color: '#fff' }}>₹{selectedPlan.price.toLocaleString()}</div>

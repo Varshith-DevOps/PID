@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { login } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -32,9 +33,9 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0e1a', position: 'relative', overflow: 'hidden', fontFamily: 'system-ui, sans-serif' }}>
       {/* Animated background elements */}
-      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.12), transparent 70%)', top: '-100px', right: '-100px' }} />
-      <div style={{ position: 'absolute', width: '300px', height: '300px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.1), transparent 70%)', bottom: '-50px', left: '-50px' }} />
-      <div style={{ position: 'absolute', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(6,182,212,0.08), transparent 70%)', top: '40%', left: '20%' }} />
+      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,167,181,0.12), transparent 70%)', top: '-100px', right: '-100px' }} />
+      <div style={{ position: 'absolute', width: '300px', height: '300px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(24,43,109,0.1), transparent 70%)', bottom: '-50px', left: '-50px' }} />
+      <div style={{ position: 'absolute', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,167,181,0.08), transparent 70%)', top: '40%', left: '20%' }} />
 
       {/* Grid lines background */}
       <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)', backgroundSize: '60px 60px', opacity: 0.5 }} />
@@ -42,18 +43,11 @@ export default function LoginPage() {
       <div style={{ width: '100%', maxWidth: '420px', padding: '0 1rem', position: 'relative', zIndex: 1 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <Link href="/" style={{ textDecoration: 'none', display: 'inline-block' }}>
-            <div style={{ width: 64, height: 64, margin: '0 auto 1rem', borderRadius: '16px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 32px rgba(59,130,246,0.3)' }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </div>
+          <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', justifyContent: 'center', marginBottom: '1rem' }}>
+            <BrandLogo variant="dark" height={72} />
           </Link>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: 800, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.5px' }}>NexusHR</h1>
-          <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem', letterSpacing: '2px', textTransform: 'uppercase' }}>Human Resource Management</p>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff', letterSpacing: '0' }}>PID hcms</h1>
+          <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Human Capital Management System</p>
         </div>
 
         {/* Login Card */}
@@ -89,14 +83,14 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.85rem', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', color: 'white', border: 'none', borderRadius: '10px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.95rem', transition: 'all 0.3s ease', opacity: loading ? 0.7 : 1, boxShadow: '0 4px 16px rgba(59,130,246,0.3)', fontFamily: 'inherit', letterSpacing: '0.5px' }}>
+            <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.85rem', background: 'linear-gradient(135deg, #00A7B5, #182B6D)', color: 'white', border: 'none', borderRadius: '10px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.95rem', transition: 'all 0.3s ease', opacity: loading ? 0.7 : 1, boxShadow: '0 4px 16px rgba(0,167,181,0.3)', fontFamily: 'inherit', letterSpacing: '0.5px' }}>
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
 
           <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>New to NexusHR? </span>
-            <Link href="/signup" style={{ fontSize: '0.85rem', color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}>Get Started</Link>
+            <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>New to PID hcms? </span>
+            <Link href="/signup" style={{ fontSize: '0.85rem', color: '#00A7B5', textDecoration: 'none', fontWeight: 600 }}>Get Started</Link>
           </div>
         </div>
 

@@ -132,7 +132,7 @@ export default function KycOnboardingPage() {
             </p>
             {user.companyCin && (
               <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                Active CIN: <code style={{ color: '#60a5fa' }}>{user.companyCin}</code>
+                Active CIN: <code style={{ color: '#73E0E7' }}>{user.companyCin}</code>
               </div>
             )}
           </div>

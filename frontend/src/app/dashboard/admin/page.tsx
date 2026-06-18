@@ -27,8 +27,8 @@ interface ResourceData {
   bench: Array<{ id: string; name: string; department: string; jobTitle: string; activeTasks: number }>;
 }
 
-const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
-const RESOURCE_COLORS = ['#3b82f6', '#ef4444'];
+const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#00A7B5'];
+const RESOURCE_COLORS = ['#00A7B5', '#ef4444'];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -36,7 +36,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       <div style={{ background: 'rgba(17,24,39,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.75rem 1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
         <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{label}</p>
         {payload.map((entry: any, idx: number) => (
-          <p key={idx} style={{ color: entry.color || '#3b82f6', fontWeight: 700, fontSize: '0.9rem' }}>{entry.name}: {entry.value}</p>
+          <p key={idx} style={{ color: entry.color || '#00A7B5', fontWeight: 700, fontSize: '0.9rem' }}>{entry.name}: {entry.value}</p>
         ))}
       </div>
     );
@@ -139,7 +139,7 @@ export default function AdminDashboard() {
                 </ResponsiveContainer>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '0.5rem' }}>
                   <div>
-                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#3b82f6' }}>{resources.occupiedCount}</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#00A7B5' }}>{resources.occupiedCount}</span>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Occupied</div>
                   </div>
                   <div>
@@ -221,7 +221,7 @@ export default function AdminDashboard() {
                 <XAxis dataKey="employee.name" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.5)' }} axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.5)' }} axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="utilization" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="utilization" fill="#00A7B5" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

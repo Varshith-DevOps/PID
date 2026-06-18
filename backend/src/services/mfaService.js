@@ -69,7 +69,7 @@ const generateRecoveryCodes = () => Array.from({ length: RECOVERY_CODE_COUNT }, 
   return `${raw.slice(0, 5)}-${raw.slice(5)}`;
 });
 
-const buildOtpAuthUrl = ({ issuer = 'NexusHR', email, secret }) => {
+const buildOtpAuthUrl = ({ issuer = 'PID hcms', email, secret }) => {
   const label = encodeURIComponent(`${issuer}:${email}`);
   const params = new URLSearchParams({
     secret,

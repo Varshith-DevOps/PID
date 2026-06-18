@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiEvents } from './api';
 import { normalizeManualMessage } from './userMessages';
+import BrandLogo from '@/components/BrandLogo';
 
 interface Toast {
   id: string;
@@ -237,8 +238,8 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                   width: '100%',
                   height: '100%',
                   border: '4px solid rgba(255, 255, 255, 0.05)',
-                  borderTop: '4px solid #3b82f6',
-                  borderRight: '4px solid #8b5cf6',
+                  borderTop: '4px solid #00A7B5',
+                  borderRight: '4px solid #182B6D',
                   borderRadius: '50%',
                   animation: 'spin-slow 0.8s linear infinite'
                 }}
@@ -247,7 +248,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                 style={{
                   position: 'absolute',
                   inset: '10px',
-                  border: '2px dashed rgba(6, 182, 212, 0.2)',
+                  border: '2px dashed rgba(0, 167, 181, 0.2)',
                   borderRadius: '50%',
                   animation: 'spin-slow 2s linear infinite reverse'
                 }}
@@ -255,20 +256,9 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
             </div>
 
             {/* Glowing Accent Title */}
-            <div
-              style={{
-                fontSize: '1rem',
-                fontWeight: 700,
-                letterSpacing: '2px',
-                textTransform: 'uppercase',
-                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                marginBottom: '12px'
-              }}
-            >
-              NexusHR
-            </div>
+              <div style={{ marginBottom: '12px' }}>
+                <BrandLogo variant="dark" height={38} />
+              </div>
 
             {/* Loading Message */}
             <div

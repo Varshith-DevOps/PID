@@ -78,7 +78,7 @@ const validateAttendancePunch = async (req, res, next) => {
       if (!signature || !deviceId) {
         return res.status(400).json({ error: 'Security: Signed mobile requests require device ID and signature.' });
       }
-      const secret = process.env.MOBILE_APP_SECRET || 'nexus-hrms-secret-key-123';
+      const secret = process.env.MOBILE_APP_SECRET || 'pid-hcms-secret-key-123';
       const expectedSignature = crypto
         .createHmac('sha256', secret)
         .update(`${employeeId}:${timestamp}:${deviceId}`)

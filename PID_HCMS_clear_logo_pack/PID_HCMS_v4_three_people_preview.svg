@@ -1,0 +1,88 @@
+<svg width="1600" height="1000" viewBox="0 0 1600 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1600" height="1000" fill="#F6F8FB"/>
+<text x="90" y="92" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="42" font-weight="800" fill="#182B6D">PID hcms — simplified clear logo</text>
+<text x="90" y="140" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="24" fill="#667085">The confusing right-side dots and orange arrow are removed. The mark is only three connected people.</text>
+<rect x="90" y="200" width="1420" height="430" rx="36" fill="#FFFFFF"/>
+<g transform="translate(90,195)">
+<rect width="1440" height="440" fill="#FFFFFF"/>
+
+    <defs>
+      <linearGradient id="pidIconGradient" x1="90" y1="85" x2="350" y2="345" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#182B6D"/>
+        <stop offset="0.62" stop-color="#0B7890"/>
+        <stop offset="1" stop-color="#00A7B5"/>
+      </linearGradient>
+      <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#101828" flood-opacity="0.14"/></filter>
+    </defs>
+    <rect x="90" y="85" width="260" height="260" rx="58" fill="url(#pidIconGradient)" filter="url(#shadow)"/>
+    <path d="M 220.0 163.0 L 163.0 213.0 L 277.0 213.0 L 220.0 163.0" fill="none" stroke="#D7F8FB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>
+    <circle cx="163.0" cy="213.0" r="24" fill="#BFEFF4"/>
+    <path d="M 124.0 297.0 C 129.0 261.0, 143.0 238.0, 163.0 238.0 C 184.0 238.0, 198.0 261.0, 203.0 297.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="277.0" cy="213.0" r="24" fill="#BFEFF4"/>
+    <path d="M 237.0 297.0 C 243.0 261.0, 257.0 238.0, 277.0 238.0 C 298.0 238.0, 312.0 261.0, 316.0 297.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="220.0" cy="163.0" r="29" fill="#FFFFFF"/>
+    <path d="M 168.0 297.0 C 174.0 253.0, 194.0 207.0, 220.0 207.0 C 247.0 207.0, 266.0 253.0, 272.0 297.0 Z" fill="#FFFFFF"/>
+    
+<text x="420" y="185" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="92" font-weight="800" letter-spacing="-2" fill="#182B6D">PID</text>
+<text x="630" y="185" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="-1" fill="#00A7B5">hcms</text>
+<rect x="420" y="226" width="170" height="5" rx="2.5" fill="#FFB23F"/>
+<rect x="604" y="228" width="370" height="2" rx="1" fill="#E9EEF5"/>
+<text x="420" y="282" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="36" font-weight="500" letter-spacing="0.3" fill="#667085">People • Intelligence • Development</text>
+<text x="420" y="335" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="30" font-weight="400" letter-spacing="0.2" fill="#8A94A6">Human Capital Management System</text>
+</g>
+<rect x="90" y="690" width="430" height="230" rx="28" fill="#FFFFFF"/>
+
+    <defs>
+      <linearGradient id="pidIconGradient" x1="140" y1="730" x2="290" y2="880" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#182B6D"/>
+        <stop offset="0.62" stop-color="#0B7890"/>
+        <stop offset="1" stop-color="#00A7B5"/>
+      </linearGradient>
+      
+    </defs>
+    <rect x="140" y="730" width="150" height="150" rx="58" fill="url(#pidIconGradient)" />
+    <path d="M 215.0 775.0 L 182.1153846153846 803.8461538461538 L 247.88461538461536 803.8461538461538 L 215.0 775.0" fill="none" stroke="#D7F8FB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>
+    <circle cx="182.1153846153846" cy="803.8461538461538" r="24" fill="#BFEFF4"/>
+    <path d="M 159.6153846153846 852.3076923076923 C 162.5 831.5384615384615, 170.57692307692307 818.2692307692307, 182.1153846153846 818.2692307692307 C 194.23076923076923 818.2692307692307, 202.3076923076923 831.5384615384615, 205.19230769230768 852.3076923076923 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="247.88461538461536" cy="803.8461538461538" r="24" fill="#BFEFF4"/>
+    <path d="M 224.80769230769232 852.3076923076923 C 228.26923076923077 831.5384615384615, 236.34615384615384 818.2692307692307, 247.88461538461536 818.2692307692307 C 260.0 818.2692307692307, 268.0769230769231 831.5384615384615, 270.38461538461536 852.3076923076923 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="215.0" cy="775.0" r="29" fill="#FFFFFF"/>
+    <path d="M 185.0 852.3076923076923 C 188.46153846153845 826.9230769230769, 200.0 800.3846153846154, 215.0 800.3846153846154 C 230.57692307692307 800.3846153846154, 241.53846153846155 826.9230769230769, 245.0 852.3076923076923 Z" fill="#FFFFFF"/>
+    
+<text x="315" y="760" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="24" font-weight="700" fill="#182B6D">Meaning</text>
+<text x="315" y="800" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="18" fill="#667085">3 people = workforce</text>
+<text x="315" y="832" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="18" fill="#667085">Connection lines = intelligent system</text>
+<text x="315" y="864" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="18" fill="#667085">Higher center person = development</text>
+<rect x="570" y="690" width="410" height="230" rx="28" fill="#0B1028"/>
+<g transform="translate(572,710) scale(.285)">
+<rect width="1440" height="440" fill="#0B1028"/>
+
+    <defs>
+      <linearGradient id="pidIconGradient" x1="90" y1="85" x2="350" y2="345" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#182B6D"/>
+        <stop offset="0.62" stop-color="#0B7890"/>
+        <stop offset="1" stop-color="#00A7B5"/>
+      </linearGradient>
+      
+    </defs>
+    <rect x="90" y="85" width="260" height="260" rx="58" fill="url(#pidIconGradient)" />
+    <path d="M 220.0 163.0 L 163.0 213.0 L 277.0 213.0 L 220.0 163.0" fill="none" stroke="#D7F8FB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>
+    <circle cx="163.0" cy="213.0" r="24" fill="#BFEFF4"/>
+    <path d="M 124.0 297.0 C 129.0 261.0, 143.0 238.0, 163.0 238.0 C 184.0 238.0, 198.0 261.0, 203.0 297.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="277.0" cy="213.0" r="24" fill="#BFEFF4"/>
+    <path d="M 237.0 297.0 C 243.0 261.0, 257.0 238.0, 277.0 238.0 C 298.0 238.0, 312.0 261.0, 316.0 297.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="220.0" cy="163.0" r="29" fill="#FFFFFF"/>
+    <path d="M 168.0 297.0 C 174.0 253.0, 194.0 207.0, 220.0 207.0 C 247.0 207.0, 266.0 253.0, 272.0 297.0 Z" fill="#FFFFFF"/>
+    
+<text x="420" y="185" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="92" font-weight="800" letter-spacing="-2" fill="#FFFFFF">PID</text>
+<text x="630" y="185" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="-1" fill="#00A7B5">hcms</text>
+<rect x="420" y="226" width="170" height="5" rx="2.5" fill="#FFB23F"/>
+<rect x="604" y="228" width="370" height="2" rx="1" fill="#20305D"/>
+<text x="420" y="282" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="36" font-weight="500" letter-spacing="0.3" fill="#D0D5DD">People • Intelligence • Development</text>
+<text x="420" y="335" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="30" font-weight="400" letter-spacing="0.2" fill="#AAB2C1">Human Capital Management System</text>
+</g>
+<rect x="1030" y="690" width="480" height="230" rx="28" fill="#FFFFFF"/>
+<circle cx="1100" cy="758" r="22" fill="#182B6D"/><text x="1140" y="766" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="21" fill="#667085">Navy: trust + global enterprise</text>
+<circle cx="1100" cy="824" r="22" fill="#00A7B5"/><text x="1140" y="832" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="21" fill="#667085">Teal: innovation + human growth</text>
+<circle cx="1100" cy="890" r="22" fill="#FFB23F"/><text x="1140" y="898" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="21" fill="#667085">Amber: energy, only as underline</text>
+</svg>

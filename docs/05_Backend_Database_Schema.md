@@ -2,7 +2,7 @@
 
 ## 1. Database Architecture Overview
 
-NexusHR uses **Prisma ORM (v6)** to manage migrations and database queries.
+PID hcms uses **Prisma ORM (v6)** to manage migrations and database queries.
 *   **Database Engine:** SQLite (Local Dev file at `backend/prisma/dev.db`).
 *   **Schema Schema Source:** [`backend/prisma/schema.prisma`](file:///e:/HRMS_application/backend/prisma/schema.prisma) (1,348 lines).
 *   **Statutory Data Seeding:** Seed scripts handle base rates (EPF/ESIC constants, LWF slabs, and professional tax ceilings) in SQLite on setup.

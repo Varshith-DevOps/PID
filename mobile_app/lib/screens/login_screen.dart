@@ -81,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF3B82F6).withOpacity(0.12),
+                color: const Color(0xFF00A7B5).withOpacity(0.12),
               ),
             ),
           ),
@@ -93,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF8B5CF6).withOpacity(0.08),
+                color: const Color(0xFF182B6D).withOpacity(0.12),
               ),
             ),
           ),
@@ -105,36 +105,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 60),
-                  // App Icon
                   Center(
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF3B82F6).withOpacity(0.3),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.group_rounded,
-                        color: Colors.white,
-                        size: 38,
-                      ),
+                    child: Image.asset(
+                      'assets/brand/pid_hcms_logo.png',
+                      height: 92,
+                      fit: BoxFit.contain,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 18),
                   const Text(
-                    'NexusHR',
+                    'PID hcms',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 32,
@@ -249,12 +229,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 52,
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
+                              colors: [Color(0xFF182B6D), Color(0xFF0B7890), Color(0xFF00A7B5)],
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF3B82F6).withOpacity(0.2),
+                                color: const Color(0xFF00A7B5).withOpacity(0.2),
                                 blurRadius: 16,
                                 offset: const Offset(0, 4),
                               ),
@@ -327,7 +307,7 @@ class _LoginScreenState extends State<LoginScreen> {
           obscureText: obscureText,
           keyboardType: keyboardType,
           style: const TextStyle(color: Colors.white, fontSize: 15),
-          cursorColor: const Color(0xFF3B82F6),
+          cursorColor: const Color(0xFF00A7B5),
           validator: validator,
           decoration: InputDecoration(
             hintText: hint,
@@ -348,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+              borderSide: const BorderSide(color: Color(0xFF00A7B5), width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

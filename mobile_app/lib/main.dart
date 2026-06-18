@@ -5,17 +5,17 @@ import 'screens/dashboard_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const NexusHRApp());
+  runApp(const PIDHcmsApp());
 }
 
-class NexusHRApp extends StatefulWidget {
-  const NexusHRApp({super.key});
+class PIDHcmsApp extends StatefulWidget {
+  const PIDHcmsApp({super.key});
 
   @override
-  State<NexusHRApp> createState() => _NexusHRAppState();
+  State<PIDHcmsApp> createState() => _PIDHcmsAppState();
 }
 
-class _NexusHRAppState extends State<NexusHRApp> {
+class _PIDHcmsAppState extends State<PIDHcmsApp> {
   late AuthProvider _authProvider;
 
   @override
@@ -30,16 +30,16 @@ class _NexusHRAppState extends State<NexusHRApp> {
       listenable: _authProvider,
       builder: (context, child) {
         return MaterialApp(
-          title: 'NexusHR Mobile',
+          title: 'PID hcms Mobile',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.dark,
-            primaryColor: const Color(0xFF2DD4BF),
-            scaffoldBackgroundColor: const Color(0xFF0B1020),
+            primaryColor: const Color(0xFF00A7B5),
+            scaffoldBackgroundColor: const Color(0xFF07111F),
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF2DD4BF),
-              secondary: Color(0xFFF59E0B),
+              primary: Color(0xFF00A7B5),
+              secondary: Color(0xFFFFB23F),
               surface: Color(0xFF111827),
               error: Color(0xFFFB7185),
             ),
@@ -58,7 +58,7 @@ class _NexusHRAppState extends State<NexusHRApp> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF2DD4BF)),
+                borderSide: const BorderSide(color: Color(0xFF00A7B5)),
               ),
             ),
             snackBarTheme: const SnackBarThemeData(

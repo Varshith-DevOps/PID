@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function PrivacyPage() {
   return (
@@ -8,13 +9,7 @@ export default function PrivacyPage() {
       {/* Navbar */}
       <nav style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.5rem', position: 'relative', zIndex: 10 }}>
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: '#fff' }}>
-          <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-            </svg>
-          </div>
-          <span style={{ fontSize: '1.3rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>NexusHR</span>
+          <BrandLogo variant="dark" height={42} />
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
           <Link href="/features" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500 }}>Features</Link>
@@ -30,7 +25,7 @@ export default function PrivacyPage() {
 
         <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fff', marginTop: '2.5rem', marginBottom: '1rem' }}>1. Data Storage & Multi-Tenancy</h2>
         <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '1.5rem' }}>
-          NexusHR is built on a secure multi-tenant SQLite/Prisma architecture. Tenant isolation middlewares strictly scope query executions so your company's digital employee records, payroll, shifts, and leaves are completely partitioned from other organizations.
+          PID hcms is built on a secure multi-tenant SQLite/Prisma architecture. Tenant isolation middlewares strictly scope query executions so your company's digital employee records, payroll, shifts, and leaves are completely partitioned from other organizations.
         </p>
 
         <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fff', marginTop: '2.5rem', marginBottom: '1rem' }}>2. Information We Collect</h2>
@@ -47,7 +42,7 @@ export default function PrivacyPage() {
       {/* Footer */}
       <footer style={{ borderTop: '1px solid rgba(255,255,255,0.05)', background: '#05070e', padding: '4rem 1.5rem 3rem' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.3)' }}>
-          <span>&copy; {new Date().getFullYear()} NexusHR. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} PID hcms. All rights reserved.</span>
           <div style={{ display: 'flex', gap: '1.5rem' }}>
             <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</Link>
             <Link href="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms</Link>

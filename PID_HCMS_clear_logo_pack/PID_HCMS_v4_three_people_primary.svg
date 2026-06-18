@@ -1,0 +1,27 @@
+<svg width="1440" height="440" viewBox="0 0 1440 440" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="440" fill="#FFFFFF"/>
+
+    <defs>
+      <linearGradient id="pidIconGradient" x1="90" y1="85" x2="350" y2="345" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#182B6D"/>
+        <stop offset="0.62" stop-color="#0B7890"/>
+        <stop offset="1" stop-color="#00A7B5"/>
+      </linearGradient>
+      <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#101828" flood-opacity="0.14"/></filter>
+    </defs>
+    <rect x="90" y="85" width="260" height="260" rx="58" fill="url(#pidIconGradient)" filter="url(#shadow)"/>
+    <path d="M 220.0 163.0 L 163.0 213.0 L 277.0 213.0 L 220.0 163.0" fill="none" stroke="#D7F8FB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.88"/>
+    <circle cx="163.0" cy="213.0" r="24" fill="#BFEFF4"/>
+    <path d="M 124.0 297.0 C 129.0 261.0, 143.0 238.0, 163.0 238.0 C 184.0 238.0, 198.0 261.0, 203.0 297.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="277.0" cy="213.0" r="24" fill="#BFEFF4"/>
+    <path d="M 237.0 297.0 C 243.0 261.0, 257.0 238.0, 277.0 238.0 C 298.0 238.0, 312.0 261.0, 316.0 297.0 Z" fill="#BFEFF4" opacity="0.96"/>
+    <circle cx="220.0" cy="163.0" r="29" fill="#FFFFFF"/>
+    <path d="M 168.0 297.0 C 174.0 253.0, 194.0 207.0, 220.0 207.0 C 247.0 207.0, 266.0 253.0, 272.0 297.0 Z" fill="#FFFFFF"/>
+    
+<text x="420" y="185" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="92" font-weight="800" letter-spacing="-2" fill="#182B6D">PID</text>
+<text x="630" y="185" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="-1" fill="#00A7B5">hcms</text>
+<rect x="420" y="226" width="170" height="5" rx="2.5" fill="#FFB23F"/>
+<rect x="604" y="228" width="370" height="2" rx="1" fill="#E9EEF5"/>
+<text x="420" y="282" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="36" font-weight="500" letter-spacing="0.3" fill="#667085">People • Intelligence • Development</text>
+<text x="420" y="335" font-family="Inter, Aptos, Segoe UI, Arial, sans-serif" font-size="30" font-weight="400" letter-spacing="0.2" fill="#8A94A6">Human Capital Management System</text>
+</svg>

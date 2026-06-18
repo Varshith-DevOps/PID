@@ -2,7 +2,7 @@
 
 ## 1. Readiness Assessment
 
-Following a static code audit of the NexusHR system, the application is highly functional but presents critical bugs that prevent immediate enterprise deployment. In particular, statutory calculations (EPF, ESI, Gratuity, Professional Tax) require adjustment to comply with Indian labor laws, and several transaction-heavy modules (Exit F&F, Leave applications) contain logic failures that trigger server crashes or data corruption.
+Following a static code audit of the PID hcms system, the application is highly functional but presents critical bugs that prevent immediate enterprise deployment. In particular, statutory calculations (EPF, ESI, Gratuity, Professional Tax) require adjustment to comply with Indian labor laws, and several transaction-heavy modules (Exit F&F, Leave applications) contain logic failures that trigger server crashes or data corruption.
 
 ---
 
@@ -10,7 +10,7 @@ Following a static code audit of the NexusHR system, the application is highly f
 
 ```mermaid
 gantt
-    title NexusHR Action Roadmap
+    title PID hcms Action Roadmap
     dateFormat  YYYY-MM-DD
     section Phase 1: Stability
     Exit F&F Remarks Crash Fix     :active, p1_1, 2026-06-15, 3d

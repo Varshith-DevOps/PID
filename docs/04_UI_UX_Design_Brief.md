@@ -1,8 +1,8 @@
-# 04. UI/UX Design Brief — NexusHR HRMS
+# 04. UI/UX Design Brief — PID hcms
 
 ## 1. Visual Design Goal
 
-The objective of the NexusHR UI is to provide a premium, modern, glassmorphic dark-mode experience that makes daily HR tasks feel fluid, simple, and clean. The application steers away from traditional default white table formats in favor of a curated, dark-navy cockpit interface that reduces eye strain and groups actions clearly.
+The objective of the PID hcms UI is to provide a premium, modern, glassmorphic dark-mode experience that makes daily HR tasks feel fluid, simple, and clean. The application steers away from traditional default white table formats in favor of a curated, dark-navy cockpit interface that reduces eye strain and groups actions clearly.
 
 ---
 
@@ -31,8 +31,9 @@ The system styles are driven entirely by custom CSS variables in `globals.css`:
 *   `--bg-secondary`: `#111827` (Charcoal Blue)
 *   `--bg-card`: `rgba(255, 255, 255, 0.04)` (Glass Layer)
 *   `--border-color`: `rgba(255, 255, 255, 0.08)` (Subtle Boundary)
-*   `--accent-blue`: `#3b82f6` (System Blue)
-*   `--accent-violet`: `#8b5cf6` (System Violet)
+*   `--accent-blue`: `#182B6D` (PID Navy)
+*   `--accent-cyan`: `#00A7B5` (PID Teal)
+*   `--accent-gold`: `#FFB23F` (PID Gold)
 *   `--success`: `#10b981` (Emerald Green)
 *   `--warning`: `#f59e0b` (Amber Orange)
 *   `--danger`: `#ef4444` (Crimson Red)
@@ -74,7 +75,7 @@ The system styles are driven entirely by custom CSS variables in `globals.css`:
 
 ```
 +-----------------------------------------------------------------+
-|  NexusHR           [ Q Search Employee... ]   (User Profile)    |
+|  PID hcms           [ Q Search Employee... ]   (User Profile)    |
 +-----------------------------------------------------------------+
 |  (Home)      |                                                  |
 |  Employees   |   Welcome Back, Priya!                           |

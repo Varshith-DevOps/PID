@@ -104,7 +104,7 @@ class AuthProvider extends ChangeNotifier {
     } catch (_) {
       _isLoading = false;
       notifyListeners();
-      return 'Cannot reach NexusHR API. Check server URL and network connection.';
+      return 'Cannot reach PID hcms API. Check server URL and network connection.';
     }
   }
 

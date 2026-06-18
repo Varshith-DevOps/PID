@@ -1,10 +1,10 @@
-# 02. Technical Requirements Document (TRD) - NexusHR HRMS
+# 02. Technical Requirements Document (TRD) - PID hcms
 
 ## 1. Document Control
 
 | Item | Details |
 | --- | --- |
-| Application | NexusHR HRMS |
+| Application | PID hcms |
 | Document Type | Technical Requirements Document |
 | Primary Audience | Fullstack developers, QA engineers, DevOps, security reviewers, implementation partners |
 | Current Local Platform | Web application with backend API and optional Flutter mobile app code |
@@ -88,7 +88,7 @@ HRMS_application/
 
 ## 4. High-Level Architecture
 
-NexusHR is implemented as a three-tier HRMS system.
+PID hcms is implemented as a three-tier HRMS system.
 
 ```mermaid
 flowchart TD

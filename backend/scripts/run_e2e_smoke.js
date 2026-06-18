@@ -1,5 +1,5 @@
 /**
- * Non-destructive production-like E2E smoke suite for NexusHR.
+ * Non-destructive production-like E2E smoke suite for PID hcms.
  *
  * Requires the backend to be running at http://localhost:5000.
  * Optionally checks frontend pages at FRONTEND_URL, default http://localhost:3000.

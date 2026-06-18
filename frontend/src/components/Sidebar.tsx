@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
+import BrandLogo from '@/components/BrandLogo';
 
 type NavItem = {
   label: string;
@@ -64,11 +65,11 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
         {user.companyLogo ? (
           <img src={user.companyLogo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'contain' }} />
         ) : (
-          <div style={{ width: '32px', height: '32px', background: 'rgba(59,130,246,0.2)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#3b82f6' }}>N</div>
+          <BrandLogo compact height={34} />
         )}
         <div style={{ overflow: 'hidden' }}>
-          <h1 style={{ fontSize: '1.05rem', fontWeight: 800, lineHeight: 1.2, color: '#fff', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', margin: 0 }}>{user.companyName || 'NexusHR'}</h1>
-          <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', display: 'block', letterSpacing: '0.5px' }}>Management System</span>
+          <h1 style={{ fontSize: '1.05rem', fontWeight: 800, lineHeight: 1.2, color: '#fff', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', margin: 0 }}>{user.companyName || 'PID hcms'}</h1>
+          <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', display: 'block', letterSpacing: '0.5px' }}>Human Capital</span>
         </div>
       </div>
 
@@ -181,7 +182,7 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
                 : 'Under verification. Access restricted to Attendance & Leave.'}
             </span>
             {isAdmin && (
-              <Link href="/kyc" style={{ marginTop: '6px', color: '#60a5fa', textDecoration: 'underline', fontWeight: 600 }}>
+              <Link href="/kyc" style={{ marginTop: '6px', color: '#73E0E7', textDecoration: 'underline', fontWeight: 600 }}>
                 Complete KYC
               </Link>
             )}

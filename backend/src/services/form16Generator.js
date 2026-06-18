@@ -62,7 +62,7 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
 
       // Left Column (Employer Details)
       doc.fontSize(9).font('Helvetica-Bold').text('Name and Address of the Employer:', 45, tableTop + 5);
-      doc.font('Helvetica').text('NexusHR Solutions Private Limited', 45, tableTop + 20);
+      doc.font('Helvetica').text('PID hcms Solutions Private Limited', 45, tableTop + 20);
       doc.text('12th Floor, Cyber Towers, Hitec City,', 45, tableTop + 32);
       doc.text('Hyderabad, Telangana, 500081', 45, tableTop + 44);
 
@@ -146,7 +146,7 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
 
       // Signature Section
       doc.fontSize(9).font('Helvetica-Bold').text('Verification / Digital Signature:', 40, doc.y);
-      doc.font('Helvetica').text('I, Director of NexusHR Solutions Pvt Ltd, do hereby certify that a sum of Rs.' + taxDetails.totalAnnualTax.toFixed(2) + ' has been deducted and deposited to the credit of Central Government.', 40, doc.y + 10, { width: 530 });
+      doc.font('Helvetica').text('I, Director of PID hcms Solutions Pvt Ltd, do hereby certify that a sum of Rs.' + taxDetails.totalAnnualTax.toFixed(2) + ' has been deducted and deposited to the credit of Central Government.', 40, doc.y + 10, { width: 530 });
       
       doc.moveDown(3);
       doc.font('Helvetica-Bold').text('Digitally Signed by: Authorized Signatory', 40, doc.y);

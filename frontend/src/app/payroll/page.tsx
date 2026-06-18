@@ -450,7 +450,7 @@ export default function PayrollPage() {
       <main className="main-content">
         <div className="page-header">
           <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>
+            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #182B6D, #0B7890)' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
             </div>
             <div><h1 className="page-title">Payroll</h1><p className="page-subtitle">Process payroll & manage salary structures</p></div>
@@ -549,7 +549,7 @@ export default function PayrollPage() {
               </div>
 
               <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
-                <div className="stat-card" style={{ borderLeft: '3px solid var(--accent-blue)', background: 'rgba(59, 130, 246, 0.05)' }}><div className="stat-card-value text-info" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.3)' }}>{preflight?.summary?.activeEmployees || 0}</div><div className="stat-card-label">Active Employees</div></div>
+                <div className="stat-card" style={{ borderLeft: '3px solid var(--accent-blue)', background: 'rgba(0, 167, 181, 0.05)' }}><div className="stat-card-value text-info" style={{ textShadow: '0 0 10px rgba(0, 167, 181, 0.3)' }}>{preflight?.summary?.activeEmployees || 0}</div><div className="stat-card-label">Active Employees</div></div>
                 <div className="stat-card" style={{ borderLeft: '3px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}><div className="stat-card-value text-warning" style={{ textShadow: '0 0 10px rgba(245, 158, 11, 0.3)' }}>{preflight?.summary?.lopDays || 0}</div><div className="stat-card-label">LOP Days</div></div>
                 <div className="stat-card" style={{ borderLeft: '3px solid var(--success)', background: 'rgba(16, 185, 129, 0.05)' }}><div className="stat-card-value text-success" style={{ textShadow: '0 0 10px rgba(16, 185, 129, 0.3)' }}>{preflight?.summary?.approvedOvertimeHours || 0}</div><div className="stat-card-label">Approved OT Hours</div></div>
                 <div className="stat-card" style={{ borderLeft: '3px solid var(--danger)', background: 'rgba(239, 68, 68, 0.05)' }}><div className="stat-card-value text-danger" style={{ textShadow: '0 0 10px rgba(239, 68, 68, 0.3)' }}>{preflight?.summary?.pendingOvertime || 0}</div><div className="stat-card-label">Pending OT</div></div>
@@ -702,7 +702,7 @@ export default function PayrollPage() {
                         statusColor = 'rgba(245, 158, 11, 0.05)';
                         borderStyle = '1px solid var(--warning)';
                       } else if (isActive) {
-                        statusColor = 'rgba(59, 130, 246, 0.08)';
+                        statusColor = 'rgba(0, 167, 181, 0.08)';
                         borderStyle = '1px solid var(--accent-blue)';
                       }
 
@@ -1170,7 +1170,7 @@ export default function PayrollPage() {
               <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>Employees</h3>
               <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
                 {employees.map((emp) => (
-                  <div key={emp.id} onClick={() => loadStructure(emp.id)} style={{ padding: '0.75rem', cursor: 'pointer', background: selectedEmployee?.id === emp.id ? 'rgba(59,130,246,0.15)' : 'transparent', borderRadius: 'var(--radius-sm)', marginBottom: '0.25rem', transition: 'var(--transition)' }}>
+                  <div key={emp.id} onClick={() => loadStructure(emp.id)} style={{ padding: '0.75rem', cursor: 'pointer', background: selectedEmployee?.id === emp.id ? 'rgba(0,167,181,0.15)' : 'transparent', borderRadius: 'var(--radius-sm)', marginBottom: '0.25rem', transition: 'var(--transition)' }}>
                     <div style={{ fontWeight: 600, color: selectedEmployee?.id === emp.id ? 'var(--accent-blue)' : 'var(--text-primary)', fontSize: '0.9rem' }}>{emp.firstName} {emp.lastName}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{emp.employeeId}</div>
                   </div>

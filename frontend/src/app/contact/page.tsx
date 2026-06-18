@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { submitContactRequest } from '@/lib/api';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function ContactPage() {
   const [name, setName] = useState('');
@@ -41,13 +42,7 @@ export default function ContactPage() {
       {/* Navbar */}
       <nav style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.5rem', position: 'relative', zIndex: 10 }}>
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: '#fff' }}>
-          <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-            </svg>
-          </div>
-          <span style={{ fontSize: '1.3rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>NexusHR</span>
+          <BrandLogo variant="dark" height={42} />
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
           <Link href="/features" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500 }}>Features</Link>
@@ -56,7 +51,7 @@ export default function ContactPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Link href="/login" style={{ color: '#fff', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 600, padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)' }}>Sign In</Link>
-          <Link href="/signup" style={{ textDecoration: 'none', fontSize: '0.9rem', fontWeight: 700, padding: '0.5rem 1.25rem', borderRadius: '8px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', color: '#fff' }}>Start Trial</Link>
+          <Link href="/signup" style={{ textDecoration: 'none', fontSize: '0.9rem', fontWeight: 700, padding: '0.5rem 1.25rem', borderRadius: '8px', background: 'linear-gradient(135deg, #00A7B5, #182B6D)', color: '#fff' }}>Start Trial</Link>
         </div>
       </nav>
 
@@ -64,15 +59,15 @@ export default function ContactPage() {
       <section style={{ maxWidth: '1000px', margin: '0 auto', padding: '5rem 1.5rem 8rem', display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '4rem' }}>
         {/* Text Area */}
         <div>
-          <h1 style={{ fontSize: '2.8rem', fontWeight: 900, marginBottom: '1.5rem', background: 'linear-gradient(to right, #fff, #93c5fd)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Connect With Our HR Specialists</h1>
+          <h1 style={{ fontSize: '2.8rem', fontWeight: 900, marginBottom: '1.5rem', background: 'linear-gradient(to right, #fff, #BFEFF4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Connect With Our HR Specialists</h1>
           <p style={{ fontSize: '1.05rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, marginBottom: '2.5rem' }}>
             Looking for custom pricing for 500+ employees, an on-premise cloud deployment architecture, or a tailored product demo? Let us know.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(0,167,181,0.1)', border: '1px solid rgba(0,167,181,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00A7B5" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
               </div>
               <div>
                 <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Phone Support</div>
@@ -81,12 +76,12 @@ export default function ContactPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(24,43,109,0.1)', border: '1px solid rgba(24,43,109,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#182B6D" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
               </div>
               <div>
                 <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Sales Email</div>
-                <div style={{ fontSize: '0.95rem', color: '#fff', fontWeight: 600 }}>sales@nexushr.com</div>
+                <div style={{ fontSize: '0.95rem', color: '#fff', fontWeight: 600 }}>sales@pid-hcms.com</div>
               </div>
             </div>
           </div>
@@ -135,7 +130,7 @@ export default function ContactPage() {
               <textarea required rows={4} value={message} onChange={(e) => setMessage(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none', resize: 'none', fontFamily: 'inherit' }} />
             </div>
 
-            <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.85rem', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.95rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
+            <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.85rem', background: 'linear-gradient(135deg, #00A7B5, #182B6D)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.95rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
               {loading ? 'Submitting request...' : 'Book Product Demo'}
             </button>
           </form>
@@ -145,7 +140,7 @@ export default function ContactPage() {
       {/* Footer */}
       <footer style={{ borderTop: '1px solid rgba(255,255,255,0.05)', background: '#05070e', padding: '4rem 1.5rem 3rem' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.3)' }}>
-          <span>&copy; {new Date().getFullYear()} NexusHR. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} PID hcms. All rights reserved.</span>
           <div style={{ display: 'flex', gap: '1.5rem' }}>
             <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</Link>
             <Link href="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms</Link>

@@ -30,7 +30,7 @@ class _DashboardShellState extends State<DashboardShell> {
         backgroundColor: const Color(0xFF111827),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         title: const Text('Log out?', style: TextStyle(color: Color(0xFFE5E7EB), fontWeight: FontWeight.w800)),
-        content: const Text('You will need to login again to access your HRMS workspace.', style: TextStyle(color: Color(0xFF94A3B8))),
+        content: const Text('You will need to login again to access your PID hcms workspace.', style: TextStyle(color: Color(0xFF94A3B8))),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Logout')),
@@ -50,28 +50,24 @@ class _DashboardShellState extends State<DashboardShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1020),
+      backgroundColor: const Color(0xFF07111F),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B1020),
+        backgroundColor: const Color(0xFF07111F),
         elevation: 0,
         centerTitle: false,
         titleSpacing: 18,
         title: Row(
           children: [
-            Container(
+            Image.asset(
+              'assets/brand/pid_hcms_icon.png',
               width: 34,
               height: 34,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2DD4BF).withOpacity(0.14),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF2DD4BF).withOpacity(0.4)),
-              ),
-              child: const Icon(Icons.workspaces_outline, color: Color(0xFF2DD4BF), size: 19),
+              fit: BoxFit.contain,
             ),
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
-                'NexusHR',
+                'PID hcms',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: Color(0xFFE5E7EB), fontWeight: FontWeight.w900, fontSize: 18),
@@ -92,7 +88,7 @@ class _DashboardShellState extends State<DashboardShell> {
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           backgroundColor: const Color(0xFF111827),
-          indicatorColor: const Color(0xFF2DD4BF).withOpacity(0.16),
+          indicatorColor: const Color(0xFF00A7B5).withOpacity(0.16),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
@@ -103,7 +99,7 @@ class _DashboardShellState extends State<DashboardShell> {
           }),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
-            return IconThemeData(color: selected ? const Color(0xFF2DD4BF) : const Color(0xFF94A3B8), size: 22);
+            return IconThemeData(color: selected ? const Color(0xFF00A7B5) : const Color(0xFF94A3B8), size: 22);
           }),
         ),
         child: NavigationBar(
