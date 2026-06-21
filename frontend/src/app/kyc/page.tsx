@@ -6,6 +6,19 @@ import Sidebar from '@/components/Sidebar';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/authContext';
 import { updateCompanyKYC, getProfile } from '@/lib/api';
+import { ValidatedInput } from '@/components/ValidatedField';
+import {
+  validateForm,
+  required,
+  optional,
+  email as vEmail,
+  mobile as vMobile,
+  personName,
+  cin as vCin,
+  gstin as vGstin,
+  pan as vPan,
+  din as vDin
+} from '@/lib/validators';
 
 export default function KycOnboardingPage() {
   const { user, login } = useAuth();
@@ -13,6 +26,7 @@ export default function KycOnboardingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [submitted, setSubmitted] = useState(false);
 
   // Form states
   const [form, setForm] = useState({
@@ -63,13 +77,42 @@ export default function KycOnboardingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess(false);
-
-    if (!form.cin.trim()) {
-      setError('Corporate Identification Number (CIN) is required to unlock your account.');
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      {
+        cin: form.cin,
+        gstin: form.gstin,
+        directorName: form.directorName,
+        directorPan: form.directorPan,
+        directorDin: form.directorDin,
+        signingAuthorityName: form.signingAuthorityName,
+        signingAuthorityEmail: form.signingAuthorityEmail,
+        signingAuthorityPhone: form.signingAuthorityPhone,
+        contactPersonName: form.contactPersonName,
+        contactPersonEmail: form.contactPersonEmail,
+        contactPersonPhone: form.contactPersonPhone
+      },
+      {
+        cin: vCin,
+        gstin: optional(vGstin),
+        directorName: optional(personName('Director name')),
+        directorPan: optional(vPan),
+        directorDin: optional(vDin),
+        signingAuthorityName: optional(personName('Signatory name')),
+        signingAuthorityEmail: optional(vEmail),
+        signingAuthorityPhone: optional(vMobile),
+        contactPersonName: optional(personName('Contact person name')),
+        contactPersonEmail: optional(vEmail),
+        contactPersonPhone: optional(vMobile)
+      }
+    );
+    if (!isValid) {
+      setError(firstError || 'Please correct the highlighted fields.');
+      setSuccess(false);
       return;
     }
+    setError('');
+    setSuccess(false);
 
     if (!form.demoCallDate) {
       setError('Please schedule a quick demo call to continue onboarding.');
@@ -146,22 +189,30 @@ export default function KycOnboardingPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Corporate Identification Number (CIN) *</label>
-                    <input
+                    <ValidatedInput
                       type="text"
                       placeholder="e.g. U72200MH2021PTC354000"
                       value={form.cin}
-                      onChange={e => setForm(prev => ({ ...prev, cin: e.target.value.toUpperCase() }))}
+                      onChange={v => setForm(prev => ({ ...prev, cin: v }))}
+                      validator={vCin}
+                      restrict="upperAlnum"
+                      maxLength={21}
+                      forceError={submitted}
                       style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                       required
                     />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>GSTIN Number</label>
-                    <input
+                    <ValidatedInput
                       type="text"
                       placeholder="e.g. 27AAAAA0000A1Z5"
                       value={form.gstin}
-                      onChange={e => setForm(prev => ({ ...prev, gstin: e.target.value.toUpperCase() }))}
+                      onChange={v => setForm(prev => ({ ...prev, gstin: v }))}
+                      validator={optional(vGstin)}
+                      restrict="upperAlnum"
+                      maxLength={15}
+                      forceError={submitted}
                       style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                     />
                   </div>
@@ -173,29 +224,41 @@ export default function KycOnboardingPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Director Name</label>
-                    <input
+                    <ValidatedInput
                       type="text"
                       value={form.directorName}
-                      onChange={e => setForm(prev => ({ ...prev, directorName: e.target.value }))}
+                      onChange={v => setForm(prev => ({ ...prev, directorName: v }))}
+                      validator={optional(personName('Director name'))}
+                      restrict="alpha"
+                      forceError={submitted}
                       style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Director PAN</label>
-                      <input
+                      <ValidatedInput
                         type="text"
                         value={form.directorPan}
-                        onChange={e => setForm(prev => ({ ...prev, directorPan: e.target.value.toUpperCase() }))}
+                        onChange={v => setForm(prev => ({ ...prev, directorPan: v }))}
+                        validator={optional(vPan)}
+                        restrict="upperAlnum"
+                        maxLength={10}
+                        forceError={submitted}
                         style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                       />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Director DIN</label>
-                      <input
+                      <ValidatedInput
                         type="text"
+                        inputMode="numeric"
                         value={form.directorDin}
-                        onChange={e => setForm(prev => ({ ...prev, directorDin: e.target.value }))}
+                        onChange={v => setForm(prev => ({ ...prev, directorDin: v }))}
+                        validator={optional(vDin)}
+                        restrict="digits"
+                        maxLength={8}
+                        forceError={submitted}
                         style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                       />
                     </div>
@@ -208,29 +271,39 @@ export default function KycOnboardingPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Signatory Name</label>
-                    <input
+                    <ValidatedInput
                       type="text"
                       value={form.signingAuthorityName}
-                      onChange={e => setForm(prev => ({ ...prev, signingAuthorityName: e.target.value }))}
+                      onChange={v => setForm(prev => ({ ...prev, signingAuthorityName: v }))}
+                      validator={optional(personName('Signatory name'))}
+                      restrict="alpha"
+                      forceError={submitted}
                       style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Signatory Email</label>
-                      <input
+                      <ValidatedInput
                         type="email"
                         value={form.signingAuthorityEmail}
-                        onChange={e => setForm(prev => ({ ...prev, signingAuthorityEmail: e.target.value }))}
+                        onChange={v => setForm(prev => ({ ...prev, signingAuthorityEmail: v }))}
+                        validator={optional(vEmail)}
+                        forceError={submitted}
                         style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                       />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Signatory Phone</label>
-                      <input
+                      <ValidatedInput
                         type="text"
+                        inputMode="numeric"
                         value={form.signingAuthorityPhone}
-                        onChange={e => setForm(prev => ({ ...prev, signingAuthorityPhone: e.target.value }))}
+                        onChange={v => setForm(prev => ({ ...prev, signingAuthorityPhone: v }))}
+                        validator={optional(vMobile)}
+                        restrict="digits"
+                        maxLength={10}
+                        forceError={submitted}
                         style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                       />
                     </div>
@@ -272,29 +345,39 @@ export default function KycOnboardingPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Contact Person Name</label>
-                    <input
+                    <ValidatedInput
                       type="text"
                       value={form.contactPersonName}
-                      onChange={e => setForm(prev => ({ ...prev, contactPersonName: e.target.value }))}
+                      onChange={v => setForm(prev => ({ ...prev, contactPersonName: v }))}
+                      validator={optional(personName('Contact person name'))}
+                      restrict="alpha"
+                      forceError={submitted}
                       style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Contact Email</label>
-                      <input
+                      <ValidatedInput
                         type="email"
                         value={form.contactPersonEmail}
-                        onChange={e => setForm(prev => ({ ...prev, contactPersonEmail: e.target.value }))}
+                        onChange={v => setForm(prev => ({ ...prev, contactPersonEmail: v }))}
+                        validator={optional(vEmail)}
+                        forceError={submitted}
                         style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                       />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Contact Phone</label>
-                      <input
+                      <ValidatedInput
                         type="text"
+                        inputMode="numeric"
                         value={form.contactPersonPhone}
-                        onChange={e => setForm(prev => ({ ...prev, contactPersonPhone: e.target.value }))}
+                        onChange={v => setForm(prev => ({ ...prev, contactPersonPhone: v }))}
+                        validator={optional(vMobile)}
+                        restrict="digits"
+                        maxLength={10}
+                        forceError={submitted}
                         style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', outline: 'none' }}
                       />
                     </div>

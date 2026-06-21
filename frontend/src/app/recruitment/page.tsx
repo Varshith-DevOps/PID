@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import { getJobOpenings, createJobOpening, getDepartments } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, required } from '@/lib/validators';
 
 interface Job {
   id: string;
@@ -26,6 +28,8 @@ export default function RecruitmentDashboard() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // New Job Opening State
   const [newJob, setNewJob] = useState({
@@ -67,9 +71,32 @@ export default function RecruitmentDashboard() {
 
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      {
+        title: newJob.title,
+        departmentId: newJob.departmentId,
+        location: newJob.location,
+        description: newJob.description,
+        requirements: newJob.requirements,
+      },
+      {
+        title: required('Job title'),
+        departmentId: required('Department'),
+        location: required('Location'),
+        description: required('Job description'),
+        requirements: required('Job requirements'),
+      }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       await createJobOpening(newJob);
       setShowModal(false);
+      setSubmitted(false);
       setNewJob({
         title: '',
         departmentId: '',
@@ -205,11 +232,17 @@ export default function RecruitmentDashboard() {
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Publish a new job opening position</p>
               </div>
 
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  {formError}
+                </div>
+              )}
+
               <form onSubmit={handleCreateJob} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Job Title</label>
-                    <input type="text" placeholder="e.g. Frontend Engineer" required value={newJob.title} onChange={e => setNewJob({ ...newJob, title: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="e.g. Frontend Engineer" required value={newJob.title} onChange={v => setNewJob({ ...newJob, title: v })} validator={required('Job title')} forceError={submitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Department</label>
@@ -223,7 +256,7 @@ export default function RecruitmentDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Location</label>
-                    <input type="text" placeholder="e.g. Remote / Mumbai" required value={newJob.location} onChange={e => setNewJob({ ...newJob, location: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="e.g. Remote / Mumbai" required value={newJob.location} onChange={v => setNewJob({ ...newJob, location: v })} validator={required('Location')} forceError={submitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Employment Type</label>
@@ -239,7 +272,7 @@ export default function RecruitmentDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Salary Range</label>
-                    <input type="text" placeholder="e.g. ₹10L - ₹15L" value={newJob.salaryRange} onChange={e => setNewJob({ ...newJob, salaryRange: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="e.g. ₹10L - ₹15L" value={newJob.salaryRange} onChange={v => setNewJob({ ...newJob, salaryRange: v })} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Status</label>
@@ -252,12 +285,12 @@ export default function RecruitmentDashboard() {
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Job Description</label>
-                  <textarea placeholder="Outline roles and responsibilities..." required value={newJob.description} onChange={e => setNewJob({ ...newJob, description: e.target.value })} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
+                  <ValidatedTextarea placeholder="Outline roles and responsibilities..." required value={newJob.description} onChange={v => setNewJob({ ...newJob, description: v })} validator={required('Job description')} forceError={submitted} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
                 </div>
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Job Requirements</label>
-                  <textarea placeholder="Skills, years of experience, qualifications..." required value={newJob.requirements} onChange={e => setNewJob({ ...newJob, requirements: e.target.value })} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
+                  <ValidatedTextarea placeholder="Skills, years of experience, qualifications..." required value={newJob.requirements} onChange={v => setNewJob({ ...newJob, requirements: v })} validator={required('Job requirements')} forceError={submitted} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>

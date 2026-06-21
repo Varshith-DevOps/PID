@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../providers/auth_provider.dart';
 import 'employee_workspace.dart';
 import 'login_screen.dart';
+import 'settings_screen.dart';
 
 class DashboardShell extends StatefulWidget {
   final AuthProvider authProvider;
@@ -15,13 +16,26 @@ class DashboardShell extends StatefulWidget {
 class _DashboardShellState extends State<DashboardShell> {
   int _selectedIndex = 0;
 
-  late final List<Widget> _screens = [
-    EmployeeHomeScreen(authProvider: widget.authProvider),
-    EmployeeTimeScreen(authProvider: widget.authProvider),
-    EmployeeLeaveScreen(authProvider: widget.authProvider),
-    EmployeeMoneyScreen(authProvider: widget.authProvider),
-    EmployeeMoreScreen(authProvider: widget.authProvider),
-  ];
+  // Tabs are built lazily: a screen (and the API calls in its initState) is only
+  // created the first time its tab is opened, then cached and kept alive. This
+  // avoids firing every tab's network requests at once on login, so the first
+  // screen renders much faster.
+  final List<Widget?> _builtScreens = List<Widget?>.filled(5, null);
+
+  Widget _screenFor(int index) {
+    switch (index) {
+      case 0:
+        return EmployeeHomeScreen(authProvider: widget.authProvider);
+      case 1:
+        return EmployeeTimeScreen(authProvider: widget.authProvider);
+      case 2:
+        return EmployeeLeaveScreen(authProvider: widget.authProvider);
+      case 3:
+        return EmployeeMoneyScreen(authProvider: widget.authProvider);
+      default:
+        return EmployeeMoreScreen(authProvider: widget.authProvider);
+    }
+  }
 
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
@@ -77,6 +91,14 @@ class _DashboardShellState extends State<DashboardShell> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined, color: Color(0xFF94A3B8)),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => SettingsScreen(authProvider: widget.authProvider)),
+            ),
+          ),
+          IconButton(
             tooltip: 'Logout',
             icon: const Icon(Icons.logout_rounded, color: Color(0xFF94A3B8)),
             onPressed: _handleLogout,
@@ -84,7 +106,13 @@ class _DashboardShellState extends State<DashboardShell> {
           const SizedBox(width: 8),
         ],
       ),
-      body: IndexedStack(index: _selectedIndex, children: _screens),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: List<Widget>.generate(5, (i) {
+          if (i == _selectedIndex) _builtScreens[i] ??= _screenFor(i);
+          return _builtScreens[i] ?? const SizedBox.shrink();
+        }),
+      ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           backgroundColor: const Color(0xFF111827),

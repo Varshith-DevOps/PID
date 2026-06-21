@@ -1,12 +1,16 @@
 'use client';
 import { useState } from 'react';
+import { ValidatedInput } from '@/components/ValidatedField';
+import { validateForm, required, personName, nonNegative, integer, pincode, optional } from '@/lib/validators';
 import { addDependent, deleteDependent, upsertExitDetails, updateEmployeeAddress, addEmployeeAddress, getChangeHistory } from '@/lib/api';
 
 export function DependentsTab({ employee, canEdit, onReload }: any) {
   const [showForm, setShowForm] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({ name: '', relationship: 'SPOUSE', dateOfBirth: '', gender: '', isNominee: false, nomineePercent: '' });
 
   const handleAdd = async () => {
+    setSubmitted(true);
     if (!form.name) { alert('Name is required'); return; }
     try { await addDependent(employee.id, form); setShowForm(false); setForm({ name: '', relationship: 'SPOUSE', dateOfBirth: '', gender: '', isNominee: false, nomineePercent: '' }); onReload(); } catch { alert('Error'); }
   };
@@ -26,7 +30,7 @@ export function DependentsTab({ employee, canEdit, onReload }: any) {
       {showForm && (
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="form-grid">
-            <div className="form-group"><label className="form-label">Name *</label><input className="input-field" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
+            <div className="form-group"><label className="form-label">Name *</label><ValidatedInput className="input-field" value={form.name} onChange={v => setForm({...form, name: v})} validator={personName('Name')} restrict="alpha" forceError={submitted} /></div>
             <div className="form-group"><label className="form-label">Relationship</label><select className="select-field" value={form.relationship} onChange={e => setForm({...form, relationship: e.target.value})}><option value="SPOUSE">Spouse</option><option value="CHILD">Child</option><option value="PARENT">Parent</option><option value="SIBLING">Sibling</option></select></div>
             <div className="form-group"><label className="form-label">Date of Birth</label><input type="date" className="input-field" value={form.dateOfBirth} onChange={e => setForm({...form, dateOfBirth: e.target.value})} /></div>
             <div className="form-group"><label className="form-label">Gender</label><select className="select-field" value={form.gender} onChange={e => setForm({...form, gender: e.target.value})}><option value="">Select</option><option value="MALE">Male</option><option value="FEMALE">Female</option></select></div>
@@ -56,13 +60,20 @@ export function DependentsTab({ employee, canEdit, onReload }: any) {
 export function ExitTab({ employee, canEdit, onReload }: any) {
   const exit = employee.exitDetails;
   const [editing, setEditing] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({ exitType: exit?.exitType||'', resignationDate: exit?.resignationDate?.split('T')[0]||'', lastWorkingDate: exit?.lastWorkingDate?.split('T')[0]||'', noticePeriodDays: exit?.noticePeriodDays||'', exitReason: exit?.exitReason||'', exitInterview: exit?.exitInterview||false, rehireEligible: exit?.rehireEligible!==false, fnfStatus: exit?.fnfStatus||'PENDING', fnfAmount: exit?.fnfAmount||'' });
 
   const handleSave = async () => {
+    setSubmitted(true);
+    const { isValid } = validateForm(
+      { noticePeriodDays: String(form.noticePeriodDays), fnfAmount: String(form.fnfAmount) },
+      { noticePeriodDays: optional(integer('Notice period')), fnfAmount: optional(nonNegative('F&F amount')) }
+    );
+    if (!isValid) { alert('Please correct the highlighted fields.'); return; }
     const reason = prompt('Reason for updating Exit Details:');
     if (reason === null) return;
     if (reason.trim() === '') { alert('Reason required'); return; }
-    try { await upsertExitDetails(employee.id, { ...form, changeReason: reason }); setEditing(false); onReload(); } catch { alert('Error'); } 
+    try { await upsertExitDetails(employee.id, { ...form, changeReason: reason }); setEditing(false); onReload(); } catch { alert('Error'); }
   };
 
   if (editing) {
@@ -73,10 +84,10 @@ export function ExitTab({ employee, canEdit, onReload }: any) {
           <div className="form-group"><label className="form-label">Exit Type</label><select className="select-field" value={form.exitType} onChange={e=>setForm({...form,exitType:e.target.value})}><option value="">Select</option><option value="RESIGNATION">Resignation</option><option value="TERMINATION">Termination</option><option value="RETIREMENT">Retirement</option><option value="ABSCONDING">Absconding</option></select></div>
           <div className="form-group"><label className="form-label">Resignation Date</label><input type="date" className="input-field" value={form.resignationDate} onChange={e=>setForm({...form,resignationDate:e.target.value})} /></div>
           <div className="form-group"><label className="form-label">Last Working Date</label><input type="date" className="input-field" value={form.lastWorkingDate} onChange={e=>setForm({...form,lastWorkingDate:e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">Notice Period (days)</label><input type="number" className="input-field" value={form.noticePeriodDays} onChange={e=>setForm({...form,noticePeriodDays:e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">Exit Reason</label><input className="input-field" value={form.exitReason} onChange={e=>setForm({...form,exitReason:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">Notice Period (days)</label><ValidatedInput type="text" inputMode="numeric" className="input-field" value={String(form.noticePeriodDays)} onChange={v=>setForm({...form,noticePeriodDays:v})} validator={optional(integer('Notice period'))} restrict="digits" forceError={submitted} /></div>
+          <div className="form-group"><label className="form-label">Exit Reason</label><ValidatedInput className="input-field" value={form.exitReason} onChange={v=>setForm({...form,exitReason:v})} /></div>
           <div className="form-group"><label className="form-label">F&amp;F Status</label><select className="select-field" value={form.fnfStatus} onChange={e=>setForm({...form,fnfStatus:e.target.value})}><option value="PENDING">Pending</option><option value="PROCESSED">Processed</option><option value="PAID">Paid</option></select></div>
-          <div className="form-group"><label className="form-label">F&amp;F Amount</label><input type="number" className="input-field" value={form.fnfAmount} onChange={e=>setForm({...form,fnfAmount:e.target.value})} /></div>
+          <div className="form-group"><label className="form-label">F&amp;F Amount</label><ValidatedInput type="text" inputMode="decimal" className="input-field" value={String(form.fnfAmount)} onChange={v=>setForm({...form,fnfAmount:v})} validator={optional(nonNegative('F&F amount'))} restrict="decimal" forceError={submitted} /></div>
         </div>
         <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem' }}>
           <label className="checkbox-label"><input type="checkbox" checked={form.exitInterview} onChange={e=>setForm({...form,exitInterview:e.target.checked})} /> Exit Interview Done</label>
@@ -110,18 +121,25 @@ export function ExitTab({ employee, canEdit, onReload }: any) {
 export function AddressTab({ employee, canEdit, onReload }: any) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({ type: 'CURRENT', line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' });
 
   const handleEdit = (a: any) => { setEditingId(a.id); setForm({ type: a.type, line1: a.line1, line2: a.line2||'', city: a.city, state: a.state, pincode: a.pincode, country: a.country }); };
-  
+
   const handleSave = async () => {
+    setSubmitted(true);
+    const { isValid } = validateForm(
+      { line1: form.line1, city: form.city, state: form.state, pincode: form.pincode },
+      { line1: required('Address line 1'), city: required('City'), state: required('State'), pincode }
+    );
+    if (!isValid) { alert('Please correct the highlighted fields.'); return; }
     const reason = prompt('Reason for updating Address:');
     if (reason === null) return;
     if (reason.trim() === '') { alert('Reason required'); return; }
     try {
       if (editingId) await updateEmployeeAddress(editingId, { ...form, changeReason: reason });
       else await addEmployeeAddress(employee.id, { ...form, changeReason: reason });
-      setEditingId(null); setShowAdd(false); setForm({ type: 'CURRENT', line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' }); onReload();
+      setEditingId(null); setShowAdd(false); setSubmitted(false); setForm({ type: 'CURRENT', line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' }); onReload();
     } catch { alert('Error saving address'); }
   };
 
@@ -136,12 +154,12 @@ export function AddressTab({ employee, canEdit, onReload }: any) {
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="form-grid">
             <div className="form-group"><label className="form-label">Type</label><select className="select-field" value={form.type} onChange={e=>setForm({...form, type:e.target.value})}><option value="CURRENT">Current</option><option value="PERMANENT">Permanent</option></select></div>
-            <div className="form-group"><label className="form-label">Line 1 *</label><input className="input-field" value={form.line1} onChange={e=>setForm({...form, line1:e.target.value})} /></div>
-            <div className="form-group"><label className="form-label">Line 2</label><input className="input-field" value={form.line2} onChange={e=>setForm({...form, line2:e.target.value})} /></div>
-            <div className="form-group"><label className="form-label">City *</label><input className="input-field" value={form.city} onChange={e=>setForm({...form, city:e.target.value})} /></div>
-            <div className="form-group"><label className="form-label">State *</label><input className="input-field" value={form.state} onChange={e=>setForm({...form, state:e.target.value})} /></div>
-            <div className="form-group"><label className="form-label">Pincode *</label><input className="input-field" value={form.pincode} onChange={e=>setForm({...form, pincode:e.target.value})} /></div>
-            <div className="form-group"><label className="form-label">Country</label><input className="input-field" value={form.country} onChange={e=>setForm({...form, country:e.target.value})} /></div>
+            <div className="form-group"><label className="form-label">Line 1 *</label><ValidatedInput className="input-field" value={form.line1} onChange={v=>setForm({...form, line1:v})} validator={required('Address line 1')} forceError={submitted} /></div>
+            <div className="form-group"><label className="form-label">Line 2</label><ValidatedInput className="input-field" value={form.line2} onChange={v=>setForm({...form, line2:v})} /></div>
+            <div className="form-group"><label className="form-label">City *</label><ValidatedInput className="input-field" value={form.city} onChange={v=>setForm({...form, city:v})} validator={required('City')} forceError={submitted} /></div>
+            <div className="form-group"><label className="form-label">State *</label><ValidatedInput className="input-field" value={form.state} onChange={v=>setForm({...form, state:v})} validator={required('State')} forceError={submitted} /></div>
+            <div className="form-group"><label className="form-label">Pincode *</label><ValidatedInput className="input-field" value={form.pincode} onChange={v=>setForm({...form, pincode:v})} validator={pincode} restrict="digits" maxLength={6} forceError={submitted} /></div>
+            <div className="form-group"><label className="form-label">Country</label><ValidatedInput className="input-field" value={form.country} onChange={v=>setForm({...form, country:v})} /></div>
           </div>
           <div style={{display:'flex',gap:'0.5rem',marginTop:'1rem'}}>
             <button className="btn btn-primary btn-sm" onClick={handleSave}>Save</button>

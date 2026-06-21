@@ -19,10 +19,15 @@ const {
   hashRecoveryCode,
   buildOtpAuthUrl,
 } = require('../services/mfaService');
+const { logSecurityEvent, clientIp } = require('../utils/securityEvents');
+const loginGuard = require('../utils/loginGuard');
 
-// Access tokens are short-lived when ACCESS_TOKEN_TTL is set; defaults to the
-// legacy JWT_EXPIRES_IN so existing deployments are unaffected until they opt in.
-const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || process.env.JWT_EXPIRES_IN || '7d';
+/** Cost factor for password hashing (OWASP-recommended ≥12). */
+const BCRYPT_ROUNDS = 12;
+
+// Access tokens are short-lived by default; a refresh flow renews them. Operators
+// can override via ACCESS_TOKEN_TTL / JWT_EXPIRES_IN.
+const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || process.env.JWT_EXPIRES_IN || '1h';
 const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_TTL || '30d';
 const REFRESH_COOKIE_PATH = '/api/auth';
 
@@ -141,17 +146,31 @@ const login = async (req, res) => {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
+    const ip = clientIp(req);
+
+    // Account/IP lockout: slows credential stuffing even under the IP rate limit.
+    const lock = loginGuard.check(email, ip);
+    if (lock.locked) {
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_LOCKED', userEmail: email, details: { retryAfterSec: lock.retryAfterSec } });
+      res.set('Retry-After', String(lock.retryAfterSec));
+      return res.status(429).json({ error: 'Too many failed attempts. Please try again later.' });
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
       include: { permissions: true },
     });
 
     if (!user || !user.isActive) {
+      loginGuard.recordFailure(email, ip);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userEmail: email, details: { reason: 'unknown_or_inactive' } });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
+      loginGuard.recordFailure(email, ip);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: email, details: { reason: 'bad_password' } });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -161,9 +180,11 @@ const login = async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: MFA_TOKEN_TTL }
       );
+      await logSecurityEvent(req, { action: 'AUTH_MFA_CHALLENGE', level: 'info', userId: user.id, userEmail: email });
       return res.json({ mfaRequired: true, mfaToken, user: { email: user.email, role: user.role } });
     }
 
+    loginGuard.reset(email, ip);
     const token = signAccessToken(user);
     setAuthCookie(res, token, user);
 
@@ -172,6 +193,7 @@ const login = async (req, res) => {
       data: { lastLoginAt: new Date() }
     }).catch(() => {});
 
+    await logSecurityEvent(req, { action: 'AUTH_LOGIN_SUCCESS', level: 'info', userId: user.id, userEmail: email });
     res.json(await buildLoginPayload(user, token));
   } catch (error) {
     console.error('[LOGIN ERROR]:', error.message);
@@ -206,7 +228,7 @@ const register = async (req, res) => {
     }
 
     // Hash password with bcrypt (10 salt rounds)
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const validRoles = [
       'SUPER_ADMIN',
       'ADMIN',
@@ -365,7 +387,7 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ error: 'Current password is incorrect' });
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     const updated = await prisma.user.update({
       where: { id: req.user.id },
       data: {
@@ -409,7 +431,7 @@ const resetPasswordForUser = async (req, res) => {
 
     // Generate a secure temporary password if none provided
     const tempPassword = newPassword || generateTempPassword();
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    const hashedPassword = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
 
     // Force the user to set their own password on next login, unless an admin
     // explicitly supplied a final password.
@@ -515,7 +537,7 @@ const verifyMfaLogin = async (req, res) => {
       return res.status(400).json({ error: 'MFA token and verification code are required' });
     }
 
-    const decoded = jwt.verify(mfaToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(mfaToken, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     if (decoded.purpose !== 'MFA') {
       return res.status(400).json({ error: 'Invalid MFA challenge token' });
     }
@@ -616,7 +638,7 @@ const signup = async (req, res) => {
       });
 
       // 2. Create hashed password
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
       // 3. Create Admin User
       const user = await tx.user.create({
@@ -687,7 +709,7 @@ const refresh = async (req, res) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     } catch (e) {
       return res.status(401).json({ error: 'Invalid or expired refresh token' });
     }

@@ -1,5 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { required } from '@/lib/validators';
 import { getEmployeeDocuments, uploadDocument, deleteDocument, downloadDocumentFile } from '@/lib/api';
 
 export default function DocumentsTab({ employee, canEdit, onReload }: any) {
@@ -9,9 +11,11 @@ export default function DocumentsTab({ employee, canEdit, onReload }: any) {
   const [docName, setDocName] = useState('');
   const [docDesc, setDocDesc] = useState('');
   const [docType, setDocType] = useState('OTHER');
+  const [submitted, setSubmitted] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = async () => {
+    setSubmitted(true);
     const file = fileRef.current?.files?.[0];
     if (!file || !docName) { alert('Please provide a title and select a file'); return; }
     setUploading(true);
@@ -47,14 +51,14 @@ export default function DocumentsTab({ employee, canEdit, onReload }: any) {
       {showForm && (
         <div className="doc-upload-zone" style={{ textAlign: 'left' }}>
           <div className="form-grid" style={{ marginBottom: '1rem' }}>
-            <div className="form-group"><label className="form-label">Title *</label><input className="input-field" value={docName} onChange={e => setDocName(e.target.value)} placeholder="e.g. Offer Letter" /></div>
+            <div className="form-group"><label className="form-label">Title *</label><ValidatedInput className="input-field" value={docName} onChange={setDocName} validator={required('Title')} forceError={submitted} placeholder="e.g. Offer Letter" /></div>
             <div className="form-group"><label className="form-label">Type</label>
               <select className="select-field" value={docType} onChange={e => setDocType(e.target.value)}>
                 <option value="ID_PROOF">ID Proof</option><option value="ADDRESS_PROOF">Address Proof</option><option value="EDUCATION">Education</option><option value="EXPERIENCE">Experience Letter</option><option value="OFFER_LETTER">Offer Letter</option><option value="OTHER">Other</option>
               </select>
             </div>
           </div>
-          <div className="form-group"><label className="form-label">Description</label><textarea className="textarea-field" value={docDesc} onChange={e => setDocDesc(e.target.value)} placeholder="Brief description..." style={{ minHeight: '60px' }} /></div>
+          <div className="form-group"><label className="form-label">Description</label><ValidatedTextarea className="textarea-field" value={docDesc} onChange={setDocDesc} placeholder="Brief description..." style={{ minHeight: '60px' }} /></div>
           <div className="form-group"><label className="form-label">File *</label><input type="file" ref={fileRef} className="input-field" /></div>
           <button className="btn btn-success btn-sm" onClick={handleUpload} disabled={uploading}>{uploading ? 'Uploading...' : 'Upload Document'}</button>
         </div>

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/lib/authContext';
 import { createAsset, getAssets } from '@/lib/api';
+import { ValidatedInput } from '@/components/ValidatedField';
+import { validateForm, required } from '@/lib/validators';
 
 export default function AssetsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -12,6 +14,8 @@ export default function AssetsPage() {
   const [assets, setAssets] = useState<any[]>([]);
   const [form, setForm] = useState({ assetTag: '', name: '', category: 'Laptop', serialNumber: '' });
   const [loading, setLoading] = useState(true);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
@@ -32,8 +36,19 @@ export default function AssetsPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { assetTag: form.assetTag, name: form.name },
+      { assetTag: required('Asset tag'), name: required('Asset name') }
+    );
+    if (!isValid) {
+      setError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setError('');
     await createAsset(form);
     setForm({ assetTag: '', name: '', category: 'Laptop', serialNumber: '' });
+    setSubmitted(false);
     loadAssets();
   };
 
@@ -50,13 +65,14 @@ export default function AssetsPage() {
           {canManageAssets && (
             <section className="card">
               <h2>Register Asset</h2>
+              {error && <p style={{ color: '#f87171', fontSize: '0.85rem', margin: '0 0 0.5rem' }}>{error}</p>}
               <form onSubmit={submit} className="form-grid">
-                <input className="form-control" placeholder="Asset tag" value={form.assetTag} onChange={e => setForm({ ...form, assetTag: e.target.value })} required />
-                <input className="form-control" placeholder="Asset name" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                <ValidatedInput className="form-control" placeholder="Asset tag" value={form.assetTag} onChange={v => setForm({ ...form, assetTag: v })} validator={required('Asset tag')} forceError={submitted} required />
+                <ValidatedInput className="form-control" placeholder="Asset name" value={form.name} onChange={v => setForm({ ...form, name: v })} validator={required('Asset name')} forceError={submitted} required />
                 <select className="form-control" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
                   <option>Laptop</option><option>Phone</option><option>ID Card</option><option>Vehicle</option><option>Equipment</option>
                 </select>
-                <input className="form-control" placeholder="Serial number" value={form.serialNumber} onChange={e => setForm({ ...form, serialNumber: e.target.value })} />
+                <ValidatedInput className="form-control" placeholder="Serial number" value={form.serialNumber} onChange={v => setForm({ ...form, serialNumber: v })} />
                 <button className="btn btn-primary" type="submit">Save Asset</button>
               </form>
             </section>

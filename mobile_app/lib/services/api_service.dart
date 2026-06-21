@@ -71,6 +71,21 @@ class ApiService {
     return _decodeResponse(await patch(endpoint, body));
   }
 
+  /// Builds an [ApiException] from a non-2xx response (for callers that handle
+  /// the raw response themselves, e.g. binary/file downloads).
+  static ApiException errorFor(http.Response response) {
+    dynamic body;
+    if (response.body.isNotEmpty) {
+      try {
+        body = jsonDecode(response.body);
+      } catch (_) {}
+    }
+    final message = body is Map && body['error'] != null
+        ? body['error'].toString()
+        : _fallbackMessage(response.statusCode);
+    return ApiException(message, response.statusCode);
+  }
+
   static dynamic _decodeResponse(http.Response response) {
     dynamic body;
     if (response.body.isNotEmpty) {

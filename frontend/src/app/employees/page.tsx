@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import { getEmployees, getDepartments, createEmployee, getShiftTypes } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput } from '@/components/ValidatedField';
+import { validateForm, email as vEmail, personName, amount, required, date as vDate } from '@/lib/validators';
 
 interface Employee {
   id: string; employeeId: string; firstName: string; lastName: string; email: string;
@@ -23,6 +25,7 @@ export default function EmployeesPage() {
   
   // Add Employee Form States
   const [showAddModal, setShowAddModal] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -54,9 +57,35 @@ export default function EmployeesPage() {
 
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid } = validateForm(
+      {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        jobTitle: form.jobTitle,
+        departmentId: form.departmentId,
+        joinDate: form.joinDate,
+        salary: form.salary,
+      },
+      {
+        firstName: personName('First name'),
+        lastName: personName('Last name'),
+        email: vEmail,
+        jobTitle: required('Job title'),
+        departmentId: required('Department'),
+        joinDate: vDate('Join date'),
+        salary: amount,
+      }
+    );
+    if (!isValid) {
+      alert('Please correct the highlighted fields.');
+      return;
+    }
     try {
       await createEmployee(form);
       setShowAddModal(false);
+      setSubmitted(false);
       setForm({
         firstName: '',
         lastName: '',
@@ -174,22 +203,22 @@ export default function EmployeesPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>First Name</label>
-                    <input type="text" placeholder="John" required value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="John" required value={form.firstName} onChange={v => setForm({ ...form, firstName: v })} validator={personName('First name')} restrict="alpha" forceError={submitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Last Name</label>
-                    <input type="text" placeholder="Doe" required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="Doe" required value={form.lastName} onChange={v => setForm({ ...form, lastName: v })} validator={personName('Last name')} restrict="alpha" forceError={submitted} className="input-field" />
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Work Email</label>
-                    <input type="email" placeholder="john.doe@company.com" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
+                    <ValidatedInput type="email" placeholder="john.doe@company.com" required value={form.email} onChange={v => setForm({ ...form, email: v })} validator={vEmail} forceError={submitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Job Title</label>
-                    <input type="text" placeholder="Frontend Engineer" required value={form.jobTitle} onChange={e => setForm({ ...form, jobTitle: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="Frontend Engineer" required value={form.jobTitle} onChange={v => setForm({ ...form, jobTitle: v })} validator={required('Job title')} forceError={submitted} className="input-field" />
                   </div>
                 </div>
 
@@ -219,7 +248,7 @@ export default function EmployeesPage() {
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Monthly Salary (INR)</label>
-                    <input type="number" placeholder="80000" required value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" inputMode="decimal" placeholder="80000" required value={form.salary} onChange={v => setForm({ ...form, salary: v })} validator={amount} restrict="decimal" forceError={submitted} className="input-field" />
                   </div>
                 </div>
 

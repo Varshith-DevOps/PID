@@ -4,9 +4,16 @@ dist/
 .env
 *.log
 .next/
+*.db
+*.sqlite
+*.sqlite3
 *.db-journal
 *.db-wal
 *.db-shm
 # Generated PostgreSQL schema (derived from prisma/schema.prisma)
 backend/prisma/schema.postgres.prisma
+
+# Built mobile APKs are served from disk by the OTA endpoint; don't commit the
+# large binaries. The version manifest (app-version.json) IS committed.
+backend/app-release/*.apk
 

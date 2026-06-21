@@ -20,6 +20,8 @@ import {
   completeOffboarding as apiCompleteOffboarding,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput } from '@/components/ValidatedField';
+import { validateForm, required, email as vEmail, mobile as vMobile, personName, amount } from '@/lib/validators';
 
 interface ChecklistTemplateTask {
   id?: string;
@@ -55,6 +57,11 @@ export default function OnOffboardingDashboard() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Per-form submit/validation flags
+  const [customTaskSubmitted, setCustomTaskSubmitted] = useState(false);
+  const [templateSubmitted, setTemplateSubmitted] = useState(false);
+  const [onboardingSubmitted, setOnboardingSubmitted] = useState(false);
 
   // Tabs & Filters
   const [activeTab, setActiveTab] = useState<'onboarding' | 'offboarding' | 'templates'>('onboarding');
@@ -186,7 +193,13 @@ export default function OnOffboardingDashboard() {
 
   const handleAddCustomTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmployee || !customTaskForm.title) return;
+    setCustomTaskSubmitted(true);
+    if (!selectedEmployee) return;
+    const { isValid } = validateForm(
+      { title: customTaskForm.title },
+      { title: required('Task title') }
+    );
+    if (!isValid) return;
     try {
       const newTask = await createCustomChecklistTask({
         employeeId: selectedEmployee.id,
@@ -197,6 +210,7 @@ export default function OnOffboardingDashboard() {
       });
       setEmployeeTasks(prev => [...prev, newTask]);
       setCustomTaskForm({ title: '', description: '', dueDate: '' });
+      setCustomTaskSubmitted(false);
       loadData();
     } catch (err) {
       console.error(err);
@@ -223,6 +237,12 @@ export default function OnOffboardingDashboard() {
 
   const handleCreateTemplateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTemplateSubmitted(true);
+    const { isValid } = validateForm(
+      { name: templateForm.name },
+      { name: required('Template name') }
+    );
+    if (!isValid || templateForm.tasks.length === 0) return;
     try {
       const templateData = {
         name: templateForm.name,
@@ -240,6 +260,7 @@ export default function OnOffboardingDashboard() {
       setShowTemplateModal(false);
       setEditingTemplateId(null);
       setTemplateForm({ name: '', type: 'ONBOARDING', description: '', tasks: [] });
+      setTemplateSubmitted(false);
       loadData();
     } catch (err) {
       console.error(err);
@@ -271,6 +292,28 @@ export default function OnOffboardingDashboard() {
 
   const handleStartOnboardingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setOnboardingSubmitted(true);
+    const { isValid } = validateForm(
+      {
+        firstName: onboardingForm.firstName,
+        lastName: onboardingForm.lastName,
+        email: onboardingForm.email,
+        phone: onboardingForm.phone,
+        jobTitle: onboardingForm.jobTitle,
+        departmentId: onboardingForm.departmentId,
+        salary: onboardingForm.salary,
+      },
+      {
+        firstName: personName('First name'),
+        lastName: personName('Last name'),
+        email: vEmail,
+        phone: vMobile,
+        jobTitle: required('Job title'),
+        departmentId: required('Department'),
+        salary: amount,
+      }
+    );
+    if (!isValid) return;
     try {
       await createEmployee({
         ...onboardingForm,
@@ -290,6 +333,7 @@ export default function OnOffboardingDashboard() {
         joinDate: new Date().toISOString().split('T')[0],
         salary: '45000',
       });
+      setOnboardingSubmitted(false);
       loadData();
       alert('New Joiner registered! Onboarding process initiated successfully.');
     } catch (err: any) {
@@ -907,24 +951,26 @@ export default function OnOffboardingDashboard() {
                   <form onSubmit={handleAddCustomTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
                       <label style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>Task Title</label>
-                      <input 
-                        type="text" 
-                        required 
+                      <ValidatedInput
+                        type="text"
+                        required
                         placeholder="e.g. Provide locker keys"
                         value={customTaskForm.title}
-                        onChange={e => setCustomTaskForm({ ...customTaskForm, title: e.target.value })}
-                        className="input-field" 
+                        onChange={v => setCustomTaskForm({ ...customTaskForm, title: v })}
+                        validator={required('Task title')}
+                        forceError={customTaskSubmitted}
+                        className="input-field"
                         style={{ fontSize: '0.72rem', padding: '0.4rem' }}
                       />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>Description</label>
-                      <input 
-                        type="text" 
+                      <ValidatedInput
+                        type="text"
                         placeholder="Additional details..."
                         value={customTaskForm.description}
-                        onChange={e => setCustomTaskForm({ ...customTaskForm, description: e.target.value })}
-                        className="input-field" 
+                        onChange={v => setCustomTaskForm({ ...customTaskForm, description: v })}
+                        className="input-field"
                         style={{ fontSize: '0.72rem', padding: '0.4rem' }}
                       />
                     </div>
@@ -980,7 +1026,7 @@ export default function OnOffboardingDashboard() {
               <form onSubmit={handleCreateTemplateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Template Name</label>
-                  <input type="text" placeholder="e.g. Remote Dev Onboarding" required value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" placeholder="e.g. Remote Dev Onboarding" required value={templateForm.name} onChange={v => setTemplateForm({ ...templateForm, name: v })} validator={required('Template name')} forceError={templateSubmitted} className="input-field" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -993,7 +1039,7 @@ export default function OnOffboardingDashboard() {
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Description</label>
-                    <input type="text" placeholder="Brief outline..." value={templateForm.description} onChange={e => setTemplateForm({ ...templateForm, description: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="Brief outline..." value={templateForm.description} onChange={v => setTemplateForm({ ...templateForm, description: v })} className="input-field" />
                   </div>
                 </div>
 
@@ -1018,10 +1064,10 @@ export default function OnOffboardingDashboard() {
                   {/* Micro inputs for task list addition */}
                   <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <div style={{ flex: 1 }}>
-                      <input type="text" placeholder="Task title..." value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} className="input-field" style={{ fontSize: '0.7rem', padding: '0.35rem' }} />
+                      <ValidatedInput type="text" placeholder="Task title..." value={newTaskTitle} onChange={setNewTaskTitle} className="input-field" style={{ fontSize: '0.7rem', padding: '0.35rem' }} />
                     </div>
                     <div style={{ flex: 1.2 }}>
-                      <input type="text" placeholder="Short description..." value={newTaskDesc} onChange={e => setNewTaskDesc(e.target.value)} className="input-field" style={{ fontSize: '0.7rem', padding: '0.35rem' }} />
+                      <ValidatedInput type="text" placeholder="Short description..." value={newTaskDesc} onChange={setNewTaskDesc} className="input-field" style={{ fontSize: '0.7rem', padding: '0.35rem' }} />
                     </div>
                     <button type="button" onClick={handleAddTemplateTaskInput} className="btn btn-secondary" style={{ padding: '0.35rem 0.6rem', fontSize: '0.7rem', border: '1px solid rgba(255,255,255,0.1)' }}>+ Add</button>
                   </div>
@@ -1053,22 +1099,22 @@ export default function OnOffboardingDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>First Name</label>
-                    <input type="text" placeholder="John" required value={onboardingForm.firstName} onChange={e => setOnboardingForm({ ...onboardingForm, firstName: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="John" required value={onboardingForm.firstName} onChange={v => setOnboardingForm({ ...onboardingForm, firstName: v })} validator={personName('First name')} restrict="alpha" forceError={onboardingSubmitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Last Name</label>
-                    <input type="text" placeholder="Doe" required value={onboardingForm.lastName} onChange={e => setOnboardingForm({ ...onboardingForm, lastName: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="Doe" required value={onboardingForm.lastName} onChange={v => setOnboardingForm({ ...onboardingForm, lastName: v })} validator={personName('Last name')} restrict="alpha" forceError={onboardingSubmitted} className="input-field" />
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Work Email</label>
-                    <input type="email" placeholder="john.doe@pid-hcms.com" required value={onboardingForm.email} onChange={e => setOnboardingForm({ ...onboardingForm, email: e.target.value })} className="input-field" />
+                    <ValidatedInput type="email" placeholder="john.doe@pid-hcms.com" required value={onboardingForm.email} onChange={v => setOnboardingForm({ ...onboardingForm, email: v })} validator={vEmail} forceError={onboardingSubmitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Mobile Number</label>
-                    <input type="text" placeholder="9876543210" value={onboardingForm.phone} onChange={e => setOnboardingForm({ ...onboardingForm, phone: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" inputMode="numeric" placeholder="9876543210" value={onboardingForm.phone} onChange={v => setOnboardingForm({ ...onboardingForm, phone: v })} validator={vMobile} restrict="digits" maxLength={10} forceError={onboardingSubmitted} className="input-field" />
                   </div>
                 </div>
 
@@ -1107,11 +1153,11 @@ export default function OnOffboardingDashboard() {
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Job Title</label>
-                    <input type="text" placeholder="Software Engineer" required value={onboardingForm.jobTitle} onChange={e => setOnboardingForm({ ...onboardingForm, jobTitle: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="Software Engineer" required value={onboardingForm.jobTitle} onChange={v => setOnboardingForm({ ...onboardingForm, jobTitle: v })} validator={required('Job title')} forceError={onboardingSubmitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Salary (INR/m)</label>
-                    <input type="number" required value={onboardingForm.salary} onChange={e => setOnboardingForm({ ...onboardingForm, salary: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" inputMode="decimal" required value={onboardingForm.salary} onChange={v => setOnboardingForm({ ...onboardingForm, salary: v })} validator={amount} restrict="decimal" forceError={onboardingSubmitted} className="input-field" />
                   </div>
                 </div>
 

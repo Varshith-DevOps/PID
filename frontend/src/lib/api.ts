@@ -415,6 +415,16 @@ export const emailBulkPayslips = async (month: number, year: number) => {
   return data;
 };
 
+export const getPayslipTemplate = async () => {
+  const { data } = await api.get('/payslip/template');
+  return data;
+};
+
+export const updatePayslipTemplate = async (payload: { templateId: string; config: any; companyId?: string }) => {
+  const { data } = await api.put('/payslip/template', payload);
+  return data;
+};
+
 export const getProjects = async (params?: { status?: string; search?: string; page?: number; limit?: number }) => {
   const { data } = await api.get('/projects', { params });
   return data;

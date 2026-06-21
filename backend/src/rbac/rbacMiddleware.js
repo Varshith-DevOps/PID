@@ -11,6 +11,7 @@
 
 const prisma = require('../config/database');
 const { getDefaultPermissions } = require('../controllers/permissionController');
+const { logSecurityEvent } = require('../utils/securityEvents');
 
 /** Roles that bypass all permission checks */
 const SUPER_ADMIN_ROLES = ['SUPER_ADMIN'];
@@ -130,6 +131,13 @@ const rbacMiddleware = (module, action) => {
       // Check specific module+action permission
       if (module && action) {
         if (!permissionGranted(user, module, action)) {
+          logSecurityEvent(req, {
+            action: 'AUTHZ_DENIED',
+            entity: module,
+            userId: user.id,
+            userEmail: user.email,
+            details: { module, action, path: req.originalUrl, method: req.method },
+          }).catch(() => {});
           return res.status(403).json({
             error: `Permission denied for ${module}.${action}`,
           });
@@ -158,6 +166,12 @@ const requireRole = (...allowedRoles) => {
   return (req, res, next) => {
     const userRole = req.user?.role;
     if (!userRole || !hasRole(userRole, allowedRoles)) {
+      logSecurityEvent(req, {
+        action: 'AUTHZ_DENIED_ROLE',
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        details: { required: allowedRoles, role: userRole || null, path: req.originalUrl, method: req.method },
+      }).catch(() => {});
       return res.status(403).json({ error: 'Role not authorized' });
     }
     next();

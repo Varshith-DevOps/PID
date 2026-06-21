@@ -10,6 +10,8 @@ import {
   createTravelAdvance,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, required, amount as vAmount } from '@/lib/validators';
 
 interface ExpenseClaim {
   id: string;
@@ -66,6 +68,10 @@ export default function ExpensesDashboard() {
     amountRequested: '',
   });
 
+  // Validation submit flags
+  const [claimSubmitted, setClaimSubmitted] = useState(false);
+  const [advanceSubmitted, setAdvanceSubmitted] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
   }, [user, authLoading]);
@@ -94,6 +100,15 @@ export default function ExpensesDashboard() {
 
   const handleClaimSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setClaimSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { title: claimForm.title, category: claimForm.category, amount: claimForm.amount, currency: claimForm.currency },
+      { title: required('Title'), category: required('Category'), amount: vAmount, currency: required('Currency') }
+    );
+    if (!isValid) {
+      alert(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
     try {
       const formData = new FormData();
       formData.append('title', claimForm.title);
@@ -109,6 +124,7 @@ export default function ExpensesDashboard() {
       setShowClaimModal(false);
       setClaimForm({ title: '', category: 'TRAVEL', amount: '', description: '', currency: 'INR' });
       setReceiptFile(null);
+      setClaimSubmitted(false);
       loadData();
     } catch (err: any) {
       console.error(err);
@@ -118,6 +134,15 @@ export default function ExpensesDashboard() {
 
   const handleAdvanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAdvanceSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { purpose: advanceForm.purpose, amountRequested: advanceForm.amountRequested },
+      { purpose: required('Purpose'), amountRequested: vAmount }
+    );
+    if (!isValid) {
+      alert(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
     try {
       await createTravelAdvance({
         purpose: advanceForm.purpose,
@@ -125,6 +150,7 @@ export default function ExpensesDashboard() {
       });
       setShowAdvanceModal(false);
       setAdvanceForm({ purpose: '', amountRequested: '' });
+      setAdvanceSubmitted(false);
       loadData();
     } catch (err) {
       console.error(err);
@@ -342,7 +368,7 @@ export default function ExpensesDashboard() {
               <form onSubmit={handleClaimSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Claim Title</label>
-                  <input type="text" placeholder="e.g. Bangalore Client dinner" required value={claimForm.title} onChange={e => setClaimForm({ ...claimForm, title: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" placeholder="e.g. Bangalore Client dinner" required value={claimForm.title} onChange={v => setClaimForm({ ...claimForm, title: v })} validator={required('Title')} forceError={claimSubmitted} className="input-field" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
@@ -358,13 +384,13 @@ export default function ExpensesDashboard() {
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Amount</label>
-                    <input type="number" placeholder="5000" required value={claimForm.amount} onChange={e => setClaimForm({ ...claimForm, amount: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" inputMode="decimal" placeholder="5000" required value={claimForm.amount} onChange={v => setClaimForm({ ...claimForm, amount: v })} validator={vAmount} restrict="decimal" forceError={claimSubmitted} className="input-field" />
                   </div>
                 </div>
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Description & Scope</label>
-                  <textarea placeholder="Outline items purchased and purpose of business claim..." value={claimForm.description} onChange={e => setClaimForm({ ...claimForm, description: e.target.value })} className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} />
+                  <ValidatedTextarea placeholder="Outline items purchased and purpose of business claim..." value={claimForm.description} onChange={v => setClaimForm({ ...claimForm, description: v })} className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} />
                 </div>
 
                 <div>
@@ -397,12 +423,12 @@ export default function ExpensesDashboard() {
               <form onSubmit={handleAdvanceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Purpose & Travel Detail</label>
-                  <input type="text" placeholder="e.g. Flight + hotel for Bangalore client meet" required value={advanceForm.purpose} onChange={e => setAdvanceForm({ ...advanceForm, purpose: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" placeholder="e.g. Flight + hotel for Bangalore client meet" required value={advanceForm.purpose} onChange={v => setAdvanceForm({ ...advanceForm, purpose: v })} validator={required('Purpose')} forceError={advanceSubmitted} className="input-field" />
                 </div>
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Cash Amount Requested (INR)</label>
-                  <input type="number" placeholder="e.g. 15000" required value={advanceForm.amountRequested} onChange={e => setAdvanceForm({ ...advanceForm, amountRequested: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" inputMode="decimal" placeholder="e.g. 15000" required value={advanceForm.amountRequested} onChange={v => setAdvanceForm({ ...advanceForm, amountRequested: v })} validator={vAmount} restrict="decimal" forceError={advanceSubmitted} className="input-field" />
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>

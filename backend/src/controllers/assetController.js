@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { canAccessEmployee, getEmployeeScopeIds, isHr } = require('../services/accessControl');
+const { canAccessEmployee, getEmployeeScopeIds, isHr, employeeInTenant } = require('../services/accessControl');
 
 const listAssets = async (req, res) => {
   try {
@@ -50,6 +50,18 @@ const assignAsset = async (req, res) => {
     const { employeeId } = req.body;
     if (!employeeId) return res.status(400).json({ error: 'Employee is required' });
 
+    // Tenant guard: the asset (if already assigned) and the target employee must
+    // belong to the caller's company. Employee lookup is tenant-scoped, so a
+    // cross-tenant employeeId returns null below.
+    const existing = await prisma.asset.findUnique({
+      where: { id },
+      include: { assignedTo: { select: { id: true } } },
+    });
+    if (!existing) return res.status(404).json({ error: 'Asset not found' });
+    if (existing.assignedToId && !(await employeeInTenant(existing.assignedToId))) {
+      return res.status(403).json({ error: 'Access denied for this asset.' });
+    }
+
     const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
 
@@ -68,6 +80,17 @@ const returnAsset = async (req, res) => {
   try {
     const { id } = req.params;
     const { condition, notes } = req.body;
+
+    // Tenant guard: only act on an asset assigned to someone in the caller's company.
+    const existing = await prisma.asset.findUnique({
+      where: { id },
+      select: { id: true, assignedToId: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Asset not found' });
+    if (existing.assignedToId && !(await employeeInTenant(existing.assignedToId))) {
+      return res.status(403).json({ error: 'Access denied for this asset.' });
+    }
+
     const asset = await prisma.asset.update({
       where: { id },
       data: {

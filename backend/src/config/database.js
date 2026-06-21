@@ -108,15 +108,10 @@ const prisma = basePrisma.$extends({
 });
 
 /**
- * Gracefully disconnect Prisma on process termination.
- * Ensures all pending database operations complete before exit.
+ * Disconnect the underlying Prisma client. Called by the server's graceful
+ * shutdown sequence (see src/index.js) — this module no longer registers its own
+ * process signal handlers so the HTTP server can drain in-flight requests first.
  */
-const shutdown = async () => {
-  await basePrisma.$disconnect();
-  process.exit(0);
-};
-
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+prisma.$disconnectBase = () => basePrisma.$disconnect();
 
 module.exports = prisma;

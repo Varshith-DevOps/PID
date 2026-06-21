@@ -14,6 +14,8 @@ import {
   getShiftAuditLogs,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput } from '@/components/ValidatedField';
+import { validateForm, required, amount, nonNegative, integer } from '@/lib/validators';
 
 interface ShiftType {
   id: string;
@@ -93,6 +95,8 @@ export default function ShiftsDashboard() {
 
   // Modals
   const [showTypeModal, setShowTypeModal] = useState(false);
+  const [typeSubmitted, setTypeSubmitted] = useState(false);
+  const [typeError, setTypeError] = useState('');
 
   // Define Type Form State
   const [typeForm, setTypeForm] = useState({
@@ -157,6 +161,35 @@ export default function ShiftsDashboard() {
 
   const handleCreateType = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTypeSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      {
+        name: typeForm.name,
+        startTime: typeForm.startTime,
+        endTime: typeForm.endTime,
+        gracePeriod: typeForm.gracePeriod,
+        minimumWorkHours: typeForm.minimumWorkHours,
+      },
+      {
+        name: required('Name'),
+        startTime: required('Start time'),
+        endTime: required('End time'),
+        gracePeriod: integer('Grace period'),
+        minimumWorkHours: nonNegative('Minimum work hours'),
+      }
+    );
+    if (!isValid) {
+      setTypeError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    if (typeForm.shiftAllowance) {
+      const allowanceErr = amount(typeForm.shiftAllowance);
+      if (allowanceErr) {
+        setTypeError(allowanceErr);
+        return;
+      }
+    }
+    setTypeError('');
     try {
       await createShiftType({
         ...typeForm,
@@ -168,6 +201,8 @@ export default function ShiftsDashboard() {
         allowedRadiusMeters: typeForm.geoRestricted ? parseFloat(typeForm.allowedRadiusMeters) : null,
       });
       setShowTypeModal(false);
+      setTypeSubmitted(false);
+      setTypeError('');
       setTypeForm({
         name: '',
         code: '',
@@ -1066,25 +1101,26 @@ export default function ShiftsDashboard() {
               </div>
 
               <form onSubmit={handleCreateType} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {typeError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.6rem 0.85rem', borderRadius: '8px', fontSize: '0.78rem' }}>{typeError}</div>}
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Shift Name</label>
-                    <input type="text" placeholder="e.g. Night Roster" required value={typeForm.name} onChange={e => setTypeForm({ ...typeForm, name: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="e.g. Night Roster" required value={typeForm.name} onChange={v => setTypeForm({ ...typeForm, name: v })} validator={required('Name')} forceError={typeSubmitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Code</label>
-                    <input type="text" placeholder="e.g. NS01" value={typeForm.code} onChange={e => setTypeForm({ ...typeForm, code: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="e.g. NS01" value={typeForm.code} onChange={v => setTypeForm({ ...typeForm, code: v })} className="input-field" />
                   </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Start Time</label>
-                    <input type="text" placeholder="09:00" required value={typeForm.startTime} onChange={e => setTypeForm({ ...typeForm, startTime: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="09:00" required value={typeForm.startTime} onChange={v => setTypeForm({ ...typeForm, startTime: v })} validator={required('Start time')} forceError={typeSubmitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>End Time</label>
-                    <input type="text" placeholder="18:00" required value={typeForm.endTime} onChange={e => setTypeForm({ ...typeForm, endTime: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="18:00" required value={typeForm.endTime} onChange={v => setTypeForm({ ...typeForm, endTime: v })} validator={required('End time')} forceError={typeSubmitted} className="input-field" />
                   </div>
                 </div>
 
@@ -1118,21 +1154,21 @@ export default function ShiftsDashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Allowance</label>
-                    <input type="number" placeholder="200" value={typeForm.shiftAllowance} onChange={e => setTypeForm({ ...typeForm, shiftAllowance: e.target.value })} className="input-field" style={{ padding: '0.5rem' }} />
+                    <ValidatedInput inputMode="decimal" placeholder="200" value={typeForm.shiftAllowance} onChange={v => setTypeForm({ ...typeForm, shiftAllowance: v })} restrict="decimal" forceError={typeSubmitted} className="input-field" style={{ padding: '0.5rem' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Grace (min)</label>
-                    <input type="number" placeholder="15" value={typeForm.gracePeriod} onChange={e => setTypeForm({ ...typeForm, gracePeriod: e.target.value })} className="input-field" style={{ padding: '0.5rem' }} />
+                    <ValidatedInput inputMode="numeric" placeholder="15" value={typeForm.gracePeriod} onChange={v => setTypeForm({ ...typeForm, gracePeriod: v })} validator={integer('Grace period')} restrict="digits" forceError={typeSubmitted} className="input-field" style={{ padding: '0.5rem' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Min Hours</label>
-                    <input type="number" step="0.5" placeholder="8.0" value={typeForm.minimumWorkHours} onChange={e => setTypeForm({ ...typeForm, minimumWorkHours: e.target.value })} className="input-field" style={{ padding: '0.5rem' }} />
+                    <ValidatedInput inputMode="decimal" placeholder="8.0" value={typeForm.minimumWorkHours} onChange={v => setTypeForm({ ...typeForm, minimumWorkHours: v })} validator={nonNegative('Minimum work hours')} restrict="decimal" forceError={typeSubmitted} className="input-field" style={{ padding: '0.5rem' }} />
                   </div>
                 </div>
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Weekly Offs (comma separated)</label>
-                  <input type="text" placeholder="Sunday" value={typeForm.weeklyOffs} onChange={e => setTypeForm({ ...typeForm, weeklyOffs: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" placeholder="Sunday" value={typeForm.weeklyOffs} onChange={v => setTypeForm({ ...typeForm, weeklyOffs: v })} className="input-field" />
                 </div>
 
                 <div style={{ display: 'flex', gap: '1rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.75rem' }}>
@@ -1151,15 +1187,15 @@ export default function ShiftsDashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem', borderRadius: '4px' }}>
                     <div>
                       <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Lat</label>
-                      <input type="text" value={typeForm.allowedLatitude} onChange={e => setTypeForm({ ...typeForm, allowedLatitude: e.target.value })} className="input-field" style={{ fontSize: '0.75rem', padding: '0.25rem' }} />
+                      <ValidatedInput type="text" value={typeForm.allowedLatitude} onChange={v => setTypeForm({ ...typeForm, allowedLatitude: v })} className="input-field" style={{ fontSize: '0.75rem', padding: '0.25rem' }} />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Lng</label>
-                      <input type="text" value={typeForm.allowedLongitude} onChange={e => setTypeForm({ ...typeForm, allowedLongitude: e.target.value })} className="input-field" style={{ fontSize: '0.75rem', padding: '0.25rem' }} />
+                      <ValidatedInput type="text" value={typeForm.allowedLongitude} onChange={v => setTypeForm({ ...typeForm, allowedLongitude: v })} className="input-field" style={{ fontSize: '0.75rem', padding: '0.25rem' }} />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Radius(m)</label>
-                      <input type="text" value={typeForm.allowedRadiusMeters} onChange={e => setTypeForm({ ...typeForm, allowedRadiusMeters: e.target.value })} className="input-field" style={{ fontSize: '0.75rem', padding: '0.25rem' }} />
+                      <ValidatedInput inputMode="numeric" value={typeForm.allowedRadiusMeters} onChange={v => setTypeForm({ ...typeForm, allowedRadiusMeters: v })} restrict="digits" className="input-field" style={{ fontSize: '0.75rem', padding: '0.25rem' }} />
                     </div>
                   </div>
                 )}
@@ -1167,12 +1203,12 @@ export default function ShiftsDashboard() {
                 {typeForm.ipRestricted && (
                   <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.75rem', borderRadius: '4px' }}>
                     <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Allowed IP Substring (e.g. 192.168.1)</label>
-                    <input type="text" placeholder="192.168.1" value={typeForm.allowedIpRange} onChange={e => setTypeForm({ ...typeForm, allowedIpRange: e.target.value })} className="input-field" style={{ fontSize: '0.75rem' }} />
+                    <ValidatedInput type="text" placeholder="192.168.1" value={typeForm.allowedIpRange} onChange={v => setTypeForm({ ...typeForm, allowedIpRange: v })} className="input-field" style={{ fontSize: '0.75rem' }} />
                   </div>
                 )}
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowTypeModal(false)} className="btn btn-secondary">
+                  <button type="button" onClick={() => { setShowTypeModal(false); setTypeSubmitted(false); setTypeError(''); }} className="btn btn-secondary">
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)', border: 'none' }}>

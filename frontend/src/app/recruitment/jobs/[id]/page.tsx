@@ -13,6 +13,8 @@ import {
   downloadOfferLetterPDF,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, email as vEmail, mobile as vMobile, personName, required, date as vDate, amount } from '@/lib/validators';
 
 interface Interview {
   id: string;
@@ -93,6 +95,10 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const [showFeedbackModal, setShowFeedbackModal] = useState<Interview | null>(null);
   const [showOfferModal, setShowOfferModal] = useState(false);
 
+  // Validation states
+  const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState('');
+
   // Form states
   const [applicantForm, setApplicantForm] = useState({
     fullName: '',
@@ -172,6 +178,24 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
   const handleAddApplicant = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      {
+        fullName: applicantForm.fullName,
+        email: applicantForm.email,
+        phone: applicantForm.phone,
+      },
+      {
+        fullName: personName('Full name'),
+        email: vEmail,
+        phone: vMobile,
+      }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       const formData = new FormData();
       formData.append('jobOpeningId', jobId);
@@ -183,6 +207,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
       await applyForJob(formData);
       setShowAddApplicant(false);
+      setSubmitted(false);
       setApplicantForm({ fullName: '', email: '', phone: '', coverLetter: '' });
       setResumeFile(null);
       loadData();
@@ -195,12 +220,31 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const handleScheduleInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedApplicant) return;
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      {
+        interviewerName: interviewForm.interviewerName,
+        roundName: interviewForm.roundName,
+        interviewDate: interviewForm.interviewDate,
+      },
+      {
+        interviewerName: personName('Interviewer name'),
+        roundName: required('Round'),
+        interviewDate: vDate('Interview date'),
+      }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       await scheduleInterview({
         applicantId: selectedApplicant.id,
         ...interviewForm,
       });
       setShowScheduleInterview(false);
+      setSubmitted(false);
       setInterviewForm({ interviewerName: '', interviewDate: '', roundName: 'Technical Round 1' });
       loadData();
     } catch (err) {
@@ -212,9 +256,20 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showFeedbackModal) return;
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { feedback: feedbackForm.feedback },
+      { feedback: required('Feedback') }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       await submitInterviewFeedback(showFeedbackModal.id, feedbackForm);
       setShowFeedbackModal(null);
+      setSubmitted(false);
       setFeedbackForm({ feedback: '', rating: 5, status: 'COMPLETED' });
       loadData();
     } catch (err) {
@@ -226,6 +281,22 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const handleCreateOffer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedApplicant) return;
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      {
+        offeredSalary: offerForm.offeredSalary,
+        joiningDate: offerForm.joiningDate,
+      },
+      {
+        offeredSalary: amount,
+        joiningDate: vDate('Joining date'),
+      }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       await createJobOffer({
         applicantId: selectedApplicant.id,
@@ -233,6 +304,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
         joiningDate: offerForm.joiningDate,
       });
       setShowOfferModal(false);
+      setSubmitted(false);
       setOfferForm({ offeredSalary: '', joiningDate: '' });
       loadData();
     } catch (err) {
@@ -269,7 +341,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
             <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{job.location} · {job.employmentType.replace('_', ' ')} · {job.salaryRange || 'No disclosed package'}</p>
           </div>
 
-          <button onClick={() => setShowAddApplicant(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+          <button onClick={() => { setSubmitted(false); setFormError(''); setShowAddApplicant(true); }} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
             Add Candidate Profile
           </button>
@@ -334,20 +406,26 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Manually register applicant details</p>
               </div>
 
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  {formError}
+                </div>
+              )}
+
               <form onSubmit={handleAddApplicant} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Full Name</label>
-                  <input type="text" placeholder="John Doe" required value={applicantForm.fullName} onChange={e => setApplicantForm({ ...applicantForm, fullName: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" placeholder="John Doe" required value={applicantForm.fullName} onChange={v => setApplicantForm({ ...applicantForm, fullName: v })} validator={personName('Full name')} restrict="alpha" forceError={submitted} className="input-field" />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Email Address</label>
-                    <input type="email" placeholder="john@example.com" required value={applicantForm.email} onChange={e => setApplicantForm({ ...applicantForm, email: e.target.value })} className="input-field" />
+                    <ValidatedInput type="email" placeholder="john@example.com" required value={applicantForm.email} onChange={v => setApplicantForm({ ...applicantForm, email: v })} validator={vEmail} forceError={submitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Phone Number</label>
-                    <input type="tel" placeholder="+91..." required value={applicantForm.phone} onChange={e => setApplicantForm({ ...applicantForm, phone: e.target.value })} className="input-field" />
+                    <ValidatedInput type="tel" inputMode="numeric" placeholder="10-digit mobile" required value={applicantForm.phone} onChange={v => setApplicantForm({ ...applicantForm, phone: v })} validator={vMobile} restrict="digits" maxLength={10} forceError={submitted} className="input-field" />
                   </div>
                 </div>
 
@@ -358,7 +436,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Cover Letter / Notes</label>
-                  <textarea placeholder="Candidate career aspirations..." value={applicantForm.coverLetter} onChange={e => setApplicantForm({ ...applicantForm, coverLetter: e.target.value })} className="input-field" style={{ minHeight: '70px', fontFamily: 'inherit' }} />
+                  <ValidatedTextarea placeholder="Candidate career aspirations..." value={applicantForm.coverLetter} onChange={v => setApplicantForm({ ...applicantForm, coverLetter: v })} className="input-field" style={{ minHeight: '70px', fontFamily: 'inherit' }} />
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
@@ -444,7 +522,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Interview Status</label>
-                  <button onClick={() => setShowScheduleInterview(true)} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.68rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <button onClick={() => { setSubmitted(false); setFormError(''); setShowScheduleInterview(true); }} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.68rem', border: '1px solid rgba(255,255,255,0.1)' }}>
                     Schedule Round
                   </button>
                 </div>
@@ -470,7 +548,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                             <strong>Feedback:</strong> {interview.feedback} (Rating: {interview.rating}/5)
                           </div>
                         ) : (
-                          <button onClick={() => setShowFeedbackModal(interview)} className="btn btn-secondary" style={{ padding: '0.2rem 0.4rem', fontSize: '0.65rem', alignSelf: 'flex-start', marginTop: '0.25rem' }}>
+                          <button onClick={() => { setSubmitted(false); setFormError(''); setShowFeedbackModal(interview); }} className="btn btn-secondary" style={{ padding: '0.2rem 0.4rem', fontSize: '0.65rem', alignSelf: 'flex-start', marginTop: '0.25rem' }}>
                             Log Interview Feedback
                           </button>
                         )}
@@ -495,7 +573,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Target Joining Date: {new Date(selectedApplicant.jobOffer.joiningDate).toLocaleDateString()}</div>
                   </div>
                 ) : (
-                  <button onClick={() => setShowOfferModal(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #eab308, #ca8a04)', border: 'none', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'center', boxShadow: '0 4px 10px rgba(234,179,8,0.2)' }}>
+                  <button onClick={() => { setSubmitted(false); setFormError(''); setShowOfferModal(true); }} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #eab308, #ca8a04)', border: 'none', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'center', boxShadow: '0 4px 10px rgba(234,179,8,0.2)' }}>
                     Extend Job Offer Letter
                   </button>
                 )}
@@ -513,6 +591,12 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Set up evaluation slot for {selectedApplicant?.fullName}</p>
               </div>
 
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  {formError}
+                </div>
+              )}
+
               <form onSubmit={handleScheduleInterview} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Round Description</label>
@@ -526,7 +610,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Interviewer Full Name</label>
-                  <input type="text" placeholder="e.g. Senior Tech Lead" required value={interviewForm.interviewerName} onChange={e => setInterviewForm({ ...interviewForm, interviewerName: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" placeholder="e.g. Senior Tech Lead" required value={interviewForm.interviewerName} onChange={v => setInterviewForm({ ...interviewForm, interviewerName: v })} validator={personName('Interviewer name')} restrict="alpha" forceError={submitted} className="input-field" />
                 </div>
 
                 <div>
@@ -556,6 +640,12 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Complete evaluation report for {showFeedbackModal.roundName}</p>
               </div>
 
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  {formError}
+                </div>
+              )}
+
               <form onSubmit={handleFeedbackSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Score / Rating (1 to 5)</label>
@@ -570,7 +660,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Evaluation Feedback Notes</label>
-                  <textarea placeholder="Detail core strengths, skill gaps, architectural command..." required value={feedbackForm.feedback} onChange={e => setFeedbackForm({ ...feedbackForm, feedback: e.target.value })} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
+                  <ValidatedTextarea placeholder="Detail core strengths, skill gaps, architectural command..." required value={feedbackForm.feedback} onChange={v => setFeedbackForm({ ...feedbackForm, feedback: v })} validator={required('Feedback')} forceError={submitted} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
@@ -595,10 +685,16 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Prepare formal agreement details for {selectedApplicant?.fullName}</p>
               </div>
 
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  {formError}
+                </div>
+              )}
+
               <form onSubmit={handleCreateOffer} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Offered Annual CTC (INR)</label>
-                  <input type="number" placeholder="e.g. 1200000" required value={offerForm.offeredSalary} onChange={e => setOfferForm({ ...offerForm, offeredSalary: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" inputMode="numeric" placeholder="e.g. 1200000" required value={offerForm.offeredSalary} onChange={v => setOfferForm({ ...offerForm, offeredSalary: v })} validator={amount} restrict="digits" forceError={submitted} className="input-field" />
                 </div>
 
                 <div>

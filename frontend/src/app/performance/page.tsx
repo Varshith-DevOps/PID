@@ -13,6 +13,8 @@ import {
   getEmployees,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, required, percentage } from '@/lib/validators';
 
 interface KRA {
   id: string;
@@ -50,6 +52,10 @@ export default function PerformanceDashboard() {
   // Modals & Drawers
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
+  // Validation states
+  const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Goal Form State
   const [goalForm, setGoalForm] = useState({
@@ -100,12 +106,23 @@ export default function PerformanceDashboard() {
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.employeeId) return;
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { title: goalForm.title, weightage: String(goalForm.weightage) },
+      { title: required('Goal title'), weightage: percentage }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       await createKra({
         employeeId: user.employeeId,
         ...goalForm,
       });
       setShowGoalModal(false);
+      setSubmitted(false);
       setGoalForm({ title: '', description: '', weightage: 25, target: '', year: 2026 });
       loadData();
     } catch (err: any) {
@@ -125,9 +142,20 @@ export default function PerformanceDashboard() {
 
   const handleCreateFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { employeeId: feedbackForm.employeeId, feedback: feedbackForm.feedback },
+      { employeeId: required('Team member'), feedback: required('Feedback') }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       await submitFeedback360(feedbackForm);
       setShowFeedbackModal(false);
+      setSubmitted(false);
       setFeedbackForm({ employeeId: '', feedback: '', rating: 5, relationship: 'PEER', anonymous: false });
       loadData();
     } catch (err: any) {
@@ -169,7 +197,7 @@ export default function PerformanceDashboard() {
             <button onClick={() => router.push('/performance/appraisals')} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', border: '1px solid rgba(255,255,255,0.1)' }}>
               📋 Appraisal Cycles
             </button>
-            <button onClick={() => setShowGoalModal(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', border: 'none', boxShadow: '0 4px 15px rgba(236,72,153,0.3)' }}>
+            <button onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', border: 'none', boxShadow: '0 4px 15px rgba(236,72,153,0.3)' }}>
               + Define Goal KRA
             </button>
           </div>
@@ -248,7 +276,7 @@ export default function PerformanceDashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'white' }}>360 Peer Reviews</h2>
-              <button onClick={() => setShowFeedbackModal(true)} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem' }}>
+              <button onClick={() => { setSubmitted(false); setFormError(''); setShowFeedbackModal(true); }} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem' }}>
                 ✍️ Write Peer Review
               </button>
             </div>
@@ -294,25 +322,31 @@ export default function PerformanceDashboard() {
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Create a Key Result Area target metric</p>
               </div>
 
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  {formError}
+                </div>
+              )}
+
               <form onSubmit={handleCreateGoal} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Goal Title</label>
-                  <input type="text" placeholder="e.g., Deliver Next.js App migration" required value={goalForm.title} onChange={e => setGoalForm({ ...goalForm, title: e.target.value })} className="input-field" />
+                  <ValidatedInput type="text" placeholder="e.g., Deliver Next.js App migration" required value={goalForm.title} onChange={v => setGoalForm({ ...goalForm, title: v })} validator={required('Goal title')} forceError={submitted} className="input-field" />
                 </div>
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Description</label>
-                  <textarea placeholder="Detail target scope and milestones..." value={goalForm.description} onChange={e => setGoalForm({ ...goalForm, description: e.target.value })} className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} />
+                  <ValidatedTextarea placeholder="Detail target scope and milestones..." value={goalForm.description} onChange={v => setGoalForm({ ...goalForm, description: v })} className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Weightage (%)</label>
-                    <input type="number" required min="1" max="100" value={goalForm.weightage} onChange={e => setGoalForm({ ...goalForm, weightage: parseInt(e.target.value) })} className="input-field" />
+                    <ValidatedInput type="text" inputMode="numeric" required value={String(goalForm.weightage)} onChange={v => setGoalForm({ ...goalForm, weightage: v === '' ? 0 : parseInt(v) })} validator={percentage} restrict="digits" maxLength={3} forceError={submitted} className="input-field" />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Target Metric</label>
-                    <input type="text" placeholder="e.g. 100% test coverage" value={goalForm.target} onChange={e => setGoalForm({ ...goalForm, target: e.target.value })} className="input-field" />
+                    <ValidatedInput type="text" placeholder="e.g. 100% test coverage" value={goalForm.target} onChange={v => setGoalForm({ ...goalForm, target: v })} className="input-field" />
                   </div>
                 </div>
 
@@ -337,6 +371,12 @@ export default function PerformanceDashboard() {
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>Write Peer Review</h3>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Provide continuous performance insights</p>
               </div>
+
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
+                  {formError}
+                </div>
+              )}
 
               <form onSubmit={handleCreateFeedback} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
@@ -380,7 +420,7 @@ export default function PerformanceDashboard() {
 
                 <div>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Written Review & Feedback</label>
-                  <textarea placeholder="Describe how this colleague contributes to the team and project success..." required value={feedbackForm.feedback} onChange={e => setFeedbackForm({ ...feedbackForm, feedback: e.target.value })} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
+                  <ValidatedTextarea placeholder="Describe how this colleague contributes to the team and project success..." required value={feedbackForm.feedback} onChange={v => setFeedbackForm({ ...feedbackForm, feedback: v })} validator={required('Feedback')} forceError={submitted} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>

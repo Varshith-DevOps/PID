@@ -1110,6 +1110,15 @@ model Company {
   logoUrl        String?
   customInfo     String?
 
+  // Payslip format / template selection.
+  // The company Admin may choose and customize the format ONCE; saving locks it.
+  // After it is locked, only the PID hcms SUPER_ADMIN team can change it.
+  payslipTemplateId     String?   // one of the catalog ids, e.g. "classic", "modern"
+  payslipTemplateConfig String?   // JSON: accent colour, optional toggles, header note, signatory
+  payslipTemplateLocked Boolean   @default(false)
+  payslipTemplateSetById String?
+  payslipTemplateSetAt   DateTime?
+
   // KYC Verification fields
   cin            String?
   gstin          String?

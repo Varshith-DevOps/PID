@@ -35,6 +35,36 @@ function makeStore(prefix) {
 }
 
 /**
+ * Global safety net: a default per-IP limit on EVERY request so no route is
+ * completely unthrottled. Generous enough not to affect normal SPA usage, low
+ * enough to blunt scripted floods. Per-route limiters below stack on top.
+ * NOTE: in-memory store is per-process; set REDIS_URL + install redis packages
+ * to share limits across cluster workers / instances.
+ */
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.GLOBAL_RATE_LIMIT_MAX) || 300,
+  message: { error: 'Too many requests. Please slow down and try again shortly.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip,
+  store: makeStore('rl:global:'),
+});
+
+/**
+ * Tighter limiter for unauthenticated public form endpoints (contact, etc.).
+ */
+const publicFormLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many submissions from this network. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip,
+  store: makeStore('rl:publicform:'),
+});
+
+/**
  * Limit login requests to 5 per minute per IP.
  */
 const loginLimiter = rateLimit({
@@ -85,4 +115,4 @@ const sensitiveLimiter = rateLimit({
   store: makeStore('rl:sensitive:'),
 });
 
-module.exports = { loginLimiter, registerLimiter, publicApplicationLimiter, sensitiveLimiter };
+module.exports = { globalLimiter, publicFormLimiter, loginLimiter, registerLimiter, publicApplicationLimiter, sensitiveLimiter };

@@ -1,6 +1,9 @@
 name: pid_hcms_mobile
 description: "PID hcms Mobile Employee Self Service Portal"
-version: 1.0.0+1
+# Bump BOTH the version name and the build number (after the +) on every release.
+# The OTA updater compares the build number against the backend manifest's
+# latestVersionCode to decide whether to prompt for an update.
+version: 2.0.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -11,10 +14,16 @@ dependencies:
   http: ^1.2.0
   shared_preferences: ^2.2.2
   intl: ^0.19.0
+  package_info_plus: ^8.0.2
+  ota_update: ^6.0.0
+  url_launcher: ^6.2.6
+  path_provider: ^2.1.3
+  share_plus: ^9.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true

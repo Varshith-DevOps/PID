@@ -89,7 +89,7 @@ const downloadPayslipPDF = async (req, res) => {
     const record = await prisma.payrollRecord.findUnique({
       where: { id },
       include: {
-        employee: { include: { department: true } },
+        employee: { include: { department: true, bankDetails: true, pfDetails: true, company: true } },
         payrollRun: true,
       },
     });
@@ -100,7 +100,11 @@ const downloadPayslipPDF = async (req, res) => {
       return res.status(403).json({ error: 'Access denied. You can only download authorized payslips.' });
     }
 
-    const pdfBuffer = await generatePayslipPDF(record, record.employee, {});
+    const pdfBuffer = await generatePayslipPDF(record, record.employee, {
+      company: record.employee.company,
+      bank: record.employee.bankDetails,
+      pf: record.employee.pfDetails,
+    });
 
     const monthName = new Date(0, record.payrollRun.month - 1).toLocaleString('en', { month: 'long' });
     const fileName = `Payslip_${record.employee.firstName}_${monthName}_${record.payrollRun.year}.pdf`;
@@ -129,10 +133,14 @@ const downloadBulkPayslips = async (req, res) => {
     const employeeIds = records.map(r => r.employeeId);
     const employees = await prisma.employee.findMany({
       where: { id: { in: employeeIds } },
-      include: { department: true },
+      include: { department: true, bankDetails: true, pfDetails: true },
     });
 
-    const pdfBuffer = await generateBulkPayslips(records, employees);
+    const company = employees[0]?.companyId
+      ? await prisma.company.findUnique({ where: { id: employees[0].companyId } })
+      : null;
+
+    const pdfBuffer = await generateBulkPayslips(records, employees, { company });
 
     const monthName = new Date(0, parseInt(month) - 1).toLocaleString('en', { month: 'long' });
     const fileName = `Payslips_${monthName}_${year}.pdf`;
@@ -152,7 +160,7 @@ const emailPayslip = async (req, res) => {
     const record = await prisma.payrollRecord.findUnique({
       where: { id },
       include: {
-        employee: true,
+        employee: { include: { department: true, bankDetails: true, pfDetails: true, company: true } },
         payrollRun: true,
       },
     });
@@ -164,7 +172,11 @@ const emailPayslip = async (req, res) => {
 
     if (!toEmail) return res.status(400).json({ error: 'No email address found' });
 
-    const pdfBuffer = await generatePayslipPDF(record, employee, {});
+    const pdfBuffer = await generatePayslipPDF(record, employee, {
+      company: employee.company,
+      bank: employee.bankDetails,
+      pf: employee.pfDetails,
+    });
 
     const monthName = new Date(0, record.payrollRun.month - 1).toLocaleString('en', { month: 'long' });
     const fileName = `Payslip_${employee.firstName}_${monthName}_${record.payrollRun.year}.pdf`;
@@ -210,7 +222,11 @@ const emailBulkPayslips = async (req, res) => {
     const employeeIds = records.map(r => r.employeeId);
     const employees = await prisma.employee.findMany({
       where: { id: { in: employeeIds } },
+      include: { department: true, bankDetails: true, pfDetails: true },
     });
+    const company = employees[0]?.companyId
+      ? await prisma.company.findUnique({ where: { id: employees[0].companyId } })
+      : null;
 
     let sent = 0;
     let failed = 0;
@@ -225,7 +241,11 @@ const emailBulkPayslips = async (req, res) => {
           }
 
           const recordWithEmployee = { ...record, employee };
-          const pdfBuffer = await generatePayslipPDF(recordWithEmployee, employee, {});
+          const pdfBuffer = await generatePayslipPDF(recordWithEmployee, employee, {
+            company,
+            bank: employee.bankDetails,
+            pf: employee.pfDetails,
+          });
 
           const monthName = new Date(0, payrollRun.month - 1).toLocaleString('en', { month: 'long' });
           const fileName = `Payslip_${employee.firstName}_${monthName}_${payrollRun.year}.pdf`;

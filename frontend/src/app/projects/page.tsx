@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/authContext';
 import { getProjects, getProjectById, createProject, updateProject, deleteProject, addProjectExpense, getTasks, createTask, updateTask, deleteTask, getEmployees } from '@/lib/api';
 import { CanCreate, CanEdit, CanDelete } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, required, amount, nonNegative, date as vDate } from '@/lib/validators';
 
 interface Project {
   id: string;
@@ -65,6 +67,9 @@ export default function ProjectsPage() {
   const [form, setForm] = useState({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' });
   const [taskForm, setTaskForm] = useState({ title: '', description: '', projectId: '', assigneeId: '', estimatedHours: 0, deadline: '', priority: 'MEDIUM' });
   const [expenseForm, setExpenseForm] = useState({ description: '', amount: 0 });
+  const [projectSubmitted, setProjectSubmitted] = useState(false);
+  const [taskSubmitted, setTaskSubmitted] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
@@ -114,9 +119,24 @@ export default function ProjectsPage() {
   };
 
   const handleSaveProject = async () => {
+    setProjectSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { name: form.name, budget: String(form.budget ?? ''), startDate: form.startDate, deadline: form.deadline },
+      { name: required('Name'), budget: amount, startDate: vDate('Start date'), deadline: vDate('Deadline') }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    if (form.startDate && form.deadline && form.deadline < form.startDate) {
+      setFormError('Deadline must be on or after the start date.');
+      return;
+    }
+    setFormError('');
     try {
       await createProject(form);
       setForm({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' });
+      setProjectSubmitted(false);
       setView('projects');
       loadProjects();
       alert('Project created');
@@ -139,10 +159,25 @@ export default function ProjectsPage() {
 
   const handleUpdateProject = async () => {
     if (!editingProject) return;
+    setProjectSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { name: form.name, budget: String(form.budget ?? ''), startDate: form.startDate, deadline: form.deadline },
+      { name: required('Name'), budget: amount, startDate: vDate('Start date'), deadline: vDate('Deadline') }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    if (form.startDate && form.deadline && form.deadline < form.startDate) {
+      setFormError('Deadline must be on or after the start date.');
+      return;
+    }
+    setFormError('');
     try {
       await updateProject(editingProject.id, form);
       setEditingProject(null);
       setForm({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' });
+      setProjectSubmitted(false);
       setView('projects');
       loadProjects();
       alert('Project updated');
@@ -161,9 +196,20 @@ export default function ProjectsPage() {
   };
 
   const handleSaveTask = async () => {
+    setTaskSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { title: taskForm.title, estimatedHours: String(taskForm.estimatedHours ?? '') },
+      { title: required('Title'), estimatedHours: nonNegative('Hours') }
+    );
+    if (!isValid) {
+      setFormError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setFormError('');
     try {
       await createTask(taskForm);
       setTaskForm({ title: '', description: '', projectId: '', assigneeId: '', estimatedHours: 0, deadline: '', priority: 'MEDIUM' });
+      setTaskSubmitted(false);
       setView('tasks');
       loadTasks();
       if (taskForm.projectId) loadProjectDetail(taskForm.projectId);
@@ -228,18 +274,19 @@ export default function ProjectsPage() {
         {(view === 'createProject' || view === 'editProject') && (
           <div className="glass-card" style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>{view === 'editProject' ? 'Edit Project' : 'Create Project'}</h2>
+            {formError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>{formError}</div>}
             <div className="form-grid">
-              <div className="form-group"><label className="form-label">Project Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field" /></div>
-              <div className="form-group"><label className="form-label">Budget</label><input type="number" value={form.budget} onChange={(e) => setForm({ ...form, budget: parseFloat(e.target.value) })} className="input-field" /></div>
+              <div className="form-group"><label className="form-label">Project Name *</label><ValidatedInput value={form.name} onChange={(v) => setForm({ ...form, name: v })} validator={required('Name')} forceError={projectSubmitted} className="input-field" /></div>
+              <div className="form-group"><label className="form-label">Budget</label><ValidatedInput inputMode="decimal" value={String(form.budget ?? '')} onChange={(v) => setForm({ ...form, budget: parseFloat(v) || 0 })} validator={amount} restrict="decimal" forceError={projectSubmitted} className="input-field" /></div>
               <div className="form-group"><label className="form-label">Manager</label><select value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })} className="select-field"><option value="">Select</option>{employees.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></div>
               <div className="form-group"><label className="form-label">Status</label><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="select-field">{PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
               <div className="form-group"><label className="form-label">Start Date</label><input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="input-field" /></div>
               <div className="form-group"><label className="form-label">Deadline</label><input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="input-field" /></div>
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Description</label><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input-field" rows={3} /></div>
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="form-label">Description</label><ValidatedTextarea value={form.description} onChange={(v) => setForm({ ...form, description: v })} className="input-field" rows={3} /></div>
             </div>
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
               <button onClick={view === 'editProject' ? handleUpdateProject : handleSaveProject} className="btn btn-primary">{view === 'editProject' ? 'Update' : 'Create'}</button>
-              <button onClick={() => { setEditingProject(null); setForm({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' }); setView('projects'); }} className="btn btn-ghost">Cancel</button>
+              <button onClick={() => { setEditingProject(null); setForm({ name: '', description: '', startDate: '', deadline: '', budget: 0, managerId: '', status: 'PLANNING' }); setProjectSubmitted(false); setFormError(''); setView('projects'); }} className="btn btn-ghost">Cancel</button>
             </div>
           </div>
         )}
@@ -247,17 +294,18 @@ export default function ProjectsPage() {
         {view === 'createTask' && (
           <div className="glass-card" style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Create Task</h2>
+            {formError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>{formError}</div>}
             <div className="form-grid">
-              <div className="form-group"><label className="form-label">Task Title *</label><input value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} className="input-field" /></div>
+              <div className="form-group"><label className="form-label">Task Title *</label><ValidatedInput value={taskForm.title} onChange={(v) => setTaskForm({ ...taskForm, title: v })} validator={required('Title')} forceError={taskSubmitted} className="input-field" /></div>
               <div className="form-group"><label className="form-label">Project</label><select value={taskForm.projectId} onChange={(e) => setTaskForm({ ...taskForm, projectId: e.target.value })} className="select-field"><option value="">Select</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
               <div className="form-group"><label className="form-label">Assign To</label><select value={taskForm.assigneeId} onChange={(e) => setTaskForm({ ...taskForm, assigneeId: e.target.value })} className="select-field"><option value="">Select</option>{employees.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName}</option>)}</select></div>
               <div className="form-group"><label className="form-label">Priority</label><select value={taskForm.priority} onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })} className="select-field">{TASK_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
-              <div className="form-group"><label className="form-label">Estimated Hours</label><input type="number" value={taskForm.estimatedHours} onChange={(e) => setTaskForm({ ...taskForm, estimatedHours: parseFloat(e.target.value) })} className="input-field" /></div>
+              <div className="form-group"><label className="form-label">Estimated Hours</label><ValidatedInput inputMode="decimal" value={String(taskForm.estimatedHours ?? '')} onChange={(v) => setTaskForm({ ...taskForm, estimatedHours: parseFloat(v) || 0 })} validator={nonNegative('Hours')} restrict="decimal" forceError={taskSubmitted} className="input-field" /></div>
               <div className="form-group"><label className="form-label">Deadline</label><input type="date" value={taskForm.deadline} onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })} className="input-field" /></div>
             </div>
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
               <button onClick={handleSaveTask} className="btn btn-primary">Create</button>
-              <button onClick={() => setView('tasks')} className="btn btn-ghost">Cancel</button>
+              <button onClick={() => { setTaskSubmitted(false); setFormError(''); setView('tasks'); }} className="btn btn-ghost">Cancel</button>
             </div>
           </div>
         )}

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/lib/authContext';
 import { createLearningCourse, getLearningCourses, getLearningEnrollments } from '@/lib/api';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, required } from '@/lib/validators';
 
 export default function LearningPage() {
   const { user, loading: authLoading } = useAuth();
@@ -12,6 +14,8 @@ export default function LearningPage() {
   const [courses, setCourses] = useState<any[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [form, setForm] = useState({ title: '', category: 'Compliance', description: '' });
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
@@ -28,8 +32,19 @@ export default function LearningPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { title: form.title, description: form.description },
+      { title: required('Course title'), description: required('Description') }
+    );
+    if (!isValid) {
+      setError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    setError('');
     await createLearningCourse(form);
     setForm({ title: '', category: 'Compliance', description: '' });
+    setSubmitted(false);
     loadData();
   };
 
@@ -46,12 +61,13 @@ export default function LearningPage() {
           {canManageLearning && (
           <section className="card">
             <h2>Create Course</h2>
+            {error && <p style={{ color: '#f87171', fontSize: '0.85rem', margin: '0 0 0.5rem' }}>{error}</p>}
             <form onSubmit={submit} className="form-grid">
-              <input className="form-control" placeholder="Course title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
+              <ValidatedInput className="form-control" placeholder="Course title" value={form.title} onChange={v => setForm({ ...form, title: v })} validator={required('Course title')} forceError={submitted} required />
               <select className="form-control" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
                 <option>Compliance</option><option>Leadership</option><option>Technical</option><option>HR Policy</option>
               </select>
-              <textarea className="form-control" placeholder="Description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              <ValidatedTextarea className="form-control" placeholder="Description" value={form.description} onChange={v => setForm({ ...form, description: v })} validator={required('Description')} forceError={submitted} />
               <button className="btn btn-primary" type="submit">Save Course</button>
             </form>
           </section>

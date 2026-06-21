@@ -21,9 +21,33 @@ const getLinkedEmployeeId = async (user) => {
   return employee?.id || null;
 };
 
+/**
+ * True if the employee exists *within the caller's tenant*.
+ *
+ * The Prisma client extension (config/database.js) scopes Employee queries by the
+ * caller's companyId via AsyncLocalStorage, so a cross-tenant employeeId resolves
+ * to null here and is denied. A platform SUPER_ADMIN has no companyId and is
+ * intentionally left unscoped (can act across tenants).
+ */
+const employeeInTenant = async (employeeId) => {
+  if (!employeeId) return false;
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: { id: true },
+  });
+  return Boolean(employee);
+};
+
 const canAccessEmployee = async (user, employeeId) => {
   if (!employeeId) return false;
-  if (isHr(user) || isPayroll(user)) return true;
+
+  // Privileged roles may act on employees, but ONLY inside their own company.
+  // Previously this returned true unconditionally, which allowed cross-tenant
+  // IDOR (e.g. reading another company's payslips by id). Now we confirm the
+  // target employee is in the caller's tenant.
+  if (isHr(user) || isPayroll(user)) {
+    return employeeInTenant(employeeId);
+  }
 
   const ownEmployeeId = await getLinkedEmployeeId(user);
   if (ownEmployeeId === employeeId) return true;
@@ -75,7 +99,8 @@ const isDirectManagerOf = async (user, employeeId) => {
 
 const canApproveEmployeeWorkflow = async (user, employeeId) => {
   if (!employeeId) return false;
-  if (isHr(user) || isAdmin(user)) return true;
+  // Approval rights still require the target to be in the caller's tenant.
+  // canAccessEmployee already enforces the company boundary for HR/Admin/Payroll.
   return canAccessEmployee(user, employeeId);
 };
 
@@ -91,6 +116,7 @@ module.exports = {
   isManagerOrAdmin,
   getLinkedEmployeeId,
   canAccessEmployee,
+  employeeInTenant,
   getEmployeeScopeIds,
   isDirectManagerOf,
   canApproveEmployeeWorkflow,

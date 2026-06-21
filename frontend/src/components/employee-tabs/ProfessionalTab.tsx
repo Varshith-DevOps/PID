@@ -1,5 +1,6 @@
 'use client';
 import InlineField from '@/components/InlineField';
+import { required } from '@/lib/validators';
 
 export default function ProfessionalTab({ employee, canEdit, onSave }: any) {
   return (
@@ -12,7 +13,7 @@ export default function ProfessionalTab({ employee, canEdit, onSave }: any) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
         <InlineField label="Employee ID" value={employee.employeeId} fieldKey="employeeId" canEdit={false} onSave={onSave} />
-        <InlineField label="Job Title" value={employee.jobTitle} fieldKey="jobTitle" canEdit={canEdit} onSave={onSave} />
+        <InlineField label="Job Title" value={employee.jobTitle} fieldKey="jobTitle" canEdit={canEdit} onSave={onSave} validator={required('Job title')} />
         <InlineField label="Department" value={employee.department?.name} fieldKey="department" canEdit={false} onSave={onSave} />
         <InlineField label="Manager" value={employee.manager ? `${employee.manager.firstName} ${employee.manager.lastName}` : 'None'} fieldKey="manager" canEdit={false} onSave={onSave} />
         <InlineField label="Join Date" value={employee.joinDate?.split('T')[0] || ''} fieldKey="joinDate" canEdit={canEdit} onSave={onSave} type="date" />

@@ -10,8 +10,14 @@ const {
   emailPayslip,
   emailBulkPayslips,
 } = require('../controllers/payslipController');
+const { getPayslipTemplate, updatePayslipTemplate } = require('../controllers/payslipTemplateController');
 
 router.get('/history', authenticate, rbacMiddleware('PAYROLL', 'VIEW'), getPayslipHistory);
+
+// Payslip format / template selection (must come before the '/:id' route).
+router.get('/template', authenticate, rbacMiddleware('PAYROLL', 'VIEW'), getPayslipTemplate);
+router.put('/template', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updatePayslipTemplate);
+
 router.get('/pdf-bulk/', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'FINANCE', 'ACCOUNTS'), rbacMiddleware('PAYROLL', 'EXPORT'), downloadBulkPayslips);
 router.get('/pdf/:id', authenticate, rbacMiddleware('PAYROLL', 'VIEW'), downloadPayslipPDF);
 router.get('/:id', authenticate, rbacMiddleware('PAYROLL', 'VIEW'), getPayslip);

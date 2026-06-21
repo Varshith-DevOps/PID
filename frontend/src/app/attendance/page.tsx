@@ -20,6 +20,8 @@ import {
 } from '@/lib/api';
 import { CanView, CanCreate, CanEdit } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, required } from '@/lib/validators';
 
 interface AttendanceRec { id?: string; employee?: { id: string; firstName: string; lastName: string; jobTitle: string; department: { name: string } }; employeeId?: string; date: string; checkIn?: string; checkOut?: string; status: string; lateMinutes?: number; workHours?: number; }
 
@@ -57,6 +59,7 @@ export default function AttendancePage() {
     statusCorrection: 'PRESENT',
     reason: '',
   });
+  const [regSubmitted, setRegSubmitted] = useState(false);
 
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   const isEmployee = user?.role === 'EMPLOYEE';
@@ -121,6 +124,22 @@ export default function AttendancePage() {
 
   const handleSubmitRegularization = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRegSubmitted(true);
+    const values: Record<string, string> = { date: regForm.date, reason: regForm.reason };
+    const rules: Record<string, (value: string) => string | null> = { date: required('Date'), reason: required('Reason') };
+    if (regForm.requestType === 'MISSING_PUNCH_IN') {
+      values.checkInCorrection = regForm.checkInCorrection;
+      rules.checkInCorrection = required('Check-in time');
+    }
+    if (regForm.requestType === 'MISSING_PUNCH_OUT') {
+      values.checkOutCorrection = regForm.checkOutCorrection;
+      rules.checkOutCorrection = required('Check-out time');
+    }
+    const { isValid, firstError } = validateForm(values, rules);
+    if (!isValid) {
+      alert(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
     try {
       await submitRegularization({
         ...regForm,
@@ -136,6 +155,7 @@ export default function AttendancePage() {
         statusCorrection: 'PRESENT',
         reason: '',
       });
+      setRegSubmitted(false);
       loadRegularizations();
       alert('Correction request submitted for approval!');
     } catch (err: any) {
@@ -410,13 +430,15 @@ export default function AttendancePage() {
                     {regForm.requestType === 'MISSING_PUNCH_IN' && (
                       <div>
                         <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Correct Check-In Time</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. 09:15" 
-                          required 
-                          value={regForm.checkInCorrection} 
-                          onChange={(e) => setRegForm({ ...regForm, checkInCorrection: e.target.value })} 
-                          className="input-field" 
+                        <ValidatedInput
+                          type="text"
+                          placeholder="e.g. 09:15"
+                          required
+                          value={regForm.checkInCorrection}
+                          onChange={(value) => setRegForm({ ...regForm, checkInCorrection: value })}
+                          validator={required('Check-in time')}
+                          forceError={regSubmitted}
+                          className="input-field"
                         />
                       </div>
                     )}
@@ -424,13 +446,15 @@ export default function AttendancePage() {
                     {regForm.requestType === 'MISSING_PUNCH_OUT' && (
                       <div>
                         <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Correct Check-Out Time</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. 18:30" 
-                          required 
-                          value={regForm.checkOutCorrection} 
-                          onChange={(e) => setRegForm({ ...regForm, checkOutCorrection: e.target.value })} 
-                          className="input-field" 
+                        <ValidatedInput
+                          type="text"
+                          placeholder="e.g. 18:30"
+                          required
+                          value={regForm.checkOutCorrection}
+                          onChange={(value) => setRegForm({ ...regForm, checkOutCorrection: value })}
+                          validator={required('Check-out time')}
+                          forceError={regSubmitted}
+                          className="input-field"
                         />
                       </div>
                     )}
@@ -450,13 +474,15 @@ export default function AttendancePage() {
 
                     <div>
                       <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Reason & Justification</label>
-                      <textarea 
-                        rows={3} 
-                        placeholder="e.g. Client meeting in morning, biometric machine down..." 
-                        required 
-                        value={regForm.reason} 
-                        onChange={(e) => setRegForm({ ...regForm, reason: e.target.value })} 
-                        className="input-field" 
+                      <ValidatedTextarea
+                        rows={3}
+                        placeholder="e.g. Client meeting in morning, biometric machine down..."
+                        required
+                        value={regForm.reason}
+                        onChange={(value) => setRegForm({ ...regForm, reason: value })}
+                        validator={required('Reason')}
+                        forceError={regSubmitted}
+                        className="input-field"
                         style={{ resize: 'none', fontFamily: 'inherit' }}
                       />
                     </div>

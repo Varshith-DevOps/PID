@@ -6,17 +6,29 @@ import { login } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
 import Link from 'next/link';
 import BrandLogo from '@/components/BrandLogo';
+import { ValidatedInput } from '@/components/ValidatedField';
+import { validateForm, email as vEmail, required } from '@/lib/validators';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const router = useRouter();
   const { login: authLogin } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { email, password },
+      { email: vEmail, password: required('Password') }
+    );
+    if (!isValid) {
+      setError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -69,7 +81,7 @@ export default function LoginPage() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
                   <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
                 </svg>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="admin@hrms.com" style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: 'rgba(255,255,255,0.95)', fontSize: '0.9rem', outline: 'none', transition: 'all 0.3s ease', fontFamily: 'inherit' }} />
+                <ValidatedInput type="email" value={email} onChange={setEmail} validator={vEmail} forceError={submitted} required placeholder="admin@hrms.com" style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: 'rgba(255,255,255,0.95)', fontSize: '0.9rem', outline: 'none', transition: 'all 0.3s ease', fontFamily: 'inherit' }} />
               </div>
             </div>
 
@@ -79,7 +91,7 @@ export default function LoginPage() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                 </svg>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: 'rgba(255,255,255,0.95)', fontSize: '0.9rem', outline: 'none', transition: 'all 0.3s ease', fontFamily: 'inherit' }} />
+                <ValidatedInput type="password" value={password} onChange={setPassword} validator={required('Password')} forceError={submitted} required placeholder="••••••••" style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: 'rgba(255,255,255,0.95)', fontSize: '0.9rem', outline: 'none', transition: 'all 0.3s ease', fontFamily: 'inherit' }} />
               </div>
             </div>
 

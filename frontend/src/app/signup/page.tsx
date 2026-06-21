@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { getBillingPlans, signup } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
 import BrandLogo from '@/components/BrandLogo';
+import { ValidatedInput } from '@/components/ValidatedField';
+import { validateForm, email as vEmail, mobile as vMobile, personName, password as vPassword, required } from '@/lib/validators';
 
 interface Plan {
   id: string;
@@ -27,6 +29,7 @@ function SignupContent() {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login: authLogin } = useAuth();
@@ -62,6 +65,22 @@ function SignupContent() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { companyName, companyCode, name, email, phone, password },
+      {
+        companyName: required('Company name'),
+        companyCode: required('Company tenant code'),
+        name: personName('Admin name'),
+        email: vEmail,
+        phone: vMobile,
+        password: vPassword
+      }
+    );
+    if (!isValid) {
+      setError(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
     setError('');
     setLoading(true);
 
@@ -109,11 +128,11 @@ function SignupContent() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Company Name *</label>
-              <input type="text" required placeholder="Acme Corporation" value={companyName} onChange={(e) => setCompanyName(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
+              <ValidatedInput type="text" required placeholder="Acme Corporation" value={companyName} onChange={setCompanyName} validator={required('Company name')} forceError={submitted} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Company Tenant Code *</label>
-              <input type="text" required placeholder="acme" value={companyCode} onChange={(e) => setCompanyCode(validateCode(e.target.value))} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
+              <ValidatedInput type="text" required placeholder="acme" value={companyCode} onChange={(v) => setCompanyCode(validateCode(v))} validator={required('Company tenant code')} forceError={submitted} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
               <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginTop: '2px', display: 'block' }}>Lowercase alphanumeric without spaces.</span>
             </div>
           </div>
@@ -141,22 +160,22 @@ function SignupContent() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Admin Name *</label>
-              <input type="text" required placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
+              <ValidatedInput type="text" required placeholder="John Doe" value={name} onChange={setName} validator={personName('Admin name')} restrict="alpha" forceError={submitted} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Admin Work Email *</label>
-              <input type="email" required placeholder="admin@acme.com" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
+              <ValidatedInput type="email" required placeholder="admin@acme.com" value={email} onChange={setEmail} validator={vEmail} forceError={submitted} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Admin Phone</label>
-              <input type="tel" placeholder="+91 9999999999" value={phone} onChange={(e) => setPhone(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
+              <ValidatedInput type="tel" inputMode="numeric" placeholder="9999999999" value={phone} onChange={setPhone} validator={vMobile} restrict="digits" maxLength={10} forceError={submitted} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Password *</label>
-              <input type="password" required placeholder="At least 12 chars" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
+              <ValidatedInput type="password" required placeholder="At least 12 chars" value={password} onChange={setPassword} validator={vPassword} forceError={submitted} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#fff', fontSize: '0.9rem', outline: 'none' }} />
             </div>
           </div>
         </div>

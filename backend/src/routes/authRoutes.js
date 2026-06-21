@@ -20,9 +20,10 @@ const { requireRole } = require('../rbac/rbacMiddleware');
 const { loginLimiter, registerLimiter, sensitiveLimiter } = require('../middleware/rateLimit');
 const { validate } = require('../middleware/validate');
 const { loginSchema, changePasswordSchema, resetPasswordSchema } = require('../schemas/authSchemas');
+const { signupSchema } = require('../schemas/publicSchemas');
 
 router.post('/login', loginLimiter, validate(loginSchema), login);
-router.post('/signup', registerLimiter, signup);
+router.post('/signup', registerLimiter, validate(signupSchema), signup);
 router.post('/mfa/verify-login', loginLimiter, verifyMfaLogin);
 router.post('/refresh', loginLimiter, refresh);
 router.post('/register', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), registerLimiter, register);

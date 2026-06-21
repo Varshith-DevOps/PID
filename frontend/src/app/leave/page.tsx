@@ -16,6 +16,8 @@ import {
 } from '@/lib/api';
 import { CanCreate, CanEdit } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
+import { ValidatedTextarea } from '@/components/ValidatedField';
+import { validateForm, required, date as vDate } from '@/lib/validators';
 
 interface EmployeeOption {
   id: string;
@@ -68,6 +70,8 @@ export default function LeavePage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [form, setForm] = useState({ employeeId: '', leaveType: 'ANNUAL', startDate: '', endDate: '', reason: '' });
+  const [submitted, setSubmitted] = useState(false);
+  const [rejectSubmitted, setRejectSubmitted] = useState(false);
 
   const isAdminView = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
@@ -149,10 +153,24 @@ export default function LeavePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
+    const { isValid, firstError } = validateForm(
+      { employeeId: form.employeeId, startDate: form.startDate, endDate: form.endDate, reason: form.reason },
+      { employeeId: required('Employee'), startDate: vDate('Start date'), endDate: vDate('End date'), reason: required('Reason') }
+    );
+    if (!isValid) {
+      alert(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    if (new Date(form.endDate) < new Date(form.startDate)) {
+      alert('End date must be on or after the start date.');
+      return;
+    }
     try {
       await createLeaveRequest(form);
       setView('list');
       setForm({ employeeId: '', leaveType: 'ANNUAL', startDate: '', endDate: '', reason: '' });
+      setSubmitted(false);
       loadLeaves();
       alert('Leave request submitted');
     } catch (err) {
@@ -161,7 +179,15 @@ export default function LeavePage() {
   };
 
   const handleApprove = async (id: string) => { try { await approveLeave(id); loadLeaves(); alert('Leave approved'); } catch (err) { alert('Failed to approve'); } };
-  const handleReject = async (id: string) => { try { await rejectLeave(id, rejectReason); setShowRejectModal(null); setRejectReason(''); loadLeaves(); alert('Leave rejected'); } catch (err) { alert('Failed to reject'); } };
+  const handleReject = async (id: string) => {
+    setRejectSubmitted(true);
+    const { isValid, firstError } = validateForm({ rejectReason }, { rejectReason: required('Reason') });
+    if (!isValid) {
+      alert(firstError || 'Please correct the highlighted fields.');
+      return;
+    }
+    try { await rejectLeave(id, rejectReason); setShowRejectModal(null); setRejectReason(''); setRejectSubmitted(false); loadLeaves(); alert('Leave rejected'); } catch (err) { alert('Failed to reject'); }
+  };
   const handleCancel = async (id: string) => { if (!confirm('Cancel this leave request?')) return; try { await cancelLeaveRequest(id); loadLeaves(); } catch (err) { alert('Failed to cancel'); } };
   const getStatusCount = (status: string) => leaves.filter((leave) => leave.status === status).length;
   const getBalance = (row: BalanceRow, type: string) => row.balances.find((balanceItem) => balanceItem.leaveType === type);
@@ -260,7 +286,7 @@ export default function LeavePage() {
           <div className="modal-overlay">
             <div className="modal-content">
               <h3 className="modal-title">Reject Leave Request</h3>
-              <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason for rejection" className="textarea-field" style={{ marginBottom: '1rem' }} />
+              <ValidatedTextarea value={rejectReason} onChange={setRejectReason} validator={required('Reason')} forceError={rejectSubmitted} placeholder="Reason for rejection" className="textarea-field" style={{ marginBottom: '1rem' }} />
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <button onClick={() => handleReject(showRejectModal)} className="btn btn-danger">Reject</button>
                 <button onClick={() => { setShowRejectModal(null); setRejectReason(''); }} className="btn btn-ghost">Cancel</button>
@@ -278,7 +304,7 @@ export default function LeavePage() {
                 <div className="form-group"><label className="form-label">Leave Type</label><select required value={form.leaveType} onChange={(e) => setForm({ ...form, leaveType: e.target.value })} className="select-field">{LEAVE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></div>
                 <div className="form-group"><label className="form-label">Start Date</label><input required type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="input-field" /></div>
                 <div className="form-group"><label className="form-label">End Date</label><input required type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} className="input-field" /></div>
-                <div className="form-group"><label className="form-label">Reason</label><textarea required value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="textarea-field" /></div>
+                <div className="form-group"><label className="form-label">Reason</label><ValidatedTextarea required value={form.reason} onChange={(value) => setForm({ ...form, reason: value })} validator={required('Reason')} forceError={submitted} className="textarea-field" /></div>
                 <button type="submit" className="btn btn-primary">Submit Request</button>
               </div>
             </form>

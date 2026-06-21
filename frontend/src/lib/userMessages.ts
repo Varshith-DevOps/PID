@@ -81,6 +81,21 @@ const successRules: MessageRule[] = [
   { id: 'platform-ok', methods: ['post', 'put'], match: '/platform', message: 'Platform settings updated.' },
   { id: 'billing-ok', methods: ['post', 'put'], match: '/billing', message: 'Billing action completed successfully.' },
   { id: 'contact-ok', methods: ['post'], match: '/contact', message: 'Request submitted. The team will contact you soon.' },
+
+  { id: 'checklist-ok', methods: ['post', 'put', 'delete'], match: '/checklists', message: 'Checklist updated successfully.' },
+  { id: 'kyc-ok', methods: ['post', 'put'], match: '/kyc', message: 'KYC details submitted successfully.' },
+  { id: 'onboarding-ok', methods: ['post', 'put'], match: '/onboarding', message: 'Onboarding details saved successfully.' },
+];
+
+/**
+ * Endpoints whose successful mutations should stay silent (background or
+ * navigation calls where a toast would be noise rather than feedback).
+ */
+const silentSuccessUrls: (string | RegExp)[] = [
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/csrf',
+  '/notifications/read',
 ];
 
 const errorRules: MessageRule[] = [
@@ -140,7 +155,16 @@ const statusMessages: Record<number, string> = {
 export function getActionSuccessMessage(method: string, url: string): string | null {
   const normalizedMethod = normalize(method);
   if (!['post', 'put', 'patch', 'delete'].includes(normalizedMethod)) return null;
-  return applyRule(successRules, { method: normalizedMethod, url });
+
+  const normalizedUrl = normalize(url);
+  const isSilent = silentSuccessUrls.some((pattern) =>
+    typeof pattern === 'string' ? normalizedUrl.includes(pattern) : pattern.test(normalizedUrl)
+  );
+  if (isSilent) return null;
+
+  // Fall back to a generic confirmation so EVERY successful action gives the
+  // user clear feedback, even if it has no module-specific message above.
+  return applyRule(successRules, { method: normalizedMethod, url }) || 'Action completed successfully.';
 }
 
 export function getActionErrorMessage(method: string, url: string, errorResponse: any): string {

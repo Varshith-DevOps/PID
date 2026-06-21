@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../providers/auth_provider.dart';
 import 'dashboard_shell.dart';
@@ -38,36 +37,152 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
-    final error = await widget.authProvider.login(
+    final result = await widget.authProvider.login(
       companyCode: _companyController.text,
       email: _emailController.text,
       password: _passwordController.text,
     );
 
     if (!mounted) return;
+    setState(() => _isLoading = false);
 
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (error == null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => DashboardShell(authProvider: widget.authProvider),
-        ),
-      );
+    if (result.success) {
+      _goToDashboard();
+    } else if (result.mfaRequired) {
+      await _promptMfa();
     } else {
-      setState(() {
-        _errorMessage = error;
-      });
+      setState(() => _errorMessage = result.error);
+    }
+  }
+
+  void _goToDashboard() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DashboardShell(authProvider: widget.authProvider),
+      ),
+    );
+  }
+
+  /// Shows the MFA challenge sheet after a password login flagged `mfaRequired`.
+  Future<void> _promptMfa() async {
+    final codeController = TextEditingController();
+    bool useRecovery = false;
+    String? sheetError;
+    bool verifying = false;
+
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF111827),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 22,
+            right: 22,
+            top: 22,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 22,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.shield_outlined, color: Color(0xFF00A7B5)),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Two-factor verification',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(sheetContext, false),
+                    icon: const Icon(Icons.close, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                useRecovery
+                    ? 'Enter one of your saved recovery codes.'
+                    : 'Enter the 6-digit code from your authenticator app.',
+                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: codeController,
+                autofocus: true,
+                keyboardType: useRecovery ? TextInputType.text : TextInputType.number,
+                style: const TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2),
+                decoration: InputDecoration(
+                  hintText: useRecovery ? 'Recovery code' : '123456',
+                  hintStyle: const TextStyle(color: Color(0xFF475569)),
+                  filled: true,
+                  fillColor: const Color(0xFF172033),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              if (sheetError != null) ...[
+                const SizedBox(height: 10),
+                Text(sheetError!, style: const TextStyle(color: Color(0xFFF87171), fontSize: 13)),
+              ],
+              const SizedBox(height: 16),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF00A7B5), minimumSize: const Size.fromHeight(48)),
+                onPressed: verifying
+                    ? null
+                    : () async {
+                        setSheetState(() {
+                          verifying = true;
+                          sheetError = null;
+                        });
+                        final res = await widget.authProvider.verifyMfa(
+                          code: useRecovery ? null : codeController.text,
+                          recoveryCode: useRecovery ? codeController.text : null,
+                        );
+                        if (res.success) {
+                          if (sheetContext.mounted) Navigator.pop(sheetContext, true);
+                        } else {
+                          setSheetState(() {
+                            verifying = false;
+                            sheetError = res.error;
+                          });
+                        }
+                      },
+                child: verifying
+                    ? const SizedBox(
+                        height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    : const Text('Verify', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+              TextButton(
+                onPressed: () => setSheetState(() {
+                  useRecovery = !useRecovery;
+                  sheetError = null;
+                  codeController.clear();
+                }),
+                child: Text(
+                  useRecovery ? 'Use authenticator code instead' : 'Use a recovery code instead',
+                  style: const TextStyle(color: Color(0xFF94A3B8)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    if (ok == true) {
+      _goToDashboard();
+    } else {
+      setState(() => _errorMessage = 'Two-factor verification was not completed.');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E1A),
       body: Stack(

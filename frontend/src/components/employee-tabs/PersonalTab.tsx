@@ -1,5 +1,6 @@
 'use client';
 import InlineField from '@/components/InlineField';
+import { email as vEmail, mobile, personName, pan, aadhaar } from '@/lib/validators';
 
 export default function PersonalTab({ employee, canEdit, onSave, shouldMask }: any) {
   return (
@@ -11,25 +12,25 @@ export default function PersonalTab({ employee, canEdit, onSave, shouldMask }: a
         </h2>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
-        <InlineField label="First Name" value={employee.firstName} fieldKey="firstName" canEdit={canEdit} onSave={onSave} />
-        <InlineField label="Last Name" value={employee.lastName} fieldKey="lastName" canEdit={canEdit} onSave={onSave} />
-        <InlineField label="Email" value={employee.email} fieldKey="email" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="email" />
-        <InlineField label="Phone" value={employee.phone} fieldKey="phone" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="phone" />
+        <InlineField label="First Name" value={employee.firstName} fieldKey="firstName" canEdit={canEdit} onSave={onSave} validator={personName('First name')} restrict="alpha" />
+        <InlineField label="Last Name" value={employee.lastName} fieldKey="lastName" canEdit={canEdit} onSave={onSave} validator={personName('Last name')} restrict="alpha" />
+        <InlineField label="Email" value={employee.email} fieldKey="email" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="email" validator={vEmail} />
+        <InlineField label="Phone" value={employee.phone} fieldKey="phone" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="phone" validator={mobile} restrict="digits" maxLength={10} />
         <InlineField label="Date of Birth" value={employee.dateOfBirth?.split('T')[0] || ''} fieldKey="dateOfBirth" canEdit={canEdit} onSave={onSave} type="date" />
         <InlineField label="Gender" value={employee.gender} fieldKey="gender" canEdit={canEdit} onSave={onSave} />
         <InlineField label="Blood Group" value={employee.bloodGroup} fieldKey="bloodGroup" canEdit={canEdit} onSave={onSave} />
         <InlineField label="Marital Status" value={employee.maritalStatus} fieldKey="maritalStatus" canEdit={canEdit} onSave={onSave} />
         <InlineField label="Nationality" value={employee.nationality} fieldKey="nationality" canEdit={canEdit} onSave={onSave} />
-        <InlineField label="Personal Email" value={employee.personalEmail} fieldKey="personalEmail" canEdit={canEdit} onSave={onSave} />
-        <InlineField label="PAN Number" value={employee.panNumber} fieldKey="panNumber" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="pan" />
-        <InlineField label="Aadhar Number" value={employee.aadharNumber} fieldKey="aadharNumber" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="aadhar" />
+        <InlineField label="Personal Email" value={employee.personalEmail} fieldKey="personalEmail" canEdit={canEdit} onSave={onSave} validator={vEmail} />
+        <InlineField label="PAN Number" value={employee.panNumber} fieldKey="panNumber" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="pan" validator={pan} restrict="upperAlnum" maxLength={10} />
+        <InlineField label="Aadhar Number" value={employee.aadharNumber} fieldKey="aadharNumber" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="aadhar" validator={aadhaar} restrict="digits" maxLength={12} />
       </div>
 
       <h3 style={{ fontSize: '1rem', marginTop: '2rem', marginBottom: '1rem', color: 'var(--accent-cyan)' }}>Emergency Contact</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
-        <InlineField label="Contact Name" value={employee.emergencyContactName} fieldKey="emergencyContactName" canEdit={canEdit} onSave={onSave} />
+        <InlineField label="Contact Name" value={employee.emergencyContactName} fieldKey="emergencyContactName" canEdit={canEdit} onSave={onSave} validator={personName('Contact name')} restrict="alpha" />
         <InlineField label="Relation" value={employee.emergencyContactRelation} fieldKey="emergencyContactRelation" canEdit={canEdit} onSave={onSave} />
-        <InlineField label="Contact Phone" value={employee.emergencyContactPhone} fieldKey="emergencyContactPhone" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="phone" />
+        <InlineField label="Contact Phone" value={employee.emergencyContactPhone} fieldKey="emergencyContactPhone" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="phone" validator={mobile} restrict="digits" maxLength={10} />
       </div>
     </div>
   );

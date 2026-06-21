@@ -1,0 +1,14 @@
+{
+  "latestVersion": "2.0.0",
+  "latestVersionCode": 2,
+  "minSupportedVersionCode": 1,
+  "mandatory": false,
+  "apkFileName": "pid-hcms-2.0.0.apk",
+  "releasedAt": "2026-06-21",
+  "releaseNotes": [
+    "Secure MFA login support directly inside the mobile app.",
+    "New Jira-style Project Board to view and move your tasks across columns.",
+    "Settings: change password and download your personal data (DPDP).",
+    "Over-the-air updates: the app now checks for new versions and installs them for you."
+  ]
+}

@@ -9,9 +9,19 @@ const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const aiController = require('../controllers/aiController');
 
-// Multer in-memory storage for simulating OCR document scanning
+// Multer in-memory storage for simulating OCR document scanning.
+// Bound the upload: memoryStorage buffers the whole file in RAM, so without a
+// limit a single large POST can OOM the worker. Only the filename is used.
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /pdf|png|jpe?g|webp|gif|csv|txt|docx?|xlsx?/i;
+    if (allowed.test(require('path').extname(file.originalname).toLowerCase())) return cb(null, true);
+    cb(new Error('Unsupported document type'));
+  },
+});
 
 // All AI routes require user authentication
 router.use(authenticate);
