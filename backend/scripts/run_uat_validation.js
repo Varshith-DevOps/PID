@@ -10,7 +10,12 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 const BASE_URL = 'http://localhost:5000/api';
-const JWT_SECRET = 'supersecretjwtkey';
+// Must match the running server's signing key; never hardcode a secret.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('JWT_SECRET env var is required to run UAT validation (must match the server).');
+  process.exit(1);
+}
 const REPORT_PATH = 'C:\\Users\\Axiora\\.gemini\\antigravity\\brain\\1f4c461b-4e05-4952-8141-ae02588e8059\\uat_report.md';
 
 const testResults = [];

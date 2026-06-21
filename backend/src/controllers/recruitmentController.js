@@ -287,9 +287,10 @@ const updateApplicantStage = async (req, res) => {
         const existingUser = await prisma.user.findUnique({ where: { email: fullApplicant.email } });
         if (!existingEmp && !existingUser) {
           const bcrypt = require('bcryptjs');
-          const tempPassword = 'employee123';
+          const { generateTempPassword } = require('../services/validators');
+          const tempPassword = generateTempPassword();
           const hashedPassword = await bcrypt.hash(tempPassword, 10);
-          
+
           const { getDefaultPermissions } = require('./permissionController');
 
           const user = await prisma.user.create({
@@ -298,6 +299,7 @@ const updateApplicantStage = async (req, res) => {
               password: hashedPassword,
               name: fullApplicant.fullName,
               role: 'EMPLOYEE',
+              mustChangePassword: true,
               permissions: {
                 create: getDefaultPermissions('EMPLOYEE'),
               },

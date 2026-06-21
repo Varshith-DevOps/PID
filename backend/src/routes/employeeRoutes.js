@@ -42,6 +42,9 @@ const {
   updateAccountStage,
   getChangeHistory,
 } = require('../controllers/employeeController');
+const { exportEmployeeData, anonymizeEmployee } = require('../controllers/dpdpController');
+const { validate } = require('../middleware/validate');
+const { employeeCreateSchema } = require('../schemas/employeeSchemas');
 
 // ──── Photo Upload Configuration (Multer v2) ──────────────────────────────
 
@@ -100,6 +103,14 @@ router.get('/org-chart', authenticate, getOrgChart);
 /** GET /api/employees/:id/history — Get change audit log for an employee */
 router.get('/:id/history', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getChangeHistory);
 
+// ──── DPDP / Privacy Rights ────────────────────────────────────────────────
+
+/** GET /api/employees/:id/data-export — Right to access (self or HR/Admin). */
+router.get('/:id/data-export', authenticate, exportEmployeeData);
+
+/** POST /api/employees/:id/anonymize — Right to erasure (HR/Admin only). */
+router.post('/:id/anonymize', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), anonymizeEmployee);
+
 // ──── Employee CRUD ────────────────────────────────────────────────────────
 
 /** GET /api/employees — List employees with optional filters */
@@ -108,8 +119,8 @@ router.get('/', authenticate, rbacMiddleware('EMPLOYEES', 'VIEW'), getAllEmploye
 /** GET /api/employees/:id — Get full employee profile */
 router.get('/:id', authenticate, rbacMiddleware('EMPLOYEES', 'VIEW'), getEmployeeById);
 
-/** POST /api/employees — Create a new employee */
-router.post('/', authenticate, rbacMiddleware('EMPLOYEES', 'CREATE'), createEmployee);
+/** POST /api/employees — Create a new employee (validation runs after authz) */
+router.post('/', authenticate, rbacMiddleware('EMPLOYEES', 'CREATE'), validate(employeeCreateSchema), createEmployee);
 
 /** PUT /api/employees/:id — Update employee details */
 router.put('/:id', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateEmployee);

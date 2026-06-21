@@ -4,6 +4,10 @@ const securityHeaders = (req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+  // Don't advertise the framework/version (reduces targeted-attack signal).
+  res.removeHeader('X-Powered-By');
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
     "base-uri 'self'",

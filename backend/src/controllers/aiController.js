@@ -1,5 +1,8 @@
 /**
- * @fileoverview AI Agents API controller.
+ * @fileoverview Rule-based assistant API controller (branded "agents").
+ * These endpoints run deterministic heuristics, not AI/ML or LLMs. Every result
+ * is advisory and carries a disclaimer; never use the output as an authoritative
+ * decision. See services/aiAgentService.js.
  * @module controllers/aiController
  */
 
@@ -73,7 +76,7 @@ exports.askQuestion = async (req, res) => {
     const { question } = req.body;
     const companyId = req.user.companyId;
 
-    if (!question || question.trim().isEmpty) {
+    if (!question || question.trim() === '') {
       return res.status(400).json({ error: 'Question parameter is required.' });
     }
 

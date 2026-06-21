@@ -9,7 +9,8 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const prisma = require('../config/database');
 const { getDefaultPermissions } = require('./permissionController');
-const { validatePassword } = require('../services/validators');
+const { validatePassword, generateTempPassword } = require('../services/validators');
+const { generateCsrfToken, setCsrfCookie } = require('../middleware/csrf');
 const {
   MFA_TOKEN_TTL,
   generateBase32Secret,
@@ -19,19 +20,45 @@ const {
   buildOtpAuthUrl,
 } = require('../services/mfaService');
 
+// Access tokens are short-lived when ACCESS_TOKEN_TTL is set; defaults to the
+// legacy JWT_EXPIRES_IN so existing deployments are unaffected until they opt in.
+const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || process.env.JWT_EXPIRES_IN || '7d';
+const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_TTL || '30d';
+const REFRESH_COOKIE_PATH = '/api/auth';
+
 const signAccessToken = (user) => jwt.sign(
-  { id: user.id, email: user.email, role: user.role, purpose: 'ACCESS' },
+  { id: user.id, email: user.email, role: user.role, purpose: 'ACCESS', tv: user.tokenVersion ?? 0 },
   process.env.JWT_SECRET,
-  { expiresIn: process.env.JWT_EXPIRES_IN }
+  { expiresIn: ACCESS_TOKEN_TTL }
 );
 
-const setAuthCookie = (res, token) => {
+const signRefreshToken = (user) => jwt.sign(
+  { id: user.id, purpose: 'REFRESH', tv: user.tokenVersion ?? 0 },
+  process.env.JWT_SECRET,
+  { expiresIn: REFRESH_TOKEN_TTL }
+);
+
+const setRefreshCookie = (res, token) => {
+  res.cookie('refreshToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: REFRESH_COOKIE_PATH, // only sent to /api/auth/* (refresh, logout)
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+};
+
+const setAuthCookie = (res, token, user) => {
   res.cookie('token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Lax',
     maxAge: 24 * 60 * 60 * 1000
   });
+  // Pair the session cookie with a readable CSRF token (double-submit pattern).
+  setCsrfCookie(res, generateCsrfToken());
+  // Issue a long-lived refresh token so short-lived access tokens can be renewed.
+  if (user) setRefreshCookie(res, signRefreshToken(user));
 };
 
 const buildLoginPayload = async (user, token) => {
@@ -84,6 +111,7 @@ const buildLoginPayload = async (user, token) => {
       role: user.role,
       employeeId: employee?.id || null,
       mfaEnabled: user.mfaEnabled,
+      mustChangePassword: user.mustChangePassword || false,
       subscriptionFeatures,
       companyName,
       companyLogo,
@@ -137,7 +165,7 @@ const login = async (req, res) => {
     }
 
     const token = signAccessToken(user);
-    setAuthCookie(res, token);
+    setAuthCookie(res, token, user);
 
     await prisma.user.update({
       where: { id: user.id },
@@ -291,6 +319,7 @@ const getProfile = async (req, res) => {
       name: user.name,
       role: user.role,
       mfaEnabled: user.mfaEnabled,
+      mustChangePassword: user.mustChangePassword || false,
       employeeId: employee?.id || null,
       permissions,
       subscriptionFeatures,
@@ -337,12 +366,21 @@ const changePassword = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id: req.user.id },
-      data: { password: hashedPassword, mfaLastVerifiedAt: null },
+      data: {
+        password: hashedPassword,
+        mfaLastVerifiedAt: null,
+        mustChangePassword: false,
+        tokenVersion: { increment: 1 }, // revoke all existing sessions
+      },
     });
 
-    res.json({ message: 'Password changed successfully' });
+    // Re-issue a token for the current session so the user stays logged in here
+    // while every other previously-issued token is invalidated.
+    const token = signAccessToken(updated);
+    setAuthCookie(res, token, updated);
+    res.json({ message: 'Password changed successfully', token });
   } catch (error) {
     console.error('[CHANGE PASSWORD ERROR]:', error.message);
     res.status(500).json({ error: 'Server error' });
@@ -370,12 +408,19 @@ const resetPasswordForUser = async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     // Generate a secure temporary password if none provided
-    const tempPassword = newPassword || crypto.randomBytes(6).toString('hex') + 'A1!';
+    const tempPassword = newPassword || generateTempPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
+    // Force the user to set their own password on next login, unless an admin
+    // explicitly supplied a final password.
     await prisma.user.update({
       where: { id: userId },
-      data: { password: hashedPassword, mfaLastVerifiedAt: null },
+      data: {
+        password: hashedPassword,
+        mfaLastVerifiedAt: null,
+        mustChangePassword: !newPassword,
+        tokenVersion: { increment: 1 }, // revoke the target user's existing sessions
+      },
     });
 
     res.json({ message: 'Password reset successfully', temporaryPassword: tempPassword });
@@ -504,7 +549,7 @@ const verifyMfaLogin = async (req, res) => {
     }
 
     const token = signAccessToken(user);
-    setAuthCookie(res, token);
+    setAuthCookie(res, token, user);
 
     await prisma.user.update({
       where: { id: user.id },
@@ -591,7 +636,7 @@ const signup = async (req, res) => {
     });
 
     const token = signAccessToken(result.user);
-    setAuthCookie(res, token);
+    setAuthCookie(res, token, result.user);
 
     // Update lastLoginAt
     await prisma.user.update({
@@ -606,6 +651,74 @@ const signup = async (req, res) => {
   }
 };
 
+/**
+ * Log out: revoke all of the user's outstanding tokens (bump tokenVersion) and
+ * clear auth cookies. Authenticated via the access token.
+ */
+const logout = async (req, res) => {
+  try {
+    if (req.user?.id) {
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { tokenVersion: { increment: 1 } },
+      }).catch(() => {});
+    }
+    res.clearCookie('token');
+    res.clearCookie('csrfToken');
+    res.clearCookie('refreshToken', { path: REFRESH_COOKIE_PATH });
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('[LOGOUT ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Exchange a valid refresh token (httpOnly cookie or body) for a new access
+ * token. The refresh token is invalidated by tokenVersion (logout / password
+ * change / admin reset), giving server-side revocation.
+ */
+const refresh = async (req, res) => {
+  try {
+    const refreshToken = (req.cookies && req.cookies.refreshToken) || req.body?.refreshToken;
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'No refresh token provided' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
+    if (decoded.purpose !== 'REFRESH') {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    if (!user || !user.isActive || (decoded.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+
+    const token = signAccessToken(user);
+    setAuthCookie(res, token, user); // also slides the refresh cookie forward
+    res.json({ token });
+  } catch (error) {
+    console.error('[REFRESH ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Issue a fresh CSRF token (sets the readable csrfToken cookie and returns it).
+ * Lets a cookie-mode client obtain a token to echo in the x-csrf-token header.
+ */
+const getCsrfToken = async (req, res) => {
+  const token = generateCsrfToken();
+  setCsrfCookie(res, token);
+  res.json({ csrfToken: token });
+};
+
 module.exports = {
   login,
   register,
@@ -617,4 +730,7 @@ module.exports = {
   enableMfa,
   disableMfa,
   verifyMfaLogin,
+  getCsrfToken,
+  logout,
+  refresh,
 };

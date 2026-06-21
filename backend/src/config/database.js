@@ -7,6 +7,7 @@
 
 const { PrismaClient } = require('@prisma/client');
 const { tenantStorage } = require('../utils/tenantContext');
+const { encryptWriteData, decryptReadResult } = require('../services/encryption');
 
 /**
  * Singleton Prisma client instance.
@@ -17,6 +18,13 @@ const basePrisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development'
     ? ['warn', 'error']
     : ['error'],
+  // Interactive transactions default to a 5s timeout, which is fine locally but
+  // too tight for bulk work (e.g. a payroll run issuing many queries) against a
+  // remote/pooled database. Raise the defaults; harmless on fast local SQLite.
+  transactionOptions: {
+    maxWait: 15000,   // wait up to 15s to acquire a pooled connection
+    timeout: 60000,   // allow a transaction up to 60s to complete
+  },
 });
 
 const tenantModels = [
@@ -34,20 +42,31 @@ const tenantModels = [
   'PaymentTransaction'
 ];
 
-// Multi-tenant query isolation extension
+// Multi-tenant query isolation + transparent field-level encryption extension
 const prisma = basePrisma.$extends({
   query: {
     $allModels: {
       async $allOperations({ model, operation, args, query }) {
         const companyId = tenantStorage.getStore();
 
+        // Encrypt sensitive fields on the way in (create/update/upsert/createMany).
+        if (['create', 'update', 'createMany', 'updateMany'].includes(operation) && args.data) {
+          encryptWriteData(model, args.data);
+        }
+        if (operation === 'upsert') {
+          if (args.create) encryptWriteData(model, args.create);
+          if (args.update) encryptWriteData(model, args.update);
+        }
+
+        let result;
         if (companyId && tenantModels.includes(model)) {
           // Convert findUnique queries to findFirst to avoid unique index validation errors
           if (operation === 'findUnique') {
             args.where = args.where || {};
             args.where.companyId = companyId;
             const prismaModelName = model.charAt(0).toLowerCase() + model.slice(1);
-            return basePrisma[prismaModelName].findFirst(args);
+            result = await basePrisma[prismaModelName].findFirst(args);
+            return decryptReadResult(result);
           }
 
           if (['findMany', 'findFirst', 'count', 'aggregate', 'groupBy', 'updateMany', 'deleteMany'].includes(operation)) {
@@ -80,7 +99,9 @@ const prisma = basePrisma.$extends({
           }
         }
 
-        return query(args);
+        result = await query(args);
+        // Decrypt sensitive fields on the way out (covers nested relation includes).
+        return decryptReadResult(result);
       }
     }
   }

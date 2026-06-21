@@ -6,6 +6,7 @@
  */
 
 const prisma = require('../config/database');
+const { computeProjectCosting } = require('../services/projectCostingService');
 
 const getEmployeeUtilization = async (req, res) => {
   try {
@@ -229,10 +230,12 @@ const project = await prisma.project.findUnique({
     const totalTasks = project.tasks.length;
     const completionPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-    const laborCost = project.tasks.reduce((sum, t) => sum + (t.actualHours || 0) * 500, 0);
-    const totalExpense = project.expenses.reduce((sum, e) => sum + e.amount, 0);
-    const totalCost = laborCost + totalExpense;
-    const budgetUsage = project.budget > 0 ? Math.round((totalCost / project.budget) * 100) : 0;
+    // Real per-resource costing (replaces the old hardcoded ₹500/hr labor rate).
+    const costing = await computeProjectCosting(project.id);
+    const laborCost = costing.laborCost;
+    const totalExpense = costing.expenses;
+    const totalCost = costing.totalCost;
+    const budgetUsage = Math.round(costing.budgetUsage);
 
     const daysUntilDeadline = project.deadline
       ? Math.ceil((new Date(project.deadline) - new Date()) / (1000 * 60 * 60 * 24))
@@ -247,6 +250,9 @@ const project = await prisma.project.findUnique({
         totalCost,
         laborCost,
         totalExpense,
+        revenue: costing.revenue,
+        margin: costing.margin,
+        marginPct: costing.marginPct,
         budgetUsage,
         resources: project.resources.length,
         daysUntilDeadline,

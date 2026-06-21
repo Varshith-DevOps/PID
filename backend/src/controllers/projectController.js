@@ -6,6 +6,7 @@
 
 const prisma = require('../config/database');
 const { getEmployeeScopeIds, getLinkedEmployeeId, isHr } = require('../services/accessControl');
+const { computeProjectCosting } = require('../services/projectCostingService');
 
 const scopedProjectAccessWhere = async (user) => {
   if (isHr(user)) return {};
@@ -293,7 +294,7 @@ const createTask = async (req, res) => {
 const updateTask = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, projectId, assigneeId, estimatedHours, actualHours, deadline, priority, status } = req.body;
+    const { title, description, projectId, assigneeId, estimatedHours, actualHours, deadline, priority, status, storyPoints, boardRank, billable } = req.body;
 
     const task = await prisma.task.findUnique({ where: { id } });
     if (!task) return res.status(404).json({ error: 'Task not found' });
@@ -316,6 +317,9 @@ const updateTask = async (req, res) => {
         ...(assigneeId && { assigneeId }),
         ...(estimatedHours !== undefined && { estimatedHours }),
         ...(actualHours !== undefined && { actualHours }),
+        ...(storyPoints !== undefined && { storyPoints }),
+        ...(boardRank !== undefined && { boardRank }),
+        ...(billable !== undefined && { billable }),
         ...(deadline && { deadline: new Date(deadline) }),
         ...(priority && { priority }),
         ...(status && { status }),
@@ -349,6 +353,127 @@ const deleteTask = async (req, res) => {
   }
 };
 
+/** Jira-style board columns (left → right workflow). */
+const BOARD_COLUMNS = ['TODO', 'IN_PROGRESS', 'AWAITING_APPROVAL', 'REWORK', 'COMPLETED'];
+
+/**
+ * GET /api/projects/:id/board — tasks for a project grouped into board columns,
+ * ordered by boardRank. Returns column metadata for a Kanban UI.
+ */
+const getProjectBoard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const project = await prisma.project.findFirst({
+      where: { id, ...(await scopedProjectAccessWhere(req.user)) },
+      select: { id: true, name: true },
+    });
+    if (!project) return res.status(403).json({ error: 'Access denied for requested project.' });
+
+    const tasks = await prisma.task.findMany({
+      where: { projectId: id, ...(await scopedTaskAccessWhere(req.user)) },
+      include: { assignee: { select: { id: true, firstName: true, lastName: true } } },
+      orderBy: [{ boardRank: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    const columns = BOARD_COLUMNS.map((status) => ({
+      status,
+      tasks: tasks.filter((t) => t.status === status),
+    }));
+    // Any task with a non-standard status is surfaced so nothing is hidden.
+    const known = new Set(BOARD_COLUMNS);
+    const other = tasks.filter((t) => !known.has(t.status));
+    if (other.length) columns.push({ status: 'OTHER', tasks: other });
+
+    res.json({ project, columns });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * PUT /api/projects/tasks/:id/move — move a task to a column (and position) on
+ * the board. Sets status + boardRank in one call for drag-and-drop.
+ */
+const moveTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, boardRank } = req.body;
+    if (status && !BOARD_COLUMNS.includes(status)) {
+      return res.status(400).json({ error: `Invalid status. Allowed: ${BOARD_COLUMNS.join(', ')}` });
+    }
+
+    const task = await prisma.task.findFirst({
+      where: { id, ...(await scopedTaskAccessWhere(req.user)) },
+    });
+    if (!task) return res.status(403).json({ error: 'Access denied for requested task.' });
+
+    const isCompletion = status === 'COMPLETED' && task.status !== 'COMPLETED';
+    const updated = await prisma.task.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(boardRank !== undefined && { boardRank: Number(boardRank) }),
+        ...(isCompletion ? { completedAt: new Date() } : {}),
+        ...(status && status !== 'COMPLETED' && task.status === 'COMPLETED' ? { completedAt: null } : {}),
+      },
+      include: { assignee: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/** GET /api/projects/:id/costing — full project costing breakdown. */
+const getProjectCosting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const project = await prisma.project.findFirst({
+      where: { id, ...(await scopedProjectAccessWhere(req.user)) },
+      select: { id: true },
+    });
+    if (!project) return res.status(403).json({ error: 'Access denied for requested project.' });
+
+    const costing = await computeProjectCosting(id);
+    if (!costing) return res.status(404).json({ error: 'Project not found' });
+    res.json(costing);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * PUT /api/projects/:projectId/resource-rate — set a resource's cost & bill
+ * rates (creates the resource link if missing). Manager/Admin only.
+ */
+const setResourceRate = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { employeeId, costRate, billRate, allocationPct } = req.body;
+    if (!employeeId) return res.status(400).json({ error: 'employeeId is required' });
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, ...(await scopedProjectAccessWhere(req.user)) },
+      select: { id: true },
+    });
+    if (!project) return res.status(403).json({ error: 'Access denied for requested project.' });
+
+    const data = {
+      ...(costRate !== undefined && { costRate: Number(costRate) }),
+      ...(billRate !== undefined && { billRate: Number(billRate) }),
+      ...(allocationPct !== undefined && { allocationPct: Number(allocationPct) }),
+    };
+    const resource = await prisma.projectResource.upsert({
+      where: { projectId_employeeId: { projectId, employeeId } },
+      update: data,
+      create: { projectId, employeeId, ...data },
+    });
+    res.json(resource);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   getProjects,
   getProjectById,
@@ -360,4 +485,8 @@ module.exports = {
   createTask,
   updateTask,
   deleteTask,
+  getProjectBoard,
+  moveTask,
+  getProjectCosting,
+  setResourceRate,
 };

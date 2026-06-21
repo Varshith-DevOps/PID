@@ -33,10 +33,16 @@ Backend file: `backend/.env`
 
 ```env
 DATABASE_URL="file:./dev.db"
-JWT_SECRET="supersecretjwtkey"
+# Generate a strong, unique secret per environment (>= 32 chars). Do NOT reuse this across envs.
+#   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+JWT_SECRET="<paste-generated-secret-here>"
 JWT_EXPIRES_IN="7d"
 PORT=5000
+# Required only when mobile punch signing is enabled; generate the same way as JWT_SECRET.
+# MOBILE_APP_SECRET="<paste-generated-secret-here>"
 ```
+
+> The server refuses to start in production with a missing, short (<32 char), or known-weak secret.
 
 Frontend file: `frontend/.env.local`
 

@@ -187,12 +187,14 @@ const createEmployee = async (req, res) => {
     // Link or create a corresponding User login record
     const existingUser = await prisma.user.findUnique({ where: { email } });
     let userId = existingUser ? existingUser.id : null;
+    let temporaryPassword = null;
 
     if (!existingUser) {
       const bcrypt = require('bcryptjs');
-      const tempPassword = 'employee123';
-      const hashedPassword = await bcrypt.hash(tempPassword, 10);
-      
+      const { generateTempPassword } = require('../services/validators');
+      temporaryPassword = generateTempPassword();
+      const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
       const { getDefaultPermissions } = require('./permissionController');
 
       const user = await prisma.user.create({
@@ -201,6 +203,7 @@ const createEmployee = async (req, res) => {
           password: hashedPassword,
           name: `${firstName} ${lastName}`,
           role: 'EMPLOYEE',
+          mustChangePassword: true,
           permissions: {
             create: getDefaultPermissions('EMPLOYEE'),
           },
@@ -257,7 +260,10 @@ const createEmployee = async (req, res) => {
       });
     }
 
-    res.status(201).json(employee);
+    // Surface the one-time temporary password so the admin can deliver it to the
+    // new employee. The account is flagged mustChangePassword and will be forced
+    // to set a new password on first login.
+    res.status(201).json(temporaryPassword ? { ...employee, temporaryPassword } : employee);
   } catch (error) {
     console.error('CREATE EMPLOYEE ERROR:', error);
     res.status(500).json({ error: error.message || 'Server error' });

@@ -1,14 +1,23 @@
 /**
- * @fileoverview AI Agent Service Orchestrator.
- * Implements core execution layers for the four agents:
- * - Sherlock (TDS Investment verification and OCR extraction audits)
- * - Jarvis (Pre-run payroll and Indian statutory compliance auditing)
- * - Winston (Attendance regularization logs validation)
- * - Athena (Policy definition search and RAG calculations)
+ * @fileoverview Rule-based assistant service (branded "agents").
+ *
+ * IMPORTANT: These are DETERMINISTIC, RULE-BASED helpers — NOT machine learning
+ * or LLM models, and NOT authoritative. They do not perform real OCR, fraud
+ * detection, RAG, or any external-system verification. Every result is advisory
+ * and must be confirmed by a human before any HR/payroll/compliance decision.
+ *
+ *  - Sherlock: heuristic checks on a declared TDS/HRA proof (filename + PAN format).
+ *  - Jarvis:   flags salary structures against fixed Indian statutory thresholds.
+ *  - Winston:  attendance-regularization triage (no external integrations).
+ *  - Athena:   static statutory knowledge base + configured policy lookup.
  * @module services/aiAgentService
  */
 
 const prisma = require('../config/database');
+
+/** Attached to every response so callers never treat output as authoritative AI. */
+const ENGINE = 'rule-based-heuristic';
+const DISCLAIMER = 'Automated rule-based check, not AI/ML and not authoritative. Advisory only — verify before acting.';
 
 /**
  * Sherlock: Handles OCR extraction and compliance validation of rent receipts, PAN cards, and signatures.
@@ -26,45 +35,49 @@ class SherlockAgent {
     const isMockForged = docLower.includes('fake') || docLower.includes('sample') || parsedAmount > 1000000;
 
     if (isMockForged) {
-      fraudIndicators.add ? fraudIndicators.add('Metadata mismatch / suspicious font modification') : fraudIndicators.push('Metadata mismatch / suspicious font modification');
-      fraudIndicators.push('Amount exceeds normal threshold limits without bank statement verification');
+      fraudIndicators.push('Filename or amount looks suspicious (heuristic only — not real document analysis)');
+      fraudIndicators.push('Amount exceeds threshold without bank-statement verification');
       isApproved = false;
     }
 
+    // Assumed basic wage used for the HRA estimate (NOT the employee's real salary).
+    const ASSUMED_ANNUAL_BASIC = 500000;
     if (category === 'HRA') {
       const landlordPan = (rentDetails?.landlordPan || '').toUpperCase();
-      const hasValidPan = RegExp(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).hasMatch ? RegExp(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).hasMatch(landlordPan) : RegExp(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).test(landlordPan);
+      const hasValidPan = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(landlordPan);
 
       if (!hasValidPan) {
-        fraudIndicators.push('Invalid or unverified landlord PAN card format');
+        fraudIndicators.push('Landlord PAN missing or not in valid format');
         isApproved = false;
       }
 
-      // Compute simulated HRA exemption (rules-based)
+      // Indicative HRA estimate (rules-based) using an ASSUMED basic salary.
       const monthlyRent = rentDetails?.monthlyRent || (parsedAmount / 12);
-      // Mock basic wage of 50000/month
-      const basicSalary = 500000; 
-      const rentPaidExceedingTenPercent = (monthlyRent * 12) - (basicSalary * 0.1);
+      const rentPaidExceedingTenPercent = (monthlyRent * 12) - (ASSUMED_ANNUAL_BASIC * 0.1);
       hraExemption = Math.max(0, Math.min(parsedAmount, rentPaidExceedingTenPercent));
     }
 
     return {
       agentName: 'Sherlock',
+      engine: ENGINE,
+      aiPowered: false,
+      disclaimer: DISCLAIMER,
       success: true,
       category,
       claimedAmount: parsedAmount,
+      assumptions: { annualBasicSalary: ASSUMED_ANNUAL_BASIC, note: 'Estimate uses an assumed basic salary, not the employee record.' },
       extractedDetails: {
         documentDetected: documentName || 'Declaration Receipt',
-        computedExemption: hraExemption,
+        estimatedExemption: hraExemption,
         landlordPan: rentDetails?.landlordPan || 'N/A'
       },
       auditResult: {
-        status: isApproved ? 'APPROVED' : 'FLAGGED',
-        fraudScore: isApproved ? 2 : 94,
+        // "suggestedStatus" — not a decision. No fabricated fraud score.
+        suggestedStatus: isApproved ? 'LOOKS_OK_PENDING_REVIEW' : 'NEEDS_REVIEW',
         warnings: fraudIndicators,
         explanation: isApproved
-            ? 'Rent receipt matches declaration. Landlord PAN check succeeded.'
-            : 'Tax proof audit failed. Flagged for manual HR inspection.'
+            ? 'Basic format checks passed. A human must verify the receipt and PAN before approval.'
+            : 'Heuristic checks flagged issues. Route to HR for manual inspection.'
       }
     };
   }
@@ -79,7 +92,7 @@ class JarvisAgent {
     const employees = await prisma.employee.findMany({
       where: { companyId },
       include: {
-        SalaryStructure: true
+        salaryStructure: true
       }
     });
 
@@ -89,7 +102,7 @@ class JarvisAgent {
     for (const emp of employees) {
       totalAudited++;
       const salary = emp.salary || 0;
-      const struct = emp.SalaryStructure?.[0];
+      const struct = emp.salaryStructure; // one-to-one relation
 
       if (!struct) {
         anomalies.push({
@@ -138,6 +151,9 @@ class JarvisAgent {
 
     return {
       agentName: 'Jarvis',
+      engine: ENGINE,
+      aiPowered: false,
+      disclaimer: DISCLAIMER,
       month,
       year,
       totalAuditedEmployees: totalAudited,
@@ -148,29 +164,28 @@ class JarvisAgent {
 }
 
 /**
- * Winston: Processes check-in regularizations by checking digital productivity logs.
+ * Winston: attendance-regularization triage.
+ *
+ * No external integrations are connected (no Git/Slack/VPN). This only applies a
+ * simple weekday/weekend heuristic and ALWAYS defers the decision to a human —
+ * it never auto-approves and never fabricates evidence.
  */
 class WinstonAgent {
   static async resolveRegularization(employeeId, dateStr, requestedTimeIn, requestedTimeOut) {
-    // In a real-world scenario, this agent connects to Git commit hashes, Slack message activities,
-    // and VPN network footprints. We simulate this by analyzing activity patterns.
-    
-    const hasDigitalFootprint = !dateStr.includes('Sunday') && !dateStr.includes('Saturday');
-    
+    const isWeekend = /saturday|sunday/i.test(dateStr);
+
     return {
       agentName: 'Winston',
+      engine: ENGINE,
+      aiPowered: false,
+      disclaimer: DISCLAIMER,
       employeeId,
       date: dateStr,
-      resolution: hasDigitalFootprint ? 'AUTO_APPROVED' : 'FLAGGED_FOR_REVIEW',
-      confidence: hasDigitalFootprint ? 98 : 45,
-      auditLog: {
-        slackActivity: hasDigitalFootprint ? 'Messages active between 09:30 and 18:15' : 'No activity logged',
-        gitCommits: hasDigitalFootprint ? '3 commits pushed to origin' : 'No activity logged',
-        vpnConnection: hasDigitalFootprint ? 'Active tunnel from 09:15 to 18:30' : 'No activity logged'
-      },
-      explanation: hasDigitalFootprint
-          ? 'Digital footprint verified. User logged Git commits and VPN signals matching the regularized shift window.'
-          : 'No productivity logs or VPN footprints found on this date. Flagged for manager review.'
+      // Recommendation only — the manager makes the actual decision.
+      recommendation: 'MANAGER_REVIEW_REQUIRED',
+      heuristic: isWeekend ? 'Requested date falls on a weekend' : 'Requested date is a weekday',
+      integrationsConnected: false,
+      explanation: 'No external activity sources are integrated, so this request cannot be auto-verified. Routed to the manager for review.'
     };
   }
 }
@@ -211,6 +226,9 @@ class AthenaAgent {
 
     return {
       agentName: 'Athena',
+      engine: ENGINE,
+      aiPowered: false,
+      disclaimer: 'Answers come from a fixed statutory knowledge base and your configured policies — not a language model. Verify against the latest law/handbook.',
       category,
       question,
       answer,

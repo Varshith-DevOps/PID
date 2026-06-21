@@ -3,6 +3,7 @@
  */
 
 const { logPayrollEvent } = require('../services/auditService');
+const { redact } = require('../utils/redact');
 
 /**
  * Middleware to intercept and log payroll mutations.
@@ -68,7 +69,7 @@ const auditPayrollMiddleware = (req, res, next) => {
           action,
           entity,
           entityId: entityId || req.body.employeeId || req.body.runId || null,
-          newDetails: req.body,
+          newDetails: redact(req.body),
           ipAddress: req.ip
         });
       } catch (err) {
