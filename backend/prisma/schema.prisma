@@ -14,6 +14,8 @@ model User {
   name         String
   role         String       @default("EMPLOYEE")
   isActive     Boolean      @default(true)
+  mustChangePassword Boolean  @default(false)
+  tokenVersion Int          @default(0)
   companyId    String?
   company      Company?     @relation(fields: [companyId], references: [id])
   lastLoginAt  DateTime?
@@ -92,6 +94,8 @@ model Employee {
   emergencyContactName     String?
   emergencyContactPhone    String?
   emergencyContactRelation String?
+  // DPDP: set when the subject's PII is erased/anonymized (statutory records kept).
+  anonymizedAt    DateTime?
 
   // Professional
   jobTitle        String
@@ -543,13 +547,16 @@ model Project {
   startDate   DateTime?
   deadline    DateTime?
   budget      Float         @default(0)
+  currency    String        @default("INR")
+  billingType String        @default("TIME_AND_MATERIAL") // or FIXED_BID / NON_BILLABLE
   status      String        @default("PLANNING")
-  
+
   manager     Employee      @relation("ProjectManager", fields: [managerId], references: [id])
   managerId   String
   resources   ProjectResource[]
-  
+
   tasks       Task[]
+  sprints     Sprint[]
   expenses    ProjectExpense[]
   
   isActive    Boolean       @default(true)
@@ -566,6 +573,9 @@ model ProjectResource {
   employee    Employee @relation("EmployeeResources", fields: [employeeId], references: [id])
   employeeId  String
   joinedAt    DateTime @default(now())
+  costRate    Float    @default(0) // internal cost per hour (company cost)
+  billRate    Float    @default(0) // client bill rate per hour (revenue)
+  allocationPct Float?            // optional % allocation to this project
 
   @@unique([projectId, employeeId])
   @@map("project_resources")
@@ -595,10 +605,15 @@ model Task {
   
   estimatedHours Float?
   actualHours    Float       @default(0)
+  storyPoints    Int?
+  boardRank      Float       @default(0) // ordering within a board column
+  billable       Boolean     @default(true)
+  sprint         Sprint?     @relation(fields: [sprintId], references: [id])
+  sprintId       String?
   deadline       DateTime?
   priority       String      @default("MEDIUM")
   status         String      @default("TODO")
-  
+
   completedAt    DateTime?
   createdBy      String?
   createdAt     DateTime     @default(now())
@@ -607,6 +622,22 @@ model Task {
   timesheets     Timesheet[]
 
   @@map("tasks")
+}
+
+model Sprint {
+  id         String   @id @default(uuid())
+  project    Project  @relation(fields: [projectId], references: [id])
+  projectId  String
+  name       String
+  goal       String?
+  startDate  DateTime
+  endDate    DateTime
+  status     String   @default("PLANNING") // PLANNING / ACTIVE / COMPLETED
+  tasks      Task[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("sprints")
 }
 
 model Timesheet {

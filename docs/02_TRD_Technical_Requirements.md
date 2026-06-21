@@ -119,7 +119,8 @@ flowchart TD
 
 ```env
 DATABASE_URL="file:./dev.db"
-JWT_SECRET="supersecretjwtkey"
+# Generate per environment: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+JWT_SECRET="<paste-generated-secret-here>"
 JWT_EXPIRES_IN="7d"
 PORT=5000
 ```

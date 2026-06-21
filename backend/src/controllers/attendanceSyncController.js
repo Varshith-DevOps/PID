@@ -1,5 +1,6 @@
 const prisma = require('../config/database');
 const crypto = require('crypto');
+const { getMobileAppSecret } = require('../config/secrets');
 const { toZonedTime, fromZonedTime, format } = require('date-fns-tz');
 const { detectAndCreateOvertime } = require('./overtimeController');
 
@@ -7,11 +8,17 @@ const { detectAndCreateOvertime } = require('./overtimeController');
  * Validates mobile punch signature if clientType is mobile
  */
 const verifyMobilePunchSignature = (punch) => {
-  const secret = process.env.MOBILE_APP_SECRET || 'pid-hcms-secret-key-123';
+  let secret;
+  try {
+    secret = getMobileAppSecret();
+  } catch (e) {
+    // Fail closed: no configured signing key means no valid signatures.
+    return false;
+  }
   const { employeeId, timestamp, deviceId, signature } = punch;
-  
+
   if (!signature) return false;
-  
+
   const payload = `${employeeId}:${timestamp}:${deviceId}`;
   const computed = crypto.createHmac('sha256', secret).update(payload).digest('hex');
   return computed === signature;

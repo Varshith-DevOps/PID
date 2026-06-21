@@ -8,7 +8,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getProfile } from './api';
+import { getProfile, logout as apiLogout } from './api';
 
 interface Permission {
   module: string;
@@ -22,6 +22,7 @@ interface User {
   name: string;
   role: string;
   employeeId?: string;
+  mustChangePassword?: boolean;
   permissions?: Permission[];
   subscriptionFeatures?: Record<string, boolean> | null;
   companyName?: string | null;
@@ -38,6 +39,7 @@ interface AuthContextType {
   loading: boolean;
   login: (token: string, user: User, permissions?: Permission[]) => void;
   logout: () => void;
+  markPasswordChanged: () => void;
   hasPermission: (module: string, action: string) => boolean;
   canEdit: (module: string) => boolean;
   canDelete: (module: string) => boolean;
@@ -80,10 +82,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
+    // Revoke server-side (bumps tokenVersion) before clearing local state.
+    void apiLogout();
     localStorage.removeItem('token');
     document.cookie = 'token=; path=/; max-age=0';
+    document.cookie = 'csrfToken=; path=/; max-age=0';
     setUser(null);
     setPermissions([]);
+  };
+
+  const markPasswordChanged = () => {
+    setUser((prev) => (prev ? { ...prev, mustChangePassword: false } : prev));
   };
 
   const hasPermission = (module: string, action: string): boolean => {
@@ -96,7 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const canDelete = (module: string): boolean => hasPermission(module, 'DELETE');
 
   return (
-    <AuthContext.Provider value={{ user, permissions, loading, login, logout, hasPermission, canEdit, canDelete }}>
+    <AuthContext.Provider value={{ user, permissions, loading, login, logout, markPasswordChanged, hasPermission, canEdit, canDelete }}>
       {children}
     </AuthContext.Provider>
   );

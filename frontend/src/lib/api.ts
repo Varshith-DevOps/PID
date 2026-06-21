@@ -33,7 +33,29 @@ export const apiEvents = new ApiEventEmitter();
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
   headers: { 'Content-Type': 'application/json' },
+  // Send the httpOnly refresh cookie on cross-origin auth calls.
+  withCredentials: true,
 });
+
+// Single in-flight refresh shared across concurrent 401s.
+let refreshPromise: Promise<string | null> | null = null;
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = api
+      .post('/auth/refresh', {}, { headers: { 'x-skip-refresh': '1' } })
+      .then((res) => {
+        const newToken = res.data?.token as string | undefined;
+        if (newToken && typeof window !== 'undefined') {
+          localStorage.setItem('token', newToken);
+          document.cookie = `token=${newToken}; path=/; max-age=${60 * 60 * 24}; SameSite=Lax`;
+        }
+        return newToken || null;
+      })
+      .catch(() => null)
+      .finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+}
 
 api.interceptors.request.use(
   (config) => {
@@ -41,6 +63,12 @@ api.interceptors.request.use(
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token');
       if (token) config.headers.Authorization = `Bearer ${token}`;
+      // Double-submit CSRF: echo the readable csrfToken cookie on mutations.
+      const method = (config.method || 'get').toLowerCase();
+      if (['post', 'put', 'patch', 'delete'].includes(method)) {
+        const match = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
+        if (match) config.headers['x-csrf-token'] = decodeURIComponent(match[1]);
+      }
     }
     return config;
   },
@@ -60,8 +88,27 @@ api.interceptors.response.use(
     }
     return response;
   },
-  (error) => {
+  async (error) => {
     apiEvents.emit('request-end', error.config?.url || '');
+
+    // On 401, try a one-time refresh-and-retry before surfacing the error.
+    const original = error.config || {};
+    const status = error.response?.status;
+    const url = original.url || '';
+    const skipRefresh = original._retry
+      || original.headers?.['x-skip-refresh']
+      || url.includes('/auth/refresh')
+      || url.includes('/auth/login');
+    if (status === 401 && !skipRefresh && typeof window !== 'undefined') {
+      original._retry = true;
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        original.headers = original.headers || {};
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api(original); // replay the original request silently
+      }
+    }
+
     const method = error.config?.method?.toLowerCase() || '';
     const errorMsg = getActionErrorMessage(method, error.config?.url || '', error.response);
     if (errorMsg) {
@@ -418,6 +465,59 @@ export const deleteTask = async (id: string) => {
   return data;
 };
 
+// ─── Jira-style board + costing ───────────────────────────────────────────────
+export const getProjectBoard = async (projectId: string) => {
+  const { data } = await api.get(`/projects/${projectId}/board`);
+  return data;
+};
+
+export const moveTask = async (id: string, payload: { status?: string; boardRank?: number }) => {
+  const { data } = await api.put(`/projects/tasks/${id}/move`, payload);
+  return data;
+};
+
+export const getProjectCosting = async (projectId: string) => {
+  const { data } = await api.get(`/projects/${projectId}/costing`);
+  return data;
+};
+
+export const setResourceRate = async (
+  projectId: string,
+  payload: { employeeId: string; costRate?: number; billRate?: number; allocationPct?: number },
+) => {
+  const { data } = await api.put(`/projects/${projectId}/resource-rate`, payload);
+  return data;
+};
+
+// ─── Sprints + burndown ───────────────────────────────────────────────────────
+export const getSprints = async (projectId: string) => {
+  const { data } = await api.get(`/projects/${projectId}/sprints`);
+  return data;
+};
+
+export const createSprint = async (
+  projectId: string,
+  payload: { name: string; goal?: string; startDate: string; endDate: string; status?: string },
+) => {
+  const { data } = await api.post(`/projects/${projectId}/sprints`, payload);
+  return data;
+};
+
+export const updateSprint = async (id: string, payload: any) => {
+  const { data } = await api.put(`/projects/sprints/${id}`, payload);
+  return data;
+};
+
+export const assignTaskToSprint = async (taskId: string, sprintId: string | null) => {
+  const { data } = await api.put(`/projects/tasks/${taskId}/sprint`, { sprintId });
+  return data;
+};
+
+export const getBurndown = async (sprintId: string) => {
+  const { data } = await api.get(`/projects/sprints/${sprintId}/burndown`);
+  return data;
+};
+
 export const logTimesheet = async (data: { employeeId: string; taskId?: string; date: string; hoursWorked: number; description?: string }) => {
   const { data: res } = await api.post('/timesheet', data);
   return res;
@@ -546,7 +646,21 @@ export const addSalaryRevision = async (employeeId: string, revision: any) => {
 };
 export const changePassword = async (currentPassword: string, newPassword: string) => {
   const { data } = await api.put('/auth/change-password', { currentPassword, newPassword });
+  // The server bumps tokenVersion (revoking old tokens) and re-issues one for this
+  // session — store it so the current session stays valid.
+  if (data?.token && typeof window !== 'undefined') {
+    localStorage.setItem('token', data.token);
+    document.cookie = `token=${data.token}; path=/; max-age=${60 * 60 * 24}; SameSite=Lax`;
+  }
   return data;
+};
+
+export const logout = async () => {
+  try {
+    await api.post('/auth/logout');
+  } catch {
+    // Best-effort server-side revocation; local state is cleared regardless.
+  }
 };
 
 export const getChangeHistory = async (employeeId: string) => {

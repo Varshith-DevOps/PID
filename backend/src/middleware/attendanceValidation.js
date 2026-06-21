@@ -1,5 +1,6 @@
 const prisma = require('../config/database');
 const crypto = require('crypto');
+const { getMobileAppSecret } = require('../config/secrets');
 
 /**
  * Calculates the distance in meters between two geolocated coordinates using the Haversine formula.
@@ -78,7 +79,13 @@ const validateAttendancePunch = async (req, res, next) => {
       if (!signature || !deviceId) {
         return res.status(400).json({ error: 'Security: Signed mobile requests require device ID and signature.' });
       }
-      const secret = process.env.MOBILE_APP_SECRET || 'pid-hcms-secret-key-123';
+      let secret;
+      try {
+        secret = getMobileAppSecret();
+      } catch (e) {
+        // Fail closed: never fall back to a default signing key.
+        return res.status(503).json({ error: 'Security: mobile signing is not configured on the server.' });
+      }
       const expectedSignature = crypto
         .createHmac('sha256', secret)
         .update(`${employeeId}:${timestamp}:${deviceId}`)

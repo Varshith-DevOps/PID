@@ -45,8 +45,15 @@ const platformAdminRoutes = require('./routes/platformAdminRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
 const { securityHeaders } = require('./middleware/securityHeaders');
+const { csrfProtection } = require('./middleware/csrf');
+const logger = require('./utils/logger');
+const prisma = require('./config/database');
+const { initSentry, captureException } = require('./config/sentry');
+
+initSentry();
 
 const app = express();
+app.disable('x-powered-by');
 
 // ──── Global Middleware ────────────────────────────────────────────────────
 app.use(cors({
@@ -57,6 +64,13 @@ app.use(cookieParser());
 app.use(securityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+// CSRF guard for cookie-authenticated mutations (Bearer/API requests are exempt).
+// Skipped under the integration test runner, which authenticates with the cookie
+// value as a token shorthand rather than simulating a real browser; the guard
+// logic is covered directly in __tests__/csrf.test.js.
+if (process.env.NODE_ENV !== 'test') {
+  app.use(csrfProtection);
+}
 
 /** Uploaded HR files are deliberately not served statically; use authenticated download APIs. */
 app.use(auditPayrollMiddleware);
@@ -95,8 +109,25 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/platform-admin', platformAdminRoutes);
 app.use('/api/ai', aiRoutes);
 
-/** Health check endpoint for monitoring and load balancers */
-app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+/** Liveness probe: process is up (no dependency checks). */
+app.get('/health/live', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+
+/**
+ * Readiness probe: verifies the database is reachable. Returns 503 when the DB
+ * is down so load balancers / orchestrators stop routing traffic to this instance.
+ */
+const readiness = async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'up', uptime: process.uptime() });
+  } catch (err) {
+    logger.error('Health check: database unreachable', { error: err.message });
+    res.status(503).json({ status: 'degraded', db: 'down' });
+  }
+};
+app.get('/health/ready', readiness);
+/** Back-compat default health endpoint now includes the DB check. */
+app.get('/health', readiness);
 
 // ──── Global Error Handler (Express 5 pattern) ────────────────────────────
 /**
@@ -108,7 +139,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime
  * @param {import('express').NextFunction} next
  */
 app.use((err, req, res, next) => {
-  console.error(`[ERROR] ${req.method} ${req.path}:`, err.message);
+  logger.error('Unhandled request error', { method: req.method, path: req.path, error: err.message });
+  if (res.statusCode >= 500 || !err.status) captureException(err, { method: req.method, path: req.path });
 
   // Handle Multer file upload errors
   if (err.code === 'LIMIT_FILE_SIZE') {
@@ -127,6 +159,9 @@ app.use((err, req, res, next) => {
 module.exports = app;
 
 if (require.main === module) {
+  const { validateStartupSecrets } = require('./config/secrets');
+  validateStartupSecrets();
+
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
     console.log(`✅ HRMS Backend running on http://localhost:${PORT}`);

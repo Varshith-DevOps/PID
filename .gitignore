@@ -7,4 +7,6 @@ dist/
 *.db-journal
 *.db-wal
 *.db-shm
+# Generated PostgreSQL schema (derived from prisma/schema.prisma)
+backend/prisma/schema.postgres.prisma
 

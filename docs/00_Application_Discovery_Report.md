@@ -128,7 +128,7 @@ The Next.js frontend is organized around page folders matching backend functiona
 
 * **Backend (`.env`):**
   * `DATABASE_URL`: Location of the database client (SQLite: `"file:./dev.db"`).
-  * `JWT_SECRET`: Signature key for signing tokens (`"supersecretjwtkey"`).
+  * `JWT_SECRET`: Signature key for signing tokens. Must be a strong, unique per-environment value (>= 32 chars); the server refuses to boot in production with a weak/missing secret.
   * `JWT_EXPIRES_IN`: Lifespan of the session token (`"7d"`).
   * `PORT`: Server port (`5000`).
 * **Frontend (`.env.local`):**

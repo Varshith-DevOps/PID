@@ -117,6 +117,75 @@ describe('Security Patches & Access Control Tests', () => {
     });
   });
 
+  describe('Forced password reset for provisioned accounts', () => {
+    let provisionedEmail;
+
+    afterAll(async () => {
+      // Clean up records this block created so re-runs stay deterministic.
+      // Delete child rows first (Postgres enforces these FKs strictly).
+      if (provisionedEmail) {
+        const emp = await prisma.employee.findUnique({ where: { email: provisionedEmail } }).catch(() => null);
+        if (emp) await prisma.employee.delete({ where: { id: emp.id } }).catch(() => {});
+        const u = await prisma.user.findUnique({ where: { email: provisionedEmail } }).catch(() => null);
+        if (u) {
+          await prisma.permission.deleteMany({ where: { userId: u.id } }).catch(() => {});
+          await prisma.user.delete({ where: { id: u.id } }).catch(() => {});
+        }
+      }
+    });
+
+    it('admin reset without a final password issues a strong temp password and forces change', async () => {
+      const res = await request(app)
+        .put(`/api/auth/reset-password/${targetUserId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({});
+      expect(res.status).toBe(200);
+      const temp = res.body.temporaryPassword;
+      expect(typeof temp).toBe('string');
+      expect(temp).not.toBe('employee123');
+      expect(temp.length).toBeGreaterThanOrEqual(12);
+
+      const user = await prisma.user.findUnique({ where: { id: targetUserId } });
+      expect(user.mustChangePassword).toBe(true);
+
+      // The temp password works and the login payload signals the forced change.
+      const login = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'priya.sharma@company.com', password: temp });
+      expect(login.status).toBe(200);
+      expect(login.body.user.mustChangePassword).toBe(true);
+    });
+
+    it('newly provisioned employee account requires a password change and has no static default', async () => {
+      const dept = await prisma.department.findFirst();
+      const email = `provisioned_${Math.floor(Math.random() * 1000000)}@company.com`;
+      provisionedEmail = email;
+      const res = await request(app)
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          firstName: 'Prov',
+          lastName: 'Isioned',
+          email,
+          jobTitle: 'Analyst',
+          departmentId: dept?.id,
+          salary: 500000,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.temporaryPassword).toBeDefined();
+      expect(res.body.temporaryPassword).not.toBe('employee123');
+
+      const user = await prisma.user.findUnique({ where: { email } });
+      expect(user.mustChangePassword).toBe(true);
+
+      // Old shared default must no longer work.
+      const badLogin = await request(app)
+        .post('/api/auth/login')
+        .send({ email, password: 'employee123' });
+      expect(badLogin.status).toBe(401);
+    });
+  });
+
   describe('Phase 3: HttpOnly Cookies', () => {
     it('should set HttpOnly token cookie on successful login', async () => {
       const res = await request(app)
@@ -128,6 +197,31 @@ describe('Security Patches & Access Control Tests', () => {
       const tokenCookie = cookies.find(c => c.startsWith('token='));
       expect(tokenCookie).toBeDefined();
       expect(tokenCookie).toContain('HttpOnly');
+    });
+  });
+
+  describe('Token revocation on logout', () => {
+    it('rejects a previously valid token after logout (server-side revocation)', async () => {
+      // Fresh, self-contained session so we do not disturb other suites' tokens.
+      const login = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'admin@hrms.com', password: 'admin123' });
+      const token = login.body.token;
+
+      const before = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`);
+      expect(before.status).toBe(200);
+
+      const out = await request(app)
+        .post('/api/auth/logout')
+        .set('Authorization', `Bearer ${token}`);
+      expect(out.status).toBe(200);
+
+      const after = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`);
+      expect(after.status).toBe(401);
     });
   });
 });

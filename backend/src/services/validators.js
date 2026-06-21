@@ -129,6 +129,32 @@ const validatePassword = (password) => {
   return hasUpper && hasLower && hasDigit && hasSpecial;
 };
 
+/**
+ * Generate a random temporary password that satisfies validatePassword().
+ * Used for provisioned accounts (employees, hired applicants) and admin resets,
+ * replacing the old shared static default. Always paired with a forced
+ * first-login password change (User.mustChangePassword = true).
+ * @returns {string}
+ */
+const generateTempPassword = () => {
+  const crypto = require('crypto');
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const special = '!@#$%^&*()-_=+';
+  const all = upper + lower + digits + special;
+  const pick = (set) => set[crypto.randomInt(set.length)];
+  // Guarantee one of each required class, then fill to 16 chars.
+  const chars = [pick(upper), pick(lower), pick(digits), pick(special)];
+  while (chars.length < 16) chars.push(pick(all));
+  // Fisher-Yates shuffle so required chars are not at fixed positions.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+};
+
 module.exports = {
   validatePAN,
   validateIFSC,
@@ -136,5 +162,6 @@ module.exports = {
   validateUAN,
   validatePRAN,
   validateBankAccount,
-  validatePassword
+  validatePassword,
+  generateTempPassword
 };

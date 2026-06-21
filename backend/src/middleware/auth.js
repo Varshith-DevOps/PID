@@ -47,6 +47,12 @@ const authenticate = async (req, res, next) => {
       return res.status(403).json({ error: 'Access denied. Account inactive.' });
     }
 
+    // Token revocation: a token is invalid once the user's tokenVersion advances
+    // (on logout, password change, or admin reset).
+    if ((decoded.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+
     // Check Subscription Guard for tenant companies (ignore for global SUPER_ADMIN)
     if (user.companyId && user.role !== 'SUPER_ADMIN') {
       const company = await prisma.company.findUnique({

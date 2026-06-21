@@ -1,5 +1,6 @@
 import { AuthProvider } from '@/lib/authContext';
 import { ToastProvider } from '@/lib/toastContext';
+import ForcePasswordChange from '@/components/ForcePasswordChange';
 import './globals.css';
 
 export const metadata = {
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            {children}
+            <ForcePasswordChange />
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>

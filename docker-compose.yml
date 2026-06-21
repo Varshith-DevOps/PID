@@ -1,0 +1,31 @@
+# Local/staging PostgreSQL for the HRMS backend.
+# SQLite remains the default for quick local dev; use this to run the app against
+# PostgreSQL (the supported production database) before cutover.
+#
+#   docker compose up -d db
+#   # in backend/.env set:
+#   #   DATABASE_URL="postgresql://hrms:hrms@localhost:5432/hrms?schema=public"
+#   # then follow docs/07_PostgreSQL_Migration_Runbook.md
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: hrms_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hrms
+      POSTGRES_PASSWORD: hrms
+      POSTGRES_DB: hrms
+    ports:
+      - "5432:5432"
+    volumes:
+      - hrms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hrms -d hrms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  hrms_pgdata:

@@ -34,7 +34,8 @@ const isEsiEnabledForPayroll = (employee) => Boolean(employee.salaryStructure)
   && employee.salaryStructure.esiEnabled !== false
   && salaryCalculator.calculateGrossEarnings(employee.salaryStructure) <= 21000;
 
-const money = (value) => Math.round((Number(value) || 0) * 100) / 100;
+const { roundMoney } = require('../utils/money');
+const money = (value) => roundMoney(value);
 
 const dayMs = 24 * 60 * 60 * 1000;
 const startOfDay = (dateLike) => {
