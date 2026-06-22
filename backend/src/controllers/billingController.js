@@ -1,6 +1,18 @@
 const prisma = require('../config/database');
 const crypto = require('crypto');
 
+const mockBillingAllowed = () => (
+  process.env.NODE_ENV !== 'production' || process.env.ALLOW_MOCK_BILLING === 'true'
+);
+
+const rejectMockBillingInProduction = (res) => {
+  if (mockBillingAllowed()) return false;
+  res.status(503).json({
+    error: 'Billing provider is not configured. Mock billing is disabled in production.'
+  });
+  return true;
+};
+
 /**
  * Get all active pricing plans.
  * GET /api/billing/plans
@@ -78,6 +90,7 @@ const getSubscription = async (req, res) => {
  */
 const checkout = async (req, res) => {
   try {
+    if (rejectMockBillingInProduction(res)) return;
     const companyId = req.user.companyId;
     const { planId } = req.body;
 
@@ -122,6 +135,7 @@ const checkout = async (req, res) => {
  */
 const confirmPayment = async (req, res) => {
   try {
+    if (rejectMockBillingInProduction(res)) return;
     const companyId = req.user.companyId;
     const { transactionId, planId, status } = req.body;
 

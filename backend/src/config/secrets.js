@@ -72,6 +72,20 @@ function validateStartupSecrets() {
   if (isWeakSecret(process.env.JWT_SECRET)) {
     problems.push(`JWT_SECRET must be set and >= ${MIN_SECRET_LENGTH} chars and not a known-weak default`);
   }
+  if (isProd) {
+    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith('file:')) {
+      problems.push('DATABASE_URL must point to a production database; SQLite/file URLs are not allowed in production');
+    }
+    if (!process.env.ALLOWED_ORIGINS) {
+      problems.push('ALLOWED_ORIGINS must be set explicitly in production');
+    }
+    if (!process.env.REDIS_URL && process.env.ALLOW_IN_MEMORY_LIMITERS !== 'true') {
+      problems.push('REDIS_URL must be set in production so rate limits and queues work across instances');
+    }
+    if (process.env.ALLOW_MOCK_BILLING === 'true') {
+      problems.push('ALLOW_MOCK_BILLING must not be true in production');
+    }
+  }
   // MOBILE_APP_SECRET is only required if mobile punch signing is used, but if
   // it is set at all it must be strong.
   if (process.env.MOBILE_APP_SECRET !== undefined && isWeakSecret(process.env.MOBILE_APP_SECRET)) {

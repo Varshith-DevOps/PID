@@ -11,16 +11,15 @@ const {
 } = require('../controllers/platformAdminController');
 const { authenticate, authorize } = require('../middleware/auth');
  
-// Require SUPER_ADMIN or SALES role for all platform-admin endpoints
 router.use(authenticate);
-router.use(authorize('SUPER_ADMIN', 'SALES'));
  
-router.get('/companies', getCompanies);
-router.put('/companies/:id/status', updateCompanyStatus);
-router.put('/companies/:id/kyc', verifyCompanyKYC);
-router.post('/companies/:id/custom-plan', createCustomPlan);
-router.get('/subscriptions', getSubscriptions);
-router.put('/subscriptions/:id', updateSubscription);
-router.get('/metrics', getMetrics);
+// SALES can view tenant pipeline data; only SUPER_ADMIN can mutate platform state.
+router.get('/companies', authorize('SUPER_ADMIN', 'SALES'), getCompanies);
+router.get('/subscriptions', authorize('SUPER_ADMIN', 'SALES'), getSubscriptions);
+router.get('/metrics', authorize('SUPER_ADMIN'), getMetrics);
+router.put('/companies/:id/status', authorize('SUPER_ADMIN'), updateCompanyStatus);
+router.put('/companies/:id/kyc', authorize('SUPER_ADMIN'), verifyCompanyKYC);
+router.post('/companies/:id/custom-plan', authorize('SUPER_ADMIN', 'SALES'), createCustomPlan);
+router.put('/subscriptions/:id', authorize('SUPER_ADMIN'), updateSubscription);
  
 module.exports = router;

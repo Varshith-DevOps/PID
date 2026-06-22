@@ -9,12 +9,9 @@ const path = require('path');
 const fs = require('fs');
 const { canAccessEmployee } = require('../services/accessControl');
 const { logPayrollEvent } = require('../services/auditService');
+const { ensureUploadDir } = require('../config/storage');
 
-const UPLOAD_DIR = path.join(__dirname, '../../uploads');
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+const UPLOAD_DIR = ensureUploadDir();
 
 const getEmployeeDocuments = async (req, res) => {
   try {

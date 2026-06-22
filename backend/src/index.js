@@ -51,8 +51,12 @@ const { csrfProtection } = require('./middleware/csrf');
 const logger = require('./utils/logger');
 const prisma = require('./config/database');
 const { initSentry, captureException } = require('./config/sentry');
+const { validateStartupSecrets } = require('./config/secrets');
 
 initSentry();
+if (process.env.NODE_ENV === 'production' || require.main === module) {
+  validateStartupSecrets();
+}
 
 const app = express();
 app.disable('x-powered-by');
@@ -166,9 +170,6 @@ app.use((err, req, res, next) => {
 module.exports = app;
 
 if (require.main === module) {
-  const { validateStartupSecrets } = require('./config/secrets');
-  validateStartupSecrets();
-
   const PORT = process.env.PORT || 5000;
   const server = app.listen(PORT, () => {
     console.log(`✅ HRMS Backend running on http://localhost:${PORT}`);

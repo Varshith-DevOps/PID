@@ -31,6 +31,7 @@ export default function PayslipsPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>('ALL');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
@@ -67,8 +68,8 @@ export default function PayslipsPage() {
 
   const handleDownload = async (id: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/payslip/pdf/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      const response = await fetch(`${apiBaseUrl}/payslip/pdf/${id}`, {
+        credentials: 'include',
       });
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -95,8 +96,8 @@ export default function PayslipsPage() {
 
   const handleDownloadAll = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/payslip/pdf-bulk?month=${new Date().getMonth() + 1}&year=${selectedYear}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      const response = await fetch(`${apiBaseUrl}/payslip/pdf-bulk?month=${new Date().getMonth() + 1}&year=${selectedYear}`, {
+        credentials: 'include',
       });
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

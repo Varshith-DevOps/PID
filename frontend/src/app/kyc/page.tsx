@@ -126,8 +126,7 @@ export default function KycOnboardingPage() {
       
       // Refresh user profile in auth context
       const freshProfile = await getProfile();
-      const token = localStorage.getItem('token') || '';
-      login(token, freshProfile, freshProfile.permissions);
+      login(undefined, freshProfile, freshProfile.permissions);
       
       setTimeout(() => {
         router.push('/dashboard');

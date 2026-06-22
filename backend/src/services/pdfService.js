@@ -13,6 +13,7 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const { getUploadRoot } = require('../config/storage');
 const { getTemplateById, normalizeConfig } = require('../config/payslipTemplates');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -194,7 +195,7 @@ function resolveLogo(logoUrl) {
   // Only embed locally-stored uploads (skip remote URLs pdfkit can't fetch).
   if (/^https?:\/\//i.test(logoUrl)) return null;
   // Confine to the uploads directory and block path traversal (e.g. ../../etc/passwd).
-  const uploadsRoot = path.resolve(__dirname, '../../uploads');
+  const uploadsRoot = getUploadRoot();
   const rel = logoUrl.replace(/^\/+/, '').replace(/^uploads[\\/]/, '');
   const candidate = path.resolve(uploadsRoot, rel);
   if (candidate !== uploadsRoot && !candidate.startsWith(uploadsRoot + path.sep)) return null;

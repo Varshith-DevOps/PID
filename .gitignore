@@ -2,6 +2,8 @@ node_modules/
 build/
 dist/
 .env
+.env.local
+frontend/.env.local
 *.log
 .next/
 *.db
@@ -16,4 +18,8 @@ backend/prisma/schema.postgres.prisma
 # Built mobile APKs are served from disk by the OTA endpoint; don't commit the
 # large binaries. The version manifest (app-version.json) IS committed.
 backend/app-release/*.apk
+
+# Runtime uploads contain private HR/candidate data and must live in private
+# storage, never in source control.
+backend/uploads/
 

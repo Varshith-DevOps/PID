@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const { ensureUploadDir } = require('../config/storage');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
 const {
@@ -30,10 +30,7 @@ router.use(authenticate);
 // ──── Receipt File Upload Configuration (Multer) ───────────────────────────
 
 /** Ensure receipts upload directory exists */
-const receiptsDir = path.join(__dirname, '../../uploads/receipts');
-if (!fs.existsSync(receiptsDir)) {
-  fs.mkdirSync(receiptsDir, { recursive: true });
-}
+const receiptsDir = ensureUploadDir('receipts');
 
 /** Multer disk storage for receipt attachments */
 const receiptsStorage = multer.diskStorage({

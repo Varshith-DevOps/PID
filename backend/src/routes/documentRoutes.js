@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const { ensureUploadDir } = require('../config/storage');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware } = require('../rbac/rbacMiddleware');
 const {
@@ -22,10 +22,7 @@ const {
 // ──── Multer Configuration ─────────────────────────────────────────────────
 
 /** Ensure upload directory exists */
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const uploadDir = ensureUploadDir();
 
 /**
  * Multer disk storage configuration.

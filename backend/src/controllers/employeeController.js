@@ -13,6 +13,7 @@ const fs = require('fs');
 const { validatePAN, validateIFSC, validateAadhaar, validateUAN, validateBankAccount } = require('../services/validators');
 const { canAccessEmployee, getLinkedEmployeeId, isHr, isPayroll } = require('../services/accessControl');
 const { assertPayrollRangeOpen, assertPayrollPeriodOpen } = require('../services/payrollPeriodGuard');
+const { getUploadRoot } = require('../config/storage');
 
 /**
  * Log a field-level change to the ChangeHistory audit trail.
@@ -67,9 +68,18 @@ const employeeFullIncludes = {
   changeHistory: { orderBy: { createdAt: 'desc' } },
 };
 
+const assertEmployeeAccess = async (req, res, employeeId, action = 'modify') => {
+  if (!(await canAccessEmployee(req.user, employeeId))) {
+    res.status(403).json({ error: `Access denied. You cannot ${action} this employee record.` });
+    return false;
+  }
+  return true;
+};
+
 const getChangeHistory = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!(await assertEmployeeAccess(req, res, id, 'view history for'))) return;
     const history = await prisma.changeHistory.findMany({
       where: { employeeId: id },
       orderBy: { createdAt: 'desc' },
@@ -283,6 +293,7 @@ const updateEmployee = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await assertEmployeeAccess(req, res, id, 'update'))) return;
 
     if (joinDate) await assertPayrollPeriodOpen(joinDate, 'Joining date update');
     if (salary !== undefined || annualCTC !== undefined || bonusPercent !== undefined || departmentId || managerId !== undefined || isActive !== undefined) {
@@ -359,6 +370,7 @@ const deleteEmployee = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await assertEmployeeAccess(req, res, id, 'deactivate'))) return;
     await assertPayrollPeriodOpen(new Date(), 'Employee deactivation');
 
     await prisma.employee.update({
@@ -378,6 +390,7 @@ const addAddress = async (req, res) => {
     const { id } = req.params;
     const { type, line1, line2, city, state, pincode, country, changeReason } = req.body;
     if (!line1 || !city || !state || !pincode) return res.status(400).json({ error: 'Address fields required' });
+    if (!(await assertEmployeeAccess(req, res, id, 'add addresses for'))) return;
 
     const address = await prisma.employeeAddress.create({
       data: { employeeId: id, type: type || 'CURRENT', line1, line2, city, state, pincode, country: country || 'India' },
@@ -397,6 +410,7 @@ const updateAddress = async (req, res) => {
     
     const existing = await prisma.employeeAddress.findUnique({ where: { id: addressId } });
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, existing.employeeId, 'update addresses for'))) return;
     
     const address = await prisma.employeeAddress.update({
       where: { id: addressId },
@@ -420,6 +434,9 @@ const updateAddress = async (req, res) => {
 const deleteAddress = async (req, res) => {
   try {
     const { addressId } = req.params;
+    const existing = await prisma.employeeAddress.findUnique({ where: { id: addressId } });
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, existing.employeeId, 'delete addresses for'))) return;
     await prisma.employeeAddress.delete({ where: { id: addressId } });
     res.json({ message: 'Address deleted' });
   } catch (error) {
@@ -433,6 +450,7 @@ const addEducation = async (req, res) => {
     const { id } = req.params;
     const { degree, specialization, institution, university, yearOfPassing, percentage } = req.body;
     if (!degree || !institution || !yearOfPassing) return res.status(400).json({ error: 'Degree, institution, and year required' });
+    if (!(await assertEmployeeAccess(req, res, id, 'add education for'))) return;
 
     const edu = await prisma.education.create({
       data: { employeeId: id, degree, specialization, institution, university, yearOfPassing: parseInt(yearOfPassing), percentage: percentage ? parseFloat(percentage) : null },
@@ -448,6 +466,9 @@ const updateEducation = async (req, res) => {
   try {
     const { eduId } = req.params;
     const { degree, specialization, institution, university, yearOfPassing, percentage } = req.body;
+    const existing = await prisma.education.findUnique({ where: { id: eduId } });
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, existing.employeeId, 'update education for'))) return;
     const edu = await prisma.education.update({
       where: { id: eduId },
       data: {
@@ -468,6 +489,9 @@ const updateEducation = async (req, res) => {
 const deleteEducation = async (req, res) => {
   try {
     const { eduId } = req.params;
+    const existing = await prisma.education.findUnique({ where: { id: eduId } });
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, existing.employeeId, 'delete education for'))) return;
     await prisma.education.delete({ where: { id: eduId } });
     res.json({ message: 'Education record deleted' });
   } catch (error) {
@@ -481,6 +505,7 @@ const addExperience = async (req, res) => {
     const { id } = req.params;
     const { company, designation, fromDate, toDate, description } = req.body;
     if (!company || !designation || !fromDate) return res.status(400).json({ error: 'Company, designation, and start date required' });
+    if (!(await assertEmployeeAccess(req, res, id, 'add experience for'))) return;
 
     const exp = await prisma.professionalExperience.create({
       data: { employeeId: id, company, designation, fromDate: new Date(fromDate), toDate: toDate ? new Date(toDate) : null, description },
@@ -496,6 +521,9 @@ const updateExperience = async (req, res) => {
   try {
     const { expId } = req.params;
     const { company, designation, fromDate, toDate, description } = req.body;
+    const existing = await prisma.professionalExperience.findUnique({ where: { id: expId } });
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, existing.employeeId, 'update experience for'))) return;
     const exp = await prisma.professionalExperience.update({
       where: { id: expId },
       data: {
@@ -515,6 +543,9 @@ const updateExperience = async (req, res) => {
 const deleteExperience = async (req, res) => {
   try {
     const { expId } = req.params;
+    const existing = await prisma.professionalExperience.findUnique({ where: { id: expId } });
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, existing.employeeId, 'delete experience for'))) return;
     await prisma.professionalExperience.delete({ where: { id: expId } });
     res.json({ message: 'Experience record deleted' });
   } catch (error) {
@@ -531,6 +562,7 @@ const upsertBankDetails = async (req, res) => {
     if (!bankName || !accountNumber || !ifscCode) {
       return res.status(400).json({ error: 'Bank name, account number, and IFSC code are required' });
     }
+    if (!(await assertEmployeeAccess(req, res, id, 'update bank details for'))) return;
     await assertPayrollPeriodOpen(new Date(), 'Bank detail update');
 
     if (!validateBankAccount(accountNumber)) {
@@ -572,6 +604,7 @@ const upsertPFDetails = async (req, res) => {
     if (uanNumber && !validateUAN(uanNumber)) {
       return res.status(400).json({ error: 'Invalid UAN Number (must be a 12-digit number not starting with 0)' });
     }
+    if (!(await assertEmployeeAccess(req, res, id, 'update PF details for'))) return;
     await assertPayrollPeriodOpen(new Date(), 'PF/statutory detail update');
 
     const existing = await prisma.pFDetails.findUnique({ where: { employeeId: id } });
@@ -615,6 +648,7 @@ const upsertExitDetails = async (req, res) => {
   try {
     const { id } = req.params;
     const { exitType, resignationDate, lastWorkingDate, noticePeriodDays, exitReason, exitInterview, rehireEligible, fnfStatus, fnfAmount, changeReason } = req.body;
+    if (!(await assertEmployeeAccess(req, res, id, 'update exit details for'))) return;
     if (resignationDate || lastWorkingDate) {
       await assertPayrollRangeOpen(resignationDate || lastWorkingDate, lastWorkingDate || resignationDate, 'Exit detail update');
     }
@@ -653,6 +687,7 @@ const addDependent = async (req, res) => {
     const { id } = req.params;
     const { name, relationship, dateOfBirth, gender, isNominee, nomineePercent } = req.body;
     if (!name || !relationship) return res.status(400).json({ error: 'Name and relationship are required' });
+    if (!(await assertEmployeeAccess(req, res, id, 'add dependents for'))) return;
 
     const dep = await prisma.dependent.create({
       data: {
@@ -676,6 +711,9 @@ const updateDependent = async (req, res) => {
   try {
     const { depId } = req.params;
     const { name, relationship, dateOfBirth, gender, isNominee, nomineePercent } = req.body;
+    const existing = await prisma.dependent.findUnique({ where: { id: depId } });
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, existing.employeeId, 'update dependents for'))) return;
     const dep = await prisma.dependent.update({
       where: { id: depId },
       data: {
@@ -698,16 +736,15 @@ const deleteDependent = async (req, res) => {
   try {
     const { depId } = req.params;
     const { inactiveRemark } = req.body;
+    const dependent = await prisma.dependent.findUnique({ where: { id: depId } });
+    if (!dependent) return res.status(404).json({ error: 'Not found' });
+    if (!(await assertEmployeeAccess(req, res, dependent.employeeId, 'delete dependents for'))) return;
     await prisma.dependent.update({ 
       where: { id: depId },
       data: { isActive: false, inactiveRemark: inactiveRemark || 'No remark provided' }
     });
     
-    // get employee id from dependent
-    const dependent = await prisma.dependent.findUnique({ where: { id: depId } });
-    if (dependent) {
-      await logChange(dependent.employeeId, req.user?.email, 'Dependent', 'isActive', 'true', 'false', inactiveRemark);
-    }
+    await logChange(dependent.employeeId, req.user?.email, 'Dependent', 'isActive', 'true', 'false', inactiveRemark);
     res.json({ message: 'Dependent marked inactive' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -726,6 +763,7 @@ const addSalaryRevision = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await assertEmployeeAccess(req, res, id, 'add salary revisions for'))) return;
     await assertPayrollPeriodOpen(effectiveDate, 'Salary revision');
 
     const previousSalary = employee.salary;
@@ -816,10 +854,11 @@ const uploadEmployeePhoto = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await assertEmployeeAccess(req, res, id, 'upload photos for'))) return;
 
     // Delete old photo if exists (with path traversal protection)
     if (employee.photoUrl) {
-      const uploadsDir = path.resolve(__dirname, '../../uploads');
+      const uploadsDir = getUploadRoot();
       const oldPath = path.resolve(employee.photoUrl);
       if (oldPath.startsWith(uploadsDir) && fs.existsSync(oldPath)) {
         fs.unlinkSync(oldPath);
@@ -845,6 +884,9 @@ const updateAccountStage = async (req, res) => {
     if (!accountStage || !validStages.includes(accountStage)) {
       return res.status(400).json({ error: `Account stage must be one of: ${validStages.join(', ')}` });
     }
+    const employee = await prisma.employee.findUnique({ where: { id } });
+    if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await assertEmployeeAccess(req, res, id, 'update account stage for'))) return;
 
     const updated = await prisma.employee.update({
       where: { id },

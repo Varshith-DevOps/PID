@@ -3,7 +3,7 @@
 /**
  * @fileoverview React Context for Authentication & Permissions.
  * Manages user state, login/logout operations, and role-based / permission checks.
- * Integrates with cookies and localstorage to persist authentication tokens.
+ * Uses backend-issued HttpOnly cookies for session persistence.
  * @module lib/authContext
  */
 
@@ -37,7 +37,7 @@ interface AuthContextType {
   user: User | null;
   permissions: Permission[];
   loading: boolean;
-  login: (token: string, user: User, permissions?: Permission[]) => void;
+  login: (token: string | undefined, user: User, permissions?: Permission[]) => void;
   logout: () => void;
   markPasswordChanged: () => void;
   hasPermission: (module: string, action: string) => boolean;
@@ -55,28 +55,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      getProfile()
-        .then((data) => {
-          setUser(data);
-          setPermissions(data.permissions || []);
-        })
-        .catch(() => {
-          localStorage.removeItem('token');
-          document.cookie = 'token=; path=/; max-age=0';
-          setUser(null);
-          setPermissions([]);
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    getProfile()
+      .then((data) => {
+        setUser(data);
+        setPermissions(data.permissions || []);
+      })
+      .catch(() => {
+        setUser(null);
+        setPermissions([]);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const login = (token: string, userData: User, userPermissions?: Permission[]) => {
-    localStorage.setItem('token', token);
-    document.cookie = `token=${token}; path=/; max-age=${60 * 60 * 24}; SameSite=Lax`;
+  const login = (_token: string | undefined, userData: User, userPermissions?: Permission[]) => {
     setUser(userData);
     setPermissions(userPermissions || []);
   };
@@ -84,8 +75,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => {
     // Revoke server-side (bumps tokenVersion) before clearing local state.
     void apiLogout();
-    localStorage.removeItem('token');
-    document.cookie = 'token=; path=/; max-age=0';
     document.cookie = 'csrfToken=; path=/; max-age=0';
     setUser(null);
     setPermissions([]);

@@ -6,18 +6,9 @@
  */
 
 const prisma = require('../config/database');
-const path = require('path');
 const fs = require('fs');
 const { canAccessEmployee, getEmployeeScopeIds, canApproveEmployeeWorkflow, isPayroll } = require('../services/accessControl');
-
-const UPLOAD_ROOT = path.resolve(__dirname, '../../uploads');
-
-const resolveStoredUpload = (storedPath) => {
-  if (!storedPath) return null;
-  const normalized = String(storedPath).replace(/\\/g, '/').replace(/^\/uploads\//, '');
-  const resolved = path.resolve(UPLOAD_ROOT, normalized);
-  return resolved.startsWith(UPLOAD_ROOT) ? resolved : null;
-};
+const { resolveStoredUpload } = require('../config/storage');
 
 // ==========================================
 // 1. Expense Claims Management

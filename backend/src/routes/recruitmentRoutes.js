@@ -10,6 +10,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { ensureUploadDir } = require('../config/storage');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware } = require('../rbac/rbacMiddleware');
 const { publicApplicationLimiter } = require('../middleware/rateLimit');
@@ -31,10 +32,7 @@ const {
 
 // ──── Resume Upload Configuration ──────────────────────────────────────────
 
-const resumeDir = path.join(__dirname, '../../uploads/resumes');
-if (!fs.existsSync(resumeDir)) {
-  fs.mkdirSync(resumeDir, { recursive: true });
-}
+const resumeDir = ensureUploadDir('resumes');
 
 const resumeStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, resumeDir),

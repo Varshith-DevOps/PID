@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
+const { ensureUploadDir } = require('../config/storage');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
 const {
@@ -49,10 +49,7 @@ const { employeeCreateSchema } = require('../schemas/employeeSchemas');
 // ──── Photo Upload Configuration (Multer v2) ──────────────────────────────
 
 /** Ensure photo upload directory exists */
-const photoDir = path.join(__dirname, '../../uploads/photos');
-if (!fs.existsSync(photoDir)) {
-  fs.mkdirSync(photoDir, { recursive: true });
-}
+const photoDir = ensureUploadDir('photos');
 
 /**
  * Multer storage for employee photos.

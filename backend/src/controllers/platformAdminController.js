@@ -186,6 +186,14 @@ const getMetrics = async (req, res) => {
  */
 const createCustomPlan = async (req, res) => {
   try {
+    if (
+      req.user?.role === 'SALES' &&
+      process.env.NODE_ENV === 'production' &&
+      process.env.ALLOW_SALES_CUSTOM_PLANS !== 'true'
+    ) {
+      return res.status(403).json({ error: 'Sales custom plan assignment requires production approval workflow.' });
+    }
+
     const { id } = req.params;
     const { name, description, price, employeeLimit, featureLimits, durationDays } = req.body;
 

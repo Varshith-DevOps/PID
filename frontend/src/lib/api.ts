@@ -1,7 +1,7 @@
 /**
  * @fileoverview Axios API client and request services.
  * Centralizes all frontend network requests to the HRMS backend API.
- * Handles automatic JWT authorization header injection via request interceptors.
+ * Uses backend-issued HttpOnly cookies and CSRF headers for browser sessions.
  * @module lib/api
  */
 
@@ -38,20 +38,13 @@ const api = axios.create({
 });
 
 // Single in-flight refresh shared across concurrent 401s.
-let refreshPromise: Promise<string | null> | null = null;
-async function refreshAccessToken(): Promise<string | null> {
+let refreshPromise: Promise<boolean> | null = null;
+async function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = api
       .post('/auth/refresh', {}, { headers: { 'x-skip-refresh': '1' } })
-      .then((res) => {
-        const newToken = res.data?.token as string | undefined;
-        if (newToken && typeof window !== 'undefined') {
-          localStorage.setItem('token', newToken);
-          document.cookie = `token=${newToken}; path=/; max-age=${60 * 60 * 24}; SameSite=Lax`;
-        }
-        return newToken || null;
-      })
-      .catch(() => null)
+      .then((res) => Boolean(res.data?.token))
+      .catch(() => false)
       .finally(() => { refreshPromise = null; });
   }
   return refreshPromise;
@@ -61,8 +54,6 @@ api.interceptors.request.use(
   (config) => {
     apiEvents.emit('request-start', config.url || '');
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
-      if (token) config.headers.Authorization = `Bearer ${token}`;
       // Double-submit CSRF: echo the readable csrfToken cookie on mutations.
       const method = (config.method || 'get').toLowerCase();
       if (['post', 'put', 'patch', 'delete'].includes(method)) {
@@ -101,10 +92,8 @@ api.interceptors.response.use(
       || url.includes('/auth/login');
     if (status === 401 && !skipRefresh && typeof window !== 'undefined') {
       original._retry = true;
-      const newToken = await refreshAccessToken();
-      if (newToken) {
-        original.headers = original.headers || {};
-        original.headers.Authorization = `Bearer ${newToken}`;
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
         return api(original); // replay the original request silently
       }
     }
@@ -656,12 +645,7 @@ export const addSalaryRevision = async (employeeId: string, revision: any) => {
 };
 export const changePassword = async (currentPassword: string, newPassword: string) => {
   const { data } = await api.put('/auth/change-password', { currentPassword, newPassword });
-  // The server bumps tokenVersion (revoking old tokens) and re-issues one for this
-  // session — store it so the current session stays valid.
-  if (data?.token && typeof window !== 'undefined') {
-    localStorage.setItem('token', data.token);
-    document.cookie = `token=${data.token}; path=/; max-age=${60 * 60 * 24}; SameSite=Lax`;
-  }
+  // The server bumps tokenVersion and refreshes the HttpOnly session cookie.
   return data;
 };
 

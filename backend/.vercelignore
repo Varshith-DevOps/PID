@@ -1,0 +1,12 @@
+node_modules
+uploads
+app-release/*.apk
+coverage
+__tests__
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm

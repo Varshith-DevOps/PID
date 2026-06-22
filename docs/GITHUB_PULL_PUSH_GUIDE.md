@@ -7,7 +7,7 @@ Use this file when you want to extract the project from GitHub, update your loca
 | Item | Value |
 | --- | --- |
 | GitHub Remote | `https://github.com/Ax-Tr/PID-HCMS.git` |
-| Current Local Branch | `codex/hrms-fullstack-bugfixes` |
+| Target Branch | `main` |
 | Local Workspace | `e:\HRMS_application` |
 
 ## 2. First-Time Extract From GitHub
@@ -22,17 +22,17 @@ git branch
 git status
 ```
 
-If you need the current working branch:
+Switch to the main branch:
 
 ```powershell
-git checkout codex/hrms-fullstack-bugfixes
+git checkout main
 ```
 
-If the branch exists only on GitHub:
+If `main` does not exist locally yet:
 
 ```powershell
 git fetch origin
-git checkout -b codex/hrms-fullstack-bugfixes origin/codex/hrms-fullstack-bugfixes
+git checkout -b main origin/main
 ```
 
 ## 3. Pull Latest Changes From GitHub
@@ -43,14 +43,16 @@ Run this before starting new work.
 cd e:\HRMS_application
 git status
 git fetch origin
-git pull origin codex/hrms-fullstack-bugfixes
+git checkout main
+git pull origin main
 ```
 
 If Git says you have local uncommitted changes, either commit them first or temporarily stash them:
 
 ```powershell
 git stash push -m "temporary local changes before pull"
-git pull origin codex/hrms-fullstack-bugfixes
+git checkout main
+git pull origin main
 git stash pop
 ```
 
@@ -129,33 +131,47 @@ git commit -m "Improve user-facing success and error messages"
 
 ## 7. Push Changes To GitHub
 
-Push the current branch:
+Push directly to the `main` branch:
 
 ```powershell
-git push origin codex/hrms-fullstack-bugfixes
+git push origin main
 ```
 
-If this is a new branch:
+If Git says the upstream branch is not configured:
 
 ```powershell
-git push -u origin codex/hrms-fullstack-bugfixes
+git push -u origin main
 ```
 
-## 8. Create Pull Request
+If Git rejects the push because remote `main` has new changes, pull first, resolve conflicts if needed, then push again:
 
-After pushing, open GitHub:
+```powershell
+git pull origin main
+git push origin main
+```
+
+## 8. Optional Pull Request Flow
+
+If your team does not allow direct pushes to `main`, create a feature branch and open a pull request instead.
+
+Create and push a branch:
+
+```powershell
+git checkout main
+git pull origin main
+git checkout -b feature/describe-your-change
+git add .
+git commit -m "Describe the completed change"
+git push -u origin feature/describe-your-change
+```
+
+Then open GitHub:
 
 ```text
 https://github.com/Ax-Tr/PID-HCMS
 ```
 
-Create a pull request from:
-
-```text
-codex/hrms-fullstack-bugfixes
-```
-
-into the target branch, usually:
+Create a pull request from your feature branch into:
 
 ```text
 main
@@ -223,7 +239,8 @@ Use this daily flow for normal development.
 cd e:\HRMS_application
 git status
 git fetch origin
-git pull origin codex/hrms-fullstack-bugfixes
+git checkout main
+git pull origin main
 
 # make code or documentation changes
 
@@ -232,7 +249,7 @@ git diff --stat
 git add .
 git status
 git commit -m "Describe the completed change"
-git push origin codex/hrms-fullstack-bugfixes
+git push origin main
 ```
 
 ## 12. Release-Ready Push Flow
@@ -250,7 +267,7 @@ cd e:\HRMS_application
 git status
 git add .
 git commit -m "Prepare HRMS production release updates"
-git push origin codex/hrms-fullstack-bugfixes
+git push origin main
 ```
 
 If tests fail, fix the issue before committing the release branch.
