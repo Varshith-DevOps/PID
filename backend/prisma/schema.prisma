@@ -354,6 +354,7 @@ model Attendance {
 
 model AttendanceSettings {
   id               String   @id @default(uuid())
+  companyId        String?
   checkInStartTime String   @default("09:00")
   checkInEndTime   String   @default("09:30")
   checkOutTime     String   @default("18:00")
@@ -361,6 +362,7 @@ model AttendanceSettings {
   halfDayThreshold Int      @default(4)
   isActive         Boolean  @default(true)
 
+  @@index([companyId])
   @@map("attendance_settings")
 }
 
@@ -431,6 +433,7 @@ model SalaryStructure {
 
 model PayrollSettings {
   id              String   @id @default(uuid())
+  companyId       String?
   pfRate          Float    @default(0.12)
   maxPf           Float    @default(2160)
   gratuityRate    Float    @default(0.0481)
@@ -454,6 +457,7 @@ model PayrollSettings {
   specialAllowancePercent Float    @default(15.0)
   insurancePercent        Float    @default(5.0)
 
+  @@index([companyId])
   @@map("payroll_settings")
 }
 
@@ -517,6 +521,7 @@ model PayrollRun {
   year            Int
   legalEntity     LegalEntity?   @relation(fields: [legalEntityId], references: [id])
   legalEntityId   String?
+  companyId       String?
   status          String         @default("DRAFT")
   totalAmount     Float?
   totalPf         Float?         @default(0)
@@ -536,12 +541,14 @@ model PayrollRun {
   approvals       PayrollApproval[]
   createdAt       DateTime        @default(now())
 
-  @@unique([month, year])
+  @@unique([companyId, month, year])
+  @@index([companyId])
   @@map("payroll_runs")
 }
 
 model Project {
   id          String        @id @default(uuid())
+  companyId   String?
   name        String
   description String?
   startDate   DateTime?
@@ -563,6 +570,7 @@ model Project {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  @@index([companyId])
   @@map("projects")
 }
 
@@ -596,6 +604,7 @@ model ProjectExpense {
 
 model Task {
   id             String      @id @default(uuid())
+  companyId      String?
   title          String
   description    String?
   project        Project?    @relation(fields: [projectId], references: [id])
@@ -621,11 +630,13 @@ model Task {
   
   timesheets     Timesheet[]
 
+  @@index([companyId])
   @@map("tasks")
 }
 
 model Sprint {
   id         String   @id @default(uuid())
+  companyId  String?
   project    Project  @relation(fields: [projectId], references: [id])
   projectId  String
   name       String
@@ -637,6 +648,7 @@ model Sprint {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  @@index([companyId])
   @@map("sprints")
 }
 
@@ -678,6 +690,7 @@ model Overtime {
 
 model JobOpening {
   id             String         @id @default(uuid())
+  companyId      String?
   title          String
   department     Department     @relation(fields: [departmentId], references: [id])
   departmentId   String
@@ -691,6 +704,7 @@ model JobOpening {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
+  @@index([companyId])
   @@map("job_openings")
 }
 
@@ -839,6 +853,7 @@ model TravelAdvance {
 
 model ShiftType {
   id                  String            @id @default(uuid())
+  companyId           String?
   name                String
   code                String?
   startTime           String            // e.g. "09:00"
@@ -864,6 +879,7 @@ model ShiftType {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
+  @@index([companyId])
   @@map("shift_types")
 }
 
@@ -925,6 +941,7 @@ model AuditLog {
 
 model ChecklistTemplate {
   id          String                  @id @default(uuid())
+  companyId   String?
   name        String                  // e.g. "Standard Developer Onboarding"
   type        String                  // "ONBOARDING" or "OFFBOARDING"
   description String?
@@ -932,6 +949,7 @@ model ChecklistTemplate {
   createdAt   DateTime                @default(now())
   updatedAt   DateTime                @updatedAt
 
+  @@index([companyId])
   @@map("checklist_templates")
 }
 
@@ -1321,6 +1339,7 @@ model ComplianceObligation {
 
 model Holiday {
   id        String   @id @default(uuid())
+  companyId String?
   name      String
   date      DateTime
   location  String?
@@ -1328,11 +1347,13 @@ model Holiday {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId])
   @@map("holidays")
 }
 
 model BiometricDevice {
   id             String    @id @default(uuid())
+  companyId      String?
   name           String
   deviceIp       String?
   lastSyncTime   DateTime?
@@ -1341,12 +1362,14 @@ model BiometricDevice {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  @@index([companyId])
   @@map("biometric_devices")
 }
 
 model Asset {
   id             String    @id @default(uuid())
-  assetTag       String    @unique
+  companyId      String?
+  assetTag       String
   name           String
   category       String
   serialNumber   String?
@@ -1361,11 +1384,14 @@ model Asset {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  @@unique([companyId, assetTag])
+  @@index([companyId])
   @@map("assets")
 }
 
 model LearningCourse {
   id          String               @id @default(uuid())
+  companyId   String?
   title       String
   description String?
   category    String               @default("GENERAL")
@@ -1375,6 +1401,7 @@ model LearningCourse {
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
+  @@index([companyId])
   @@map("learning_courses")
 }
 

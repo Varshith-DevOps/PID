@@ -1075,6 +1075,23 @@ async function main() {
 
   console.log('✅ Shift Management & Rostering seeded successfully');
 
+  // Backfill companyId on company-level operational models that are now tenant-scoped.
+  // The seed uses a raw (non-extended) Prisma client, so these are not auto-populated.
+  // All seed data belongs to the single default tenant.
+  console.log('🌱 Backfilling tenant companyId on operational models...');
+  const tenantBackfill = [
+    'attendanceSettings', 'payrollSettings', 'payrollRun', 'project', 'task',
+    'sprint', 'jobOpening', 'shiftType', 'checklistTemplate', 'holiday',
+    'biometricDevice', 'asset', 'learningCourse',
+  ];
+  for (const model of tenantBackfill) {
+    await prisma[model].updateMany({
+      where: { companyId: null },
+      data: { companyId: defaultCompany.id },
+    });
+  }
+  console.log('✅ Tenant companyId backfill complete');
+
   console.log('\n🎉 Seed completed!');
   console.log('  🔐 Admin: admin@hrms.com / admin123');
   console.log('  🔐 Employees: <name>@company.com / employee123');

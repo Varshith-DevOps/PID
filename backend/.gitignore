@@ -1,0 +1,4 @@
+.vercel
+
+# Test / coverage output (generated)
+/coverage/

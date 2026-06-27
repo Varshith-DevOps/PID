@@ -10,6 +10,8 @@ const path = require('path');
 const { ensureUploadDir } = require('../config/storage');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
+const { validate } = require('../middleware/validate');
+const { expenseClaimCreateSchema, travelAdvanceCreateSchema } = require('../schemas/operationsSchemas');
 const {
   getClaims,
   createClaim,
@@ -59,7 +61,7 @@ const uploadReceipt = multer({
 
 // ──── Expense Claims Endpoints ─────────────────────────────────────────────
 router.get('/claims', rbacMiddleware('EXPENSES', 'VIEW'), getClaims);
-router.post('/claims', rbacMiddleware('EXPENSES', 'CREATE'), uploadReceipt.single('receipt'), createClaim);
+router.post('/claims', rbacMiddleware('EXPENSES', 'CREATE'), uploadReceipt.single('receipt'), validate(expenseClaimCreateSchema), createClaim);
 router.put('/claims/:id', rbacMiddleware('EXPENSES', 'EDIT'), uploadReceipt.single('receipt'), updateClaim);
 router.get('/claims/:id/receipt', rbacMiddleware('EXPENSES', 'VIEW'), downloadClaimReceipt);
 router.put('/claims/:id/manager-approve', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('EXPENSES', 'EDIT'), managerApproveClaim);
@@ -68,7 +70,7 @@ router.put('/claims/:id/reject', rbacMiddleware('EXPENSES', 'EDIT'), rejectClaim
 
 // ──── Travel Advances Endpoints ────────────────────────────────────────────
 router.get('/advances', rbacMiddleware('EXPENSES', 'VIEW'), getAdvances);
-router.post('/advances', rbacMiddleware('EXPENSES', 'CREATE'), createAdvance);
+router.post('/advances', rbacMiddleware('EXPENSES', 'CREATE'), validate(travelAdvanceCreateSchema), createAdvance);
 router.put('/advances/:id/approve', requireRole('SUPER_ADMIN', 'ADMIN', 'FINANCE', 'ACCOUNTS'), rbacMiddleware('EXPENSES', 'EDIT'), approveAdvance);
 router.put('/advances/:id/settle', requireRole('SUPER_ADMIN', 'ADMIN', 'FINANCE', 'ACCOUNTS'), rbacMiddleware('EXPENSES', 'EDIT'), settleAdvance);
 

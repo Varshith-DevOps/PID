@@ -27,6 +27,10 @@ const basePrisma = new PrismaClient({
   },
 });
 
+// Models carrying a companyId column that MUST be scoped to the caller's tenant.
+// The query extension below injects `where.companyId` on reads and populates it on
+// writes for every model in this list. Keep it in sync with the schema: any model
+// with a `companyId` field belongs here, or it becomes a cross-tenant IDOR surface.
 const tenantModels = [
   'User',
   'Department',
@@ -39,7 +43,22 @@ const tenantModels = [
   'IntegrationConnection',
   'ComplianceObligation',
   'Subscription',
-  'PaymentTransaction'
+  'PaymentTransaction',
+  // Company-level operational models — previously global/relation-only and thus
+  // readable across tenants by id. Now carry a companyId and are isolated here.
+  'AttendanceSettings',
+  'PayrollSettings',
+  'PayrollRun',
+  'Project',
+  'Task',
+  'Sprint',
+  'JobOpening',
+  'ShiftType',
+  'ChecklistTemplate',
+  'Holiday',
+  'BiometricDevice',
+  'Asset',
+  'LearningCourse'
 ];
 
 // Multi-tenant query isolation + transparent field-level encryption extension

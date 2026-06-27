@@ -25,7 +25,7 @@ describe('Project costing + Jira board', () => {
     resourceEmpId = emp.id;
 
     const project = await prisma.project.create({
-      data: { name: PNAME, budget: 50000, currency: 'INR', managerId: emp.id, status: 'ACTIVE' },
+      data: { name: PNAME, budget: 50000, currency: 'INR', managerId: emp.id, status: 'ACTIVE', companyId: emp.companyId },
     });
     projectId = project.id;
 
@@ -33,10 +33,10 @@ describe('Project costing + Jira board', () => {
     await prisma.projectResource.create({ data: { projectId, employeeId: emp.id, costRate: 1000, billRate: 2000 } });
 
     // Billable task: 10h -> cost 10000, revenue 20000.
-    const t1 = await prisma.task.create({ data: { title: 'Billable', projectId, assigneeId: emp.id, actualHours: 10, billable: true, status: 'TODO' } });
+    const t1 = await prisma.task.create({ data: { title: 'Billable', projectId, assigneeId: emp.id, actualHours: 10, billable: true, status: 'TODO', companyId: emp.companyId } });
     taskBillableId = t1.id;
     // Non-billable task: 5h -> cost 5000, revenue 0.
-    await prisma.task.create({ data: { title: 'Internal', projectId, assigneeId: emp.id, actualHours: 5, billable: false, status: 'TODO' } });
+    await prisma.task.create({ data: { title: 'Internal', projectId, assigneeId: emp.id, actualHours: 5, billable: false, status: 'TODO', companyId: emp.companyId } });
     // Expense ₹3000.
     await prisma.projectExpense.create({ data: { projectId, description: 'Cloud', amount: 3000 } });
   });

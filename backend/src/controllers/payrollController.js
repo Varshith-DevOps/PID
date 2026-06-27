@@ -273,8 +273,8 @@ const getPayrollPreflight = async (req, res) => {
     const { targetMonth, targetYear } = getPeriod(req.query.month, req.query.year);
     const { startDate, endDate } = getPeriodDates(targetMonth, targetYear);
 
-    const existing = await prisma.payrollRun.findUnique({
-      where: { month_year: { month: targetMonth, year: targetYear } },
+    const existing = await prisma.payrollRun.findFirst({
+      where: { month: targetMonth, year: targetYear },
     });
     const employees = await prisma.employee.findMany({
       where: {
@@ -381,8 +381,8 @@ const runPayroll = async (req, res) => {
     const { targetMonth, targetYear } = getPeriod(month, year);
 
     // If a run exists, check status
-    const existing = await prisma.payrollRun.findUnique({
-      where: { month_year: { month: targetMonth, year: targetYear } },
+    const existing = await prisma.payrollRun.findFirst({
+      where: { month: targetMonth, year: targetYear },
     });
     if (existing && existing.status !== 'REVERSED') {
       return res.status(400).json({ error: `Payroll run already exists in status: ${existing.status}` });
@@ -1032,8 +1032,8 @@ const getPayrollReport = async (req, res) => {
     const targetMonth = parseInt(month) || new Date().getMonth() + 1;
     const targetYear = parseInt(year) || new Date().getFullYear();
 
-    const payrollRun = await prisma.payrollRun.findUnique({
-      where: { month_year: { month: targetMonth, year: targetYear } },
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: { month: targetMonth, year: targetYear },
     });
 
     if (!payrollRun) return res.status(404).json({ error: 'Payroll not run for this period' });
@@ -1095,8 +1095,8 @@ const getPayrollExport = async (req, res) => {
   try {
     const { format = 'csv' } = req.query;
     const { targetMonth, targetYear } = getPeriod(req.query.month, req.query.year);
-    const payrollRun = await prisma.payrollRun.findUnique({
-      where: { month_year: { month: targetMonth, year: targetYear } },
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: { month: targetMonth, year: targetYear },
     });
     if (!payrollRun) return res.status(404).json({ error: 'Payroll not run for this period' });
 

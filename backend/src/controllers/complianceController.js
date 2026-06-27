@@ -17,8 +17,8 @@ const { canAccessEmployee, isPayroll } = require('../services/accessControl');
  * Helper to get records for a period
  */
 const getRecordsForPeriod = async (month, year) => {
-  const payrollRun = await prisma.payrollRun.findUnique({
-    where: { month_year: { month: parseInt(month), year: parseInt(year) } }
+  const payrollRun = await prisma.payrollRun.findFirst({
+    where: { month: parseInt(month), year: parseInt(year) }
   });
 
   if (!payrollRun) return null;

@@ -200,10 +200,10 @@ const createEmployee = async (req, res) => {
     let temporaryPassword = null;
 
     if (!existingUser) {
-      const bcrypt = require('bcryptjs');
+      const { hashPassword } = require('../utils/password');
       const { generateTempPassword } = require('../services/validators');
       temporaryPassword = generateTempPassword();
-      const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+      const hashedPassword = await hashPassword(temporaryPassword);
 
       const { getDefaultPermissions } = require('./permissionController');
 

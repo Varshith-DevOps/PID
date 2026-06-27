@@ -12,8 +12,8 @@ const findBlockingPayrollRun = async (dateLike) => {
   const period = toMonthYear(dateLike);
   if (!period) return null;
 
-  const run = await prisma.payrollRun.findUnique({
-    where: { month_year: period },
+  const run = await prisma.payrollRun.findFirst({
+    where: period,
     select: { id: true, month: true, year: true, status: true },
   });
 

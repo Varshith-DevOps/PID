@@ -21,9 +21,7 @@ const {
 } = require('../services/mfaService');
 const { logSecurityEvent, clientIp } = require('../utils/securityEvents');
 const loginGuard = require('../utils/loginGuard');
-
-/** Cost factor for password hashing (OWASP-recommended ≥12). */
-const BCRYPT_ROUNDS = 12;
+const { BCRYPT_ROUNDS } = require('../utils/password');
 
 // Access tokens are short-lived by default; a refresh flow renews them. Operators
 // can override via ACCESS_TOKEN_TTL / JWT_EXPIRES_IN.

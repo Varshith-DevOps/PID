@@ -120,8 +120,8 @@ const downloadPayslipPDF = async (req, res) => {
 const downloadBulkPayslips = async (req, res) => {
   try {
     const { month, year } = req.query;
-    const payrollRun = await prisma.payrollRun.findUnique({
-      where: { month_year: { month: parseInt(month), year: parseInt(year) } },
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: { month: parseInt(month), year: parseInt(year) },
     });
 
     if (!payrollRun) return res.status(404).json({ error: 'Payroll not found' });
@@ -209,8 +209,8 @@ const emailBulkPayslips = async (req, res) => {
   try {
     const { month, year } = req.body;
 
-    const payrollRun = await prisma.payrollRun.findUnique({
-      where: { month_year: { month: parseInt(month), year: parseInt(year) } },
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: { month: parseInt(month), year: parseInt(year) },
     });
 
     if (!payrollRun) return res.status(404).json({ error: 'Payroll not run for this period' });

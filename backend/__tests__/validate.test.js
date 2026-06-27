@@ -28,6 +28,45 @@ describe('Request validation (Zod)', () => {
   });
 });
 
+describe('Operational route validation (leave / timesheet / expense)', () => {
+  let employeeToken, employeeId;
+
+  beforeAll(async () => {
+    const e = await request(app).post('/api/auth/login').send({ email: 'rajesh.kumar@company.com', password: 'employee123' });
+    employeeToken = e.body.token;
+    const emp = await prisma.employee.findUnique({ where: { email: 'rajesh.kumar@company.com' } });
+    employeeId = emp.id;
+  });
+
+  it('rejects a leave request missing endDate before the handler runs', async () => {
+    const res = await request(app)
+      .post('/api/leave')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ employeeId, leaveType: 'ANNUAL', startDate: '2099-03-02' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+    expect(res.body.details.some((d) => d.field === 'endDate')).toBe(true);
+  });
+
+  it('rejects a timesheet with non-numeric hours', async () => {
+    const res = await request(app)
+      .post('/api/timesheet')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ employeeId, date: '2099-03-02', hoursWorked: 'abc' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+
+  it('rejects an expense claim with a non-numeric amount', async () => {
+    const res = await request(app)
+      .post('/api/expenses/claims')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ title: 'Bad amount', category: 'TRAVEL', amount: 'abc' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Validation failed');
+  });
+});
+
 describe('parsePagination', () => {
   it('applies safe defaults', () => {
     expect(parsePagination({})).toEqual({ page: 1, limit: 50, skip: 0 });

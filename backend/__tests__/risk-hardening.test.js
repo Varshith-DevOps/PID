@@ -156,9 +156,10 @@ describe('Production Risk Hardening', () => {
 
   it('blocks attendance edits for a payroll-locked month', async () => {
     const lockedDate = new Date(2099, 0, 15);
+    const lockAdmin = await prisma.user.findFirst({ where: { email: 'admin@hrms.com' } });
     await prisma.payrollRun.deleteMany({ where: { month: 1, year: 2099 } });
     await prisma.payrollRun.create({
-      data: { month: 1, year: 2099, status: 'DRAFT', processedBy: 'qa' },
+      data: { month: 1, year: 2099, status: 'DRAFT', processedBy: 'qa', companyId: lockAdmin.companyId },
     });
 
     const res = await request(app)

@@ -9,6 +9,7 @@
 
 const prisma = require('../config/database');
 const bcrypt = require('bcryptjs');
+const { hashPassword } = require('../utils/password');
 const { canAccessEmployee, isHr } = require('../services/accessControl');
 const { generateTempPassword } = require('../services/validators');
 
@@ -115,7 +116,7 @@ const anonymizeEmployee = async (req, res) => {
           where: { id: employee.userId },
           data: {
             email: `anonymized+${token}@redacted.local`,
-            password: await bcrypt.hash(generateTempPassword(), 10),
+            password: await hashPassword(generateTempPassword()),
             isActive: false,
             mfaSecret: null,
             mfaRecoveryCodes: null,

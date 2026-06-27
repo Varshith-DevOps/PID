@@ -58,7 +58,7 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
       // Employer & Employee Box Table
       const tableTop = doc.y;
       doc.rect(40, tableTop, 530, 140).stroke();
-      doc.line(305, tableTop, 305, tableTop + 140).stroke();
+      doc.moveTo(305, tableTop).lineTo( 305, tableTop + 140).stroke();
 
       // Left Column (Employer Details)
       doc.fontSize(9).font('Helvetica-Bold').text('Name and Address of the Employer:', 45, tableTop + 5);
@@ -72,9 +72,9 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
       doc.text(employee.address || 'Address: N/A', 310, tableTop + 32, { width: 250 });
 
       // PAN / TAN Details Row
-      doc.line(40, tableTop + 90, 570, tableTop + 90).stroke();
-      doc.line(172, tableTop + 90, 172, tableTop + 140).stroke();
-      doc.line(437, tableTop + 90, 437, tableTop + 140).stroke();
+      doc.moveTo(40, tableTop + 90).lineTo( 570, tableTop + 90).stroke();
+      doc.moveTo(172, tableTop + 90).lineTo( 172, tableTop + 140).stroke();
+      doc.moveTo(437, tableTop + 90).lineTo( 437, tableTop + 140).stroke();
 
       doc.font('Helvetica-Bold').text('TDS Circle / CIT(TDS)', 45, tableTop + 95);
       doc.font('Helvetica').text('CIT (TDS), Hyderabad', 45, tableTop + 107);
@@ -93,8 +93,8 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
       // Period & Assessment Year Box
       const periodTop = doc.y;
       doc.rect(40, periodTop, 530, 45).stroke();
-      doc.line(220, periodTop, 220, periodTop + 45).stroke();
-      doc.line(400, periodTop, 400, periodTop + 45).stroke();
+      doc.moveTo(220, periodTop).lineTo( 220, periodTop + 45).stroke();
+      doc.moveTo(400, periodTop).lineTo( 400, periodTop + 45).stroke();
 
       doc.font('Helvetica-Bold').text('Period (From - To)', 45, periodTop + 5);
       doc.font('Helvetica').text(`01-04-${financialYear.split('-')[0]} to 31-03-20${financialYear.split('-')[1]}`, 45, periodTop + 18);
@@ -113,10 +113,10 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
 
       const qTop = doc.y;
       doc.rect(40, qTop, 530, 100).stroke();
-      doc.line(40, qTop + 20, 570, qTop + 20).stroke();
+      doc.moveTo(40, qTop + 20).lineTo( 570, qTop + 20).stroke();
       // Columns: Quarter | Tax Deducted | Tax Deposited
-      doc.line(160, qTop, 160, qTop + 100).stroke();
-      doc.line(360, qTop, 360, qTop + 100).stroke();
+      doc.moveTo(160, qTop).lineTo( 160, qTop + 100).stroke();
+      doc.moveTo(360, qTop).lineTo( 360, qTop + 100).stroke();
 
       doc.text('Quarter', 45, qTop + 5);
       doc.text('Tax Deducted (Rs.)', 165, qTop + 5);
@@ -132,7 +132,7 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
 
       quarters.forEach((q, idx) => {
         const yOffset = qTop + 25 + (idx * 18);
-        doc.line(40, yOffset + 15, 570, yOffset + 15).stroke();
+        doc.moveTo(40, yOffset + 15).lineTo( 570, yOffset + 15).stroke();
         doc.font('Helvetica').text(q.q, 45, yOffset);
         doc.text(q.tax.toFixed(2), 165, yOffset);
         doc.text(q.tax.toFixed(2), 365, yOffset);
@@ -164,15 +164,15 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
       // Grid for calculations
       const bTop = doc.y;
       doc.rect(40, bTop, 530, 420).stroke();
-      doc.line(360, bTop, 360, bTop + 420).stroke();
-      doc.line(480, bTop, 480, bTop + 420).stroke();
+      doc.moveTo(360, bTop).lineTo( 360, bTop + 420).stroke();
+      doc.moveTo(480, bTop).lineTo( 480, bTop + 420).stroke();
 
       // Headers
       doc.font('Helvetica-Bold');
       doc.text('Details of Salary Paid and Tax Deducted', 45, bTop + 5);
       doc.text('Amount (Rs.)', 365, bTop + 5);
       doc.text('Amount (Rs.)', 485, bTop + 5);
-      doc.line(40, bTop + 20, 570, bTop + 20).stroke();
+      doc.moveTo(40, bTop + 20).lineTo( 570, bTop + 20).stroke();
 
       let rowY = bTop + 25;
       const drawRow = (label, col1Val, col2Val, isBold = false) => {
@@ -180,7 +180,7 @@ const generateForm16 = (employee, taxDetails, financialYear) => {
         doc.text(label, 45, rowY, { width: 310 });
         if (col1Val !== null) doc.text(col1Val, 365, rowY);
         if (col2Val !== null) doc.text(col2Val, 485, rowY);
-        doc.line(40, rowY + 18, 570, rowY + 18).stroke();
+        doc.moveTo(40, rowY + 18).lineTo( 570, rowY + 18).stroke();
         rowY += 22;
       };
 

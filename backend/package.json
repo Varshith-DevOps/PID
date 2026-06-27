@@ -19,7 +19,8 @@
     "db:pg:migrate": "npm run schema:pg && npx prisma migrate deploy --schema=prisma/schema.postgres.prisma",
     "vercel-build": "npm run db:pg:generate",
     "seed": "node prisma/seed.js",
-    "test": "jest --forceExit --detectOpenHandles"
+    "test": "jest --forceExit --detectOpenHandles",
+    "test:coverage": "jest --coverage --coverageReporters=text-summary --forceExit"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
