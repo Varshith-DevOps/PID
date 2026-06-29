@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_theme.dart';
 import 'employee_workspace.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
@@ -38,13 +39,14 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   Future<void> _handleLogout() async {
+    final c = context.colors;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF111827),
+        backgroundColor: c.raised,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        title: const Text('Log out?', style: TextStyle(color: Color(0xFFE5E7EB), fontWeight: FontWeight.w800)),
-        content: const Text('You will need to login again to access your PID hcms workspace.', style: TextStyle(color: Color(0xFF94A3B8))),
+        title: Text('Log out?', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w800)),
+        content: Text('You will need to login again to access your PID hcms workspace.', style: TextStyle(color: c.textSecondary)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Logout')),
@@ -63,10 +65,11 @@ class _DashboardShellState extends State<DashboardShell> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Scaffold(
-      backgroundColor: const Color(0xFF07111F),
+      backgroundColor: c.canvas,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF07111F),
+        backgroundColor: c.navInk,
         elevation: 0,
         centerTitle: false,
         titleSpacing: 18,
@@ -84,7 +87,7 @@ class _DashboardShellState extends State<DashboardShell> {
                 'PID hcms',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Color(0xFFE5E7EB), fontWeight: FontWeight.w900, fontSize: 18),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
               ),
             ),
           ],
@@ -92,7 +95,7 @@ class _DashboardShellState extends State<DashboardShell> {
         actions: [
           IconButton(
             tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined, color: Color(0xFF94A3B8)),
+            icon: const Icon(Icons.settings_outlined, color: Colors.white70),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => SettingsScreen(authProvider: widget.authProvider)),
@@ -100,7 +103,7 @@ class _DashboardShellState extends State<DashboardShell> {
           ),
           IconButton(
             tooltip: 'Logout',
-            icon: const Icon(Icons.logout_rounded, color: Color(0xFF94A3B8)),
+            icon: const Icon(Icons.logout_rounded, color: Colors.white70),
             onPressed: _handleLogout,
           ),
           const SizedBox(width: 8),
@@ -115,19 +118,19 @@ class _DashboardShellState extends State<DashboardShell> {
       ),
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
-          backgroundColor: const Color(0xFF111827),
-          indicatorColor: const Color(0xFF00A7B5).withOpacity(0.16),
+          backgroundColor: c.raised,
+          indicatorColor: c.accent.withOpacity(0.16),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(
-              color: selected ? const Color(0xFFE5E7EB) : const Color(0xFF94A3B8),
+              color: selected ? c.textPrimary : c.textSecondary,
               fontSize: 11,
               fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             );
           }),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
-            return IconThemeData(color: selected ? const Color(0xFF00A7B5) : const Color(0xFF94A3B8), size: 22);
+            return IconThemeData(color: selected ? c.accent : c.textSecondary, size: 22);
           }),
         ),
         child: NavigationBar(

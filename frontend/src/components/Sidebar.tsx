@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import BrandLogo from '@/components/BrandLogo';
+import ThemeToggle from '@/components/ThemeToggle';
+import { exitSupportView } from '@/lib/supportView';
+import { isOwnerRole, ownerTabsFor } from '@/lib/platformRoles';
 
 type NavItem = {
   label: string;
@@ -54,12 +57,67 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
   if (!user) return null;
 
   const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+  // App-owner accounts (the platform / "Admin Portal") — NOT tenants.
+  const isOwner = isOwnerRole(user.role);
   const sections = [
     { key: 'main', label: 'Overview' },
     { key: 'hr', label: 'HR Management' },
     { key: 'finance', label: 'Finance' },
     { key: 'work', label: 'Work' },
   ];
+
+  // ── App-owner portal: a platform-only nav, fully separate from the tenant app,
+  //    further filtered per platform role (separation of duties) ──
+  if (isOwner) {
+    const currentTab = (typeof window !== 'undefined' && active.startsWith('/platform-admin'))
+      ? (new URLSearchParams(window.location.search).get('tab') || 'overview')
+      : null;
+    const allowed = new Set(ownerTabsFor(user.role));
+    const icon = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} />;
+    const ownerNav = ([
+      { key: 'overview', label: 'Overview', d: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
+      { key: 'tenants', label: 'Tenants', d: '<path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/>' },
+      { key: 'kyc', label: 'KYC Approvals', d: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>' },
+      { key: 'subscriptions', label: 'Subscriptions', d: '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>' },
+      { key: 'leads', label: 'Leads', d: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>' },
+      { key: 'custom-plan', label: 'Custom Plans', d: '<path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>' },
+      { key: 'support', label: 'Platform Staff', d: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' },
+      { key: 'audit', label: 'Audit Log', d: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>' },
+    ] as { key: string; label: string; d: string }[]).filter(i => allowed.has(i.key as any));
+    return (
+      <aside className="sidebar">
+        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1.5rem 1.25rem' }}>
+          <BrandLogo compact height={34} />
+          <div style={{ overflow: 'hidden' }}>
+            <h1 style={{ fontSize: '1.05rem', fontWeight: 800, lineHeight: 1.2, color: '#fff', margin: 0 }}>PID hcms</h1>
+            <span style={{ fontSize: '0.65rem', color: '#73E0E7', textTransform: 'uppercase', display: 'block', letterSpacing: '1px', fontWeight: 700 }}>Admin Portal</span>
+          </div>
+        </div>
+        <nav className="sidebar-nav" style={{ flex: 1 }}>
+          <div className="sidebar-section">Platform</div>
+          {ownerNav.map(item => (
+            <Link key={item.key} href={`/platform-admin?tab=${item.key}`} className={currentTab === item.key ? 'active' : ''}>
+              <span className="nav-icon">{icon(item.d)}</span>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <div style={{ padding: '0.5rem 1rem 0' }}>
+          <ThemeToggle />
+        </div>
+        <div className="sidebar-user">
+          <div className="sidebar-user-avatar">{user.name?.charAt(0)?.toUpperCase()}</div>
+          <div className="sidebar-user-info">
+            <div className="sidebar-user-name">{user.name}</div>
+            <div className="sidebar-user-role">{user.role?.replace('_', ' ')}</div>
+          </div>
+          <button onClick={handleLogout} title="Logout" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'rgba(255,255,255,0.4)', transition: 'color 0.3s' }} onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="sidebar">
@@ -75,6 +133,21 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
         </div>
       </div>
 
+      {user.role === 'SUPPORT' && (
+        <div style={{ margin: '0 1rem 0.75rem', padding: '0.75rem', borderRadius: '8px', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)', fontSize: '0.7rem' }}>
+          <div style={{ fontWeight: 700, letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }} />
+            READ-ONLY SUPPORT
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1.4 }}>
+            {user.companyName ? `Viewing ${user.companyName}` : 'No customer selected'}
+          </div>
+          <button onClick={() => exitSupportView()} style={{ marginTop: '6px', background: 'none', border: 'none', color: '#73E0E7', textDecoration: 'underline', fontWeight: 600, cursor: 'pointer', padding: 0, fontSize: '0.7rem' }}>
+            Switch customer
+          </button>
+        </div>
+      )}
+
       <nav className="sidebar-nav" style={{ flex: 1 }}>
         {sections.map(section => {
           const items = NAV_ITEMS.filter(item => item.section === section.key);
@@ -82,18 +155,16 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
             if (item.adminOnly && !isAdmin) return false;
             if (item.module && !hasPermission(item.module, 'VIEW')) return false;
 
-            // Enforce KYC & CIN Gating for tenant users
-            if (user.role !== 'SUPER_ADMIN' && user.role !== 'SALES') {
-              // 1. Without CIN, block everything except Settings (which includes KYC onboarding)
-              if (!user.companyCin) {
-                return false;
-              }
-              // 2. If KYC not approved, only Attendance and Leave modules are allowed
+            // KYC gating for tenant users. A newly created tenant can immediately do
+            // employee data entry, attendance and leave (so they can start setting up);
+            // every other tool unlocks once KYC is APPROVED.
+            if (user.role !== 'SUPER_ADMIN' && user.role !== 'SALES' && user.role !== 'SUPPORT') {
               if (user.companyKycStatus !== 'APPROVED') {
-                if (item.module && !['ATTENDANCE', 'LEAVE'].includes(item.module)) {
+                const PRE_KYC_MODULES = ['EMPLOYEES', 'ATTENDANCE', 'LEAVE', 'ONBOARDING'];
+                if (item.module && !PRE_KYC_MODULES.includes(item.module)) {
                   return false;
                 }
-                // Hide AI agent hub
+                // Hide AI agent hub until verified
                 if (item.href === '/dashboard/ai-agents') return false;
               }
             }
@@ -172,11 +243,11 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
           </>
         )}
 
-        {user.companyKycStatus && user.companyKycStatus !== 'APPROVED' && user.role !== 'SUPER_ADMIN' && user.role !== 'SALES' && (
+        {user.companyKycStatus && user.companyKycStatus !== 'APPROVED' && user.role !== 'SUPER_ADMIN' && user.role !== 'SALES' && user.role !== 'SUPPORT' && (
           <div style={{ margin: '1rem', padding: '0.75rem', borderRadius: '8px', background: user.companyKycStatus === 'REJECTED' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)', border: `1px solid ${user.companyKycStatus === 'REJECTED' ? '#ef4444' : '#f59e0b'}`, color: user.companyKycStatus === 'REJECTED' ? '#ef4444' : '#f59e0b', fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
-              KYC: {user.companyKycStatus}
+              KYC: {user.companyKycStatus.replace(/_/g, ' ')}
             </div>
             <span style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1.3 }}>
               {user.companyKycStatus === 'REJECTED' 
@@ -190,7 +261,31 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
             )}
           </div>
         )}
+
+        {user.role !== 'SUPER_ADMIN' && user.role !== 'SALES' && user.role !== 'SUPPORT' &&
+         (user.billingStatus === 'PAST_DUE' || user.billingStatus === 'SUSPENDED_NONPAYMENT') && (
+          <div style={{ margin: '0 1rem 1rem', padding: '0.75rem', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#ef4444', fontSize: '0.72rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
+              {user.billingStatus === 'SUSPENDED_NONPAYMENT' ? 'Account suspended' : 'Payment past due'}
+            </div>
+            <span style={{ fontSize: '0.65rem', opacity: 0.85, lineHeight: 1.3 }}>
+              {user.billingStatus === 'SUSPENDED_NONPAYMENT'
+                ? 'Access is suspended for non-payment. Settle your dues to restore access.'
+                : `Your subscription has lapsed.${user.graceEndsAt ? ` Access continues until ${new Date(user.graceEndsAt).toLocaleDateString()}.` : ''} Please pay to avoid suspension.`}
+            </span>
+            {isAdmin && (
+              <Link href="/dashboard/billing" style={{ marginTop: '6px', color: '#73E0E7', textDecoration: 'underline', fontWeight: 600 }}>
+                Manage billing
+              </Link>
+            )}
+          </div>
+        )}
       </nav>
+
+      <div style={{ padding: '0.5rem 1rem 0' }}>
+        <ThemeToggle />
+      </div>
 
       <div className="sidebar-user">
         <div className="sidebar-user-avatar">{user.name?.charAt(0)?.toUpperCase()}</div>

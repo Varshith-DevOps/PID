@@ -3,8 +3,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import { getEmployeeDashboard, getProfile, checkIn, checkOut, getMyAttendanceHistory } from '@/lib/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Sidebar from '@/components/Sidebar';
+import {
+  PageHeader, Tabs, Card, StatCard, Button, Badge, StatusChip,
+  KpiBar, DataTable, EmptyState, Skeleton,
+} from '@/components/ui';
+import type { Column } from '@/components/ui';
 
 interface Task {
   id: string;
@@ -37,26 +41,13 @@ interface AttendanceRec {
   workHours?: number;
 }
 
-const TASK_STATUS_MAP: Record<string, string> = {
-  TODO: 'badge-neutral',
-  IN_PROGRESS: 'badge-info',
-  AWAITING_APPROVAL: 'badge-warning',
-  REWORK: 'badge-danger',
-  COMPLETED: 'badge-success',
-};
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{ background: 'rgba(17,24,39,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.75rem 1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
-        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{label}</p>
-        {payload.map((entry: any, idx: number) => (
-          <p key={idx} style={{ color: entry.color || '#182B6D', fontWeight: 700, fontSize: '0.9rem' }}>{entry.value}h</p>
-        ))}
-      </div>
-    );
-  }
-  return null;
+// Maps task status to a Badge tone (replaces legacy badge-* classes).
+const TASK_STATUS_TONE: Record<string, 'neutral' | 'info' | 'warning' | 'danger' | 'success'> = {
+  TODO: 'neutral',
+  IN_PROGRESS: 'info',
+  AWAITING_APPROVAL: 'warning',
+  REWORK: 'danger',
+  COMPLETED: 'success',
 };
 
 function formatDuration(seconds: number) {
@@ -79,6 +70,7 @@ export default function EmployeeDashboard() {
   const [breakElapsed, setBreakElapsed] = useState(0);
   const [clockLoading, setClockLoading] = useState(false);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRec[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [view, setView] = useState<'dashboard' | 'attendance'>('dashboard');
   const timerRef = useRef<any>(null);
   const breakTimerRef = useRef<any>(null);
@@ -139,11 +131,14 @@ export default function EmployeeDashboard() {
 
   const loadAttendanceHistory = async () => {
     if (!employeeId) return;
+    setAttendanceLoading(true);
     try {
       const data = await getMyAttendanceHistory(employeeId, {});
       setAttendanceHistory(data.attendances || []);
     } catch (err) {
       console.error(err);
+    } finally {
+      setAttendanceLoading(false);
     }
   };
 
@@ -160,6 +155,7 @@ export default function EmployeeDashboard() {
       setCheckInTime(new Date());
       setElapsed(0);
       setBreakElapsed(0);
+      alert('Checked in successfully');
       // Reload dashboard data
       const data = await getEmployeeDashboard(employeeId);
       setDashboard(data);
@@ -177,6 +173,7 @@ export default function EmployeeDashboard() {
       await checkOut(employeeId);
       setClockState('done');
       setBreakActive(false);
+      alert('Checked out successfully');
       const data = await getEmployeeDashboard(employeeId);
       setDashboard(data);
     } catch (err: any) {
@@ -197,36 +194,54 @@ export default function EmployeeDashboard() {
     hours: t.hoursWorked,
   })) || [];
 
-  const todayStatusCls = dashboard?.todayStatus === 'PRESENT' ? 'text-success' :
-    dashboard?.todayStatus === 'LATE' ? 'text-warning' :
-    dashboard?.todayStatus === 'ABSENT' ? 'text-danger' : '';
+  const todayStatusTone =
+    dashboard?.todayStatus === 'PRESENT' ? 'var(--success-fg)' :
+    dashboard?.todayStatus === 'LATE' ? 'var(--warning-fg)' :
+    dashboard?.todayStatus === 'ABSENT' ? 'var(--danger-fg)' : 'var(--text-primary)';
+
+  const attendanceColumns: Column<AttendanceRec>[] = [
+    {
+      key: 'date',
+      header: 'Date',
+      render: (att) => (
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+          {new Date(att.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+        </span>
+      ),
+    },
+    { key: 'checkIn', header: 'Check In', render: (att) => att.checkIn ? new Date(att.checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—' },
+    { key: 'checkOut', header: 'Check Out', render: (att) => att.checkOut ? new Date(att.checkOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—' },
+    { key: 'workHours', header: 'Hours', align: 'center', render: (att) => <span style={{ fontWeight: 600 }}>{att.workHours?.toFixed(1) || '—'}</span> },
+    { key: 'status', header: 'Status', render: (att) => <StatusChip status={att.status} /> },
+  ];
 
   return (
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        <div className="page-header">
-          <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #182B6D, #0B7890)' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </div>
-            <div><h1 className="page-title">My Dashboard</h1><p className="page-subtitle">Your tasks, hours & attendance</p></div>
-          </div>
-          <div className="page-header-actions">
-            <div className="tab-group">
-              <button className={`tab-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>Dashboard</button>
-              <button className={`tab-btn ${view === 'attendance' ? 'active' : ''}`} onClick={() => setView('attendance')}>My Attendance</button>
-            </div>
-          </div>
-        </div>
+        <PageHeader
+          title="My Dashboard"
+          subtitle="Your tasks, hours & attendance"
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
+          actions={(
+            <Tabs
+              items={[
+                { key: 'dashboard', label: 'Dashboard' },
+                { key: 'attendance', label: 'My Attendance' },
+              ]}
+              value={view}
+              onChange={(k) => setView(k as 'dashboard' | 'attendance')}
+            />
+          )}
+        />
 
         {view === 'dashboard' && (
           <>
             {/* Time Clock Card */}
-            <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', background: 'linear-gradient(135deg, rgba(24,43,109,0.08), rgba(11,120,144,0.08))', border: '1px solid rgba(24,43,109,0.2)' }}>
+            <Card style={{ marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
-                  <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     Time Clock
                   </h2>
@@ -242,7 +257,7 @@ export default function EmployeeDashboard() {
                   {/* Timer Display */}
                   {clockState === 'working' && (
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontFamily: 'monospace', fontSize: '2rem', fontWeight: 800, color: breakActive ? 'var(--warning)' : 'var(--success)', letterSpacing: '2px' }}>
+                      <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '2rem', fontWeight: 800, color: breakActive ? 'var(--warning-fg)' : 'var(--success-fg)', letterSpacing: '2px' }}>
                         {formatDuration(elapsed)}
                       </div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
@@ -254,105 +269,98 @@ export default function EmployeeDashboard() {
                   {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     {clockState === 'idle' && (
-                      <button onClick={handleClockIn} disabled={clockLoading} className="btn btn-success" style={{ minWidth: '120px' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                      <Button
+                        onClick={handleClockIn}
+                        loading={clockLoading}
+                        variant="success"
+                        style={{ minWidth: '120px' }}
+                        leftIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>}
+                      >
                         {clockLoading ? 'Logging in...' : 'Login'}
-                      </button>
+                      </Button>
                     )}
                     {clockState === 'working' && (
                       <>
-                        <button onClick={toggleBreak} className={`btn ${breakActive ? 'btn-warning' : 'btn-ghost'}`} style={{ minWidth: '100px' }}>
+                        <Button onClick={toggleBreak} variant={breakActive ? 'warning' : 'ghost'} style={{ minWidth: '100px' }}>
                           {breakActive ? '▶ Resume' : '☕ Break'}
-                        </button>
-                        <button onClick={handleClockOut} disabled={clockLoading} className="btn btn-danger" style={{ minWidth: '120px' }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        </Button>
+                        <Button
+                          onClick={handleClockOut}
+                          loading={clockLoading}
+                          variant="danger"
+                          style={{ minWidth: '120px' }}
+                          leftIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>}
+                        >
                           {clockLoading ? 'Logging out...' : 'Logout'}
-                        </button>
+                        </Button>
                       </>
                     )}
                     {clockState === 'done' && (
-                      <span className="badge badge-success" style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}>Shift Complete</span>
+                      <Badge tone="success" dot style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}>Shift Complete</Badge>
                     )}
                   </div>
                 </div>
               </div>
-            </div>
+            </Card>
 
             {/* Stat Cards */}
-            <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-              <div className="stat-card">
-                <div className={`stat-card-value ${todayStatusCls}`}>{dashboard?.todayStatus || '—'}</div>
-                <div className="stat-card-label">Today Status</div>
+            {loading ? (
+              <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Card key={i}><Skeleton height={28} width="50%" /><Skeleton height={14} width="70%" style={{ marginTop: '0.5rem' }} /></Card>
+                ))}
               </div>
-              <div className="stat-card"><div className="stat-card-value text-blue">{dashboard?.thisWeekHours || 0}h</div><div className="stat-card-label">This Week Hours</div></div>
-              <div className="stat-card"><div className="stat-card-value text-violet">{dashboard?.assignedTasks?.length || 0}</div><div className="stat-card-label">Assigned Tasks</div></div>
-              <div className="stat-card"><div className="stat-card-value text-warning">{dashboard?.pendingOvertime || 0}</div><div className="stat-card-label">Pending Overtime</div></div>
-            </div>
+            ) : (
+              <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                <StatCard label="Today Status" value={<span style={{ color: todayStatusTone }}>{dashboard?.todayStatus || '—'}</span>} />
+                <StatCard label="This Week Hours" value={`${dashboard?.thisWeekHours || 0}h`} />
+                <StatCard label="Assigned Tasks" value={dashboard?.assignedTasks?.length || 0} />
+                <StatCard label="Pending Overtime" value={dashboard?.pendingOvertime || 0} />
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-              <div className="glass-card" style={{ padding: '1.5rem' }}>
-                <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>Weekly Hours</h2>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={timesheetData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'rgba(255,255,255,0.5)' }} axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.5)' }} axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} tickLine={false} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="hours" fill="#182B6D" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <Card title="Weekly Hours">
+                {timesheetData.length ? (
+                  <KpiBar data={timesheetData} xKey="date" bars={[{ key: 'hours', name: 'Hours', color: '#182B6D' }]} height={250} />
+                ) : (
+                  <EmptyState title="No hours logged yet" message="Your weekly hours will appear here once timesheets are submitted." />
+                )}
+              </Card>
 
-              <div className="glass-card" style={{ padding: '1.5rem' }}>
-                <h2 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>Assigned Tasks</h2>
+              <Card title="Assigned Tasks">
                 <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                   {dashboard?.assignedTasks.map((task) => (
-                    <div key={task.id} className="glass-card" style={{ padding: '0.85rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Card key={task.id} style={{ padding: '0.85rem 1rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{task.title}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{task.project?.name}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <span className={`badge ${TASK_STATUS_MAP[task.status] || 'badge-neutral'}`} style={{ marginBottom: '0.25rem', display: 'inline-block' }}>{task.status.replace('_', ' ')}</span>
+                        <Badge tone={TASK_STATUS_TONE[task.status] || 'neutral'} style={{ marginBottom: '0.25rem' }}>{task.status.replace('_', ' ')}</Badge>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Due: {new Date(task.deadline).toLocaleDateString()}</div>
                       </div>
-                    </div>
+                    </Card>
                   ))}
                   {(!dashboard?.assignedTasks?.length) && (
-                    <div className="empty-state">No tasks assigned</div>
+                    <EmptyState title="No tasks assigned" />
                   )}
                 </div>
-              </div>
+              </Card>
             </div>
           </>
         )}
 
         {view === 'attendance' && (
-          <div className="glass-card" style={{ overflow: 'hidden' }}>
-            <div style={{ padding: '1.25rem' }}>
-              <h2 style={{ fontSize: '1rem', fontWeight: 700 }}>My Attendance History</h2>
-            </div>
-            <table className="data-table">
-              <thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th style={{ textAlign: 'center' }}>Hours</th><th>Status</th></tr></thead>
-              <tbody>
-                {attendanceHistory.length === 0 ? (
-                  <tr><td colSpan={5} className="empty-state">No attendance records found</td></tr>
-                ) : attendanceHistory.map((att) => (
-                  <tr key={att.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{new Date(att.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                    <td>{att.checkIn ? new Date(att.checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                    <td>{att.checkOut ? new Date(att.checkOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 600 }}>{att.workHours?.toFixed(1) || '—'}</td>
-                    <td>
-                      <span className={`badge ${att.status === 'PRESENT' ? 'badge-success' : att.status === 'LATE' ? 'badge-warning' : att.status === 'HALF_DAY' ? 'badge-purple' : 'badge-danger'}`}>
-                        {att.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Card title="My Attendance History" padded={false}>
+            <DataTable
+              columns={attendanceColumns}
+              rows={attendanceHistory}
+              loading={attendanceLoading}
+              rowKey={(att) => att.id}
+              emptyTitle="No attendance records found"
+            />
+          </Card>
         )}
       </main>
     </div>

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/ui.dart';
 
 class ManagerConsole extends StatefulWidget {
   final AuthProvider authProvider;
@@ -80,10 +82,11 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
       if (!mounted) return;
 
       if (res.statusCode == 200) {
+        final c = context.colors;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(approve ? 'Leave request approved.' : 'Leave request rejected.'),
-            backgroundColor: approve ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+            backgroundColor: approve ? c.success : c.danger,
           ),
         );
         _fetchLeaves();
@@ -111,10 +114,11 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
       if (!mounted) return;
 
       if (res.statusCode == 200) {
+        final c = context.colors;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(approve ? 'Expense claim approved.' : 'Expense claim rejected.'),
-            backgroundColor: approve ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+            backgroundColor: approve ? c.success : c.danger,
           ),
         );
         _fetchExpenses();
@@ -135,16 +139,17 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: c.canvas,
       body: Column(
         children: [
           TabBar(
             controller: _tabController,
-            dividerColor: const Color(0xFF1E293B),
-            indicatorColor: const Color(0xFF3B82F6),
-            labelColor: Colors.white,
-            unselectedLabelColor: const Color(0xFF64748B),
+            dividerColor: c.border,
+            indicatorColor: c.accent,
+            labelColor: c.textPrimary,
+            unselectedLabelColor: c.textMuted,
             tabs: const [
               Tab(text: 'Leave Requests'),
               Tab(text: 'Expense Claims'),
@@ -155,7 +160,7 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
               padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 16.0),
               child: Text(
                 _errorMessage!,
-                style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13),
+                style: TextStyle(color: c.danger, fontSize: 13),
               ),
             ),
           Expanded(
@@ -163,14 +168,10 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
               controller: _tabController,
               children: [
                 // Leaves List View
-                _loadingLeaves
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6)))
-                    : _buildLeavesList(),
+                _loadingLeaves ? const LoadingView() : _buildLeavesList(),
 
                 // Expenses List View
-                _loadingExpenses
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF10B981)))
-                    : _buildExpensesList(),
+                _loadingExpenses ? const LoadingView() : _buildExpensesList(),
               ],
             ),
           ),
@@ -181,21 +182,13 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
 
   Widget _buildLeavesList() {
     if (_leaveRequests.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.done_all_rounded, color: const Color(0xFF1E293B), size: 48),
-            const SizedBox(height: 12),
-            const Text(
-              'No pending leave approvals.',
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13.5),
-            ),
-          ],
-        ),
+      return const EmptyView(
+        icon: Icons.done_all_rounded,
+        message: 'No pending leave approvals.',
       );
     }
 
+    final c = context.colors;
     return ListView.separated(
       padding: const EdgeInsets.all(24.0),
       itemCount: _leaveRequests.length,
@@ -215,42 +208,30 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
         final reason = req['reason'] ?? 'No reason provided';
         final id = req['id'].toString();
 
-        return Container(
+        return AppCard(
           padding: const EdgeInsets.all(18.0),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF1E293B)),
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    empName,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6).withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
+                  Expanded(
                     child: Text(
-                      type.toString().replaceAll('_', ' '),
-                      style: const TextStyle(color: Color(0xFF60A5FA), fontSize: 10, fontWeight: FontWeight.bold),
+                      empName,
+                      style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  StatusChip(label: type.toString(), tone: ChipTone.leave),
                 ],
               ),
               const SizedBox(height: 6),
-              Text('$startStr - $endStr', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5)),
+              Text('$startStr - $endStr', style: TextStyle(color: c.textSecondary, fontSize: 12.5)),
               const SizedBox(height: 10),
               Text(
                 reason,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5),
+                style: TextStyle(color: c.textMuted, fontSize: 12.5),
               ),
               const SizedBox(height: 18),
               Row(
@@ -258,18 +239,13 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
                 children: [
                   TextButton(
                     onPressed: () => _handleLeaveAction(id, false),
-                    style: TextButton.styleFrom(foregroundColor: const Color(0xFFEF4444)),
+                    style: TextButton.styleFrom(foregroundColor: c.danger),
                     child: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 12),
-                  ElevatedButton(
+                  PrimaryButton(
+                    label: 'Approve',
                     onPressed: () => _handleLeaveAction(id, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text('Approve', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                 ],
               ),
@@ -282,21 +258,13 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
 
   Widget _buildExpensesList() {
     if (_expenseClaims.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.done_all_rounded, color: const Color(0xFF1E293B), size: 48),
-            const SizedBox(height: 12),
-            const Text(
-              'No pending expense approvals.',
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13.5),
-            ),
-          ],
-        ),
+      return const EmptyView(
+        icon: Icons.done_all_rounded,
+        message: 'No pending expense approvals.',
       );
     }
 
+    final c = context.colors;
     return ListView.separated(
       padding: const EdgeInsets.all(24.0),
       itemCount: _expenseClaims.length,
@@ -311,49 +279,36 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
         final desc = claim['description'] ?? '';
         final id = claim['id'].toString();
 
-        return Container(
+        return AppCard(
           padding: const EdgeInsets.all(18.0),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF1E293B)),
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    empName,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  Expanded(
+                    child: Text(
+                      empName,
+                      style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
                   ),
                   Text(
                     '₹${NumberFormat('#,##,##0').format(amount)}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                    style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      category.toString().toUpperCase(),
-                      style: const TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                  StatusChip(label: category.toString().toUpperCase(), tone: ChipTone.payroll),
                 ],
               ),
               const SizedBox(height: 10),
               Text(
                 desc,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5),
+                style: TextStyle(color: c.textMuted, fontSize: 12.5),
               ),
               const SizedBox(height: 18),
               Row(
@@ -361,18 +316,13 @@ class _ManagerConsoleState extends State<ManagerConsole> with SingleTickerProvid
                 children: [
                   TextButton(
                     onPressed: () => _handleExpenseAction(id, false),
-                    style: TextButton.styleFrom(foregroundColor: const Color(0xFFEF4444)),
+                    style: TextButton.styleFrom(foregroundColor: c.danger),
                     child: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 12),
-                  ElevatedButton(
+                  PrimaryButton(
+                    label: 'Approve',
                     onPressed: () => _handleExpenseAction(id, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text('Approve', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                 ],
               ),

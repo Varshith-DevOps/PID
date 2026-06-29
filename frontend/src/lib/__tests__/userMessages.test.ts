@@ -45,4 +45,19 @@ describe('normalizeManualMessage', () => {
     expect(normalizeManualMessage('Profile saved').type).toBe('success');
     expect(normalizeManualMessage(undefined)).toEqual({ message: 'Action completed.', type: 'success' });
   });
+
+  it('classifies imperative validation messages as errors (not green success)', () => {
+    expect(normalizeManualMessage('Please correct the highlighted fields.').type).toBe('error');
+    expect(normalizeManualMessage('End date must be on or after the start date.').type).toBe('error');
+    expect(normalizeManualMessage('Resolve blocking payroll checks before running payroll.').type).toBe('error');
+    expect(normalizeManualMessage('Complete all manual payroll process checks before running payroll.').type).toBe('error');
+    expect(normalizeManualMessage('Select a customer to assign.').type).toBe('error');
+    expect(normalizeManualMessage('CSV file is empty or only contains headers').type).toBe('error');
+  });
+
+  it('keeps genuine confirmations (incl. successful rejections) as success', () => {
+    expect(normalizeManualMessage('Leave rejected').type).toBe('success');
+    expect(normalizeManualMessage('Payroll processed successfully').type).toBe('success');
+    expect(normalizeManualMessage('Salary structure saved').type).toBe('success');
+  });
 });

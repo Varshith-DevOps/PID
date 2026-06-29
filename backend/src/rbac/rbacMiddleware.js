@@ -12,6 +12,18 @@
 const prisma = require('../config/database');
 const { getDefaultPermissions } = require('../controllers/permissionController');
 const { logSecurityEvent } = require('../utils/securityEvents');
+const { runWithCompanyId } = require('../utils/tenantContext');
+
+// Fetch the ACTING user's own record regardless of the active tenant context.
+// Platform accounts (SUPER_ADMIN, SUPPORT) have no / a different companyId than
+// the tenant currently being viewed, so a scoped lookup would miss them.
+// NOTE: the query MUST be awaited *inside* runWithCompanyId — a PrismaPromise is
+// lazy, so returning it unawaited would execute later under the outer (tenant)
+// context and re-scope the user out.
+const findActingUser = (args) =>
+  runWithCompanyId(undefined, async () => {
+    return await prisma.user.findUnique(args);
+  });
 
 /** Roles that bypass all permission checks */
 const SUPER_ADMIN_ROLES = ['SUPER_ADMIN'];
@@ -59,7 +71,7 @@ const hasRole = (userRole, allowedRoles) => allowedRoles.includes(userRole);
  * @returns {Promise<boolean>} Whether the permission is granted
  */
 const checkModulePermission = async (userId, module, action) => {
-  const user = await prisma.user.findUnique({
+  const user = await findActingUser({
     where: { id: userId },
     include: { permissions: true },
   });
@@ -87,8 +99,10 @@ const rbacMiddleware = (module, action) => {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-      // Consolidate user status check, permission lookup, and company details in one database query
-      const user = await prisma.user.findUnique({
+      // Consolidate user status check, permission lookup, and company details in one database query.
+      // Fetched unscoped so platform accounts (SUPER_ADMIN / SUPPORT) resolve even
+      // while a tenant context is active.
+      const user = await findActingUser({
         where: { id: userId },
         include: { permissions: true, company: true }
       });
@@ -102,26 +116,20 @@ const rbacMiddleware = (module, action) => {
         return next();
       }
 
-      // Enforce KYC & CIN Gating for tenant users
+      // KYC gating for tenant users. Before verification a tenant may use employee
+      // data entry, attendance, leave, onboarding and settings; every other module
+      // unlocks on KYC approval. Platform roles (no companyId) and SALES are exempt.
       if (user.companyId && user.role !== 'SALES') {
         const company = user.company;
         if (!company) {
           return res.status(403).json({ error: 'Company not found.' });
         }
 
-        // 1. Without company CIN account cannot be used
-        if (!company.cin) {
-          if (module !== 'SETTINGS') {
+        if (company.kycStatus !== 'APPROVED') {
+          const PRE_KYC_MODULES = ['EMPLOYEES', 'ATTENDANCE', 'LEAVE', 'ONBOARDING', 'SETTINGS'];
+          if (module && !PRE_KYC_MODULES.includes(module)) {
             return res.status(403).json({
-              error: 'Company CIN is missing. Access blocked.',
-              cinMissing: true
-            });
-          }
-        } else if (company.kycStatus !== 'APPROVED') {
-          // 2. If KYC not done, only attendance & leave module only can be used
-          if (module && !['ATTENDANCE', 'LEAVE', 'SETTINGS'].includes(module)) {
-            return res.status(403).json({
-              error: 'KYC not approved. Access restricted to Attendance and Leave modules.',
+              error: 'Finish KYC verification to unlock this module. Employee setup, attendance and leave are available now.',
               kycRequired: true
             });
           }

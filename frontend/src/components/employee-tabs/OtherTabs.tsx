@@ -1,12 +1,18 @@
 'use client';
 import { useState } from 'react';
-import { ValidatedInput } from '@/components/ValidatedField';
 import { validateForm, required, personName, nonNegative, integer, pincode, optional } from '@/lib/validators';
 import { addDependent, deleteDependent, upsertExitDetails, updateEmployeeAddress, addEmployeeAddress, getChangeHistory } from '@/lib/api';
+import {
+  Button, Card, Badge, StatusChip, DataTable, ConfirmDialog,
+  TextField, Select, DateField, Checkbox, LoadingBlock,
+} from '@/components/ui';
+import type { Column } from '@/components/ui';
 
 export function DependentsTab({ employee, canEdit, onReload }: any) {
   const [showForm, setShowForm] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [delId, setDelId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({ name: '', relationship: 'SPOUSE', dateOfBirth: '', gender: '', isNominee: false, nomineePercent: '' });
 
   const handleAdd = async () => {
@@ -14,45 +20,64 @@ export function DependentsTab({ employee, canEdit, onReload }: any) {
     if (!form.name) { alert('Name is required'); return; }
     try { await addDependent(employee.id, form); setShowForm(false); setForm({ name: '', relationship: 'SPOUSE', dateOfBirth: '', gender: '', isNominee: false, nomineePercent: '' }); onReload(); } catch { alert('Error'); }
   };
-  const handleDel = async (id: string) => {
-    const remark = prompt('Reason for marking this dependent as inactive?');
-    if (remark !== null) {
-      try { await deleteDependent(id, remark); onReload(); } catch { alert('Error marking inactive'); }
-    }
+
+  const handleConfirmDelete = async (remark?: string) => {
+    if (!delId) return;
+    setDeleting(true);
+    try { await deleteDependent(delId, remark || ''); setDelId(null); onReload(); } catch { alert('Error marking inactive'); } finally { setDeleting(false); }
   };
+
+  const columns: Column<any>[] = [
+    { key: 'name', header: 'Name', render: (d) => <span style={{ fontWeight: 600 }}>{d.name}</span> },
+    { key: 'relationship', header: 'Relationship', render: (d) => <Badge tone="info">{d.relationship}</Badge> },
+    { key: 'dateOfBirth', header: 'DOB', render: (d) => (d.dateOfBirth ? new Date(d.dateOfBirth).toLocaleDateString() : '-') },
+    { key: 'gender', header: 'Gender', render: (d) => d.gender || '-' },
+    { key: 'status', header: 'Status', render: (d) => <StatusChip status={d.isActive ? 'ACTIVE' : 'INACTIVE'} /> },
+    { key: 'nominee', header: 'Nominee', render: (d) => (d.isNominee ? <Badge tone="success">Yes ({d.nomineePercent || 100}%)</Badge> : 'No') },
+    ...(canEdit ? [{
+      key: 'actions', header: '', align: 'right' as const,
+      render: (d: any) => (canEdit && d.isActive ? <Button size="sm" variant="danger" onClick={() => setDelId(d.id)}>Make Inactive</Button> : null),
+    }] : []),
+  ];
 
   return (
     <div>
       <div className="section-header">
         <h2 className="section-title">Dependents &amp; Nominees</h2>
-        {canEdit && <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : '+ Add'}</button>}
+        {canEdit && <Button size="sm" onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : '+ Add'}</Button>}
       </div>
       {showForm && (
-        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <Card style={{ marginBottom: '1.5rem' }}>
           <div className="form-grid">
-            <div className="form-group"><label className="form-label">Name *</label><ValidatedInput className="input-field" value={form.name} onChange={v => setForm({...form, name: v})} validator={personName('Name')} restrict="alpha" forceError={submitted} /></div>
-            <div className="form-group"><label className="form-label">Relationship</label><select className="select-field" value={form.relationship} onChange={e => setForm({...form, relationship: e.target.value})}><option value="SPOUSE">Spouse</option><option value="CHILD">Child</option><option value="PARENT">Parent</option><option value="SIBLING">Sibling</option></select></div>
-            <div className="form-group"><label className="form-label">Date of Birth</label><input type="date" className="input-field" value={form.dateOfBirth} onChange={e => setForm({...form, dateOfBirth: e.target.value})} /></div>
-            <div className="form-group"><label className="form-label">Gender</label><select className="select-field" value={form.gender} onChange={e => setForm({...form, gender: e.target.value})}><option value="">Select</option><option value="MALE">Male</option><option value="FEMALE">Female</option></select></div>
+            <TextField label="Name" required value={form.name} onChange={v => setForm({ ...form, name: v })} validator={personName('Name')} restrict="alpha" forceError={submitted} />
+            <Select label="Relationship" value={form.relationship} onChange={v => setForm({ ...form, relationship: v })} options={[{ value: 'SPOUSE', label: 'Spouse' }, { value: 'CHILD', label: 'Child' }, { value: 'PARENT', label: 'Parent' }, { value: 'SIBLING', label: 'Sibling' }]} />
+            <DateField label="Date of Birth" value={form.dateOfBirth} onChange={v => setForm({ ...form, dateOfBirth: v })} />
+            <Select label="Gender" value={form.gender} onChange={v => setForm({ ...form, gender: v })} placeholder="Select" options={[{ value: 'MALE', label: 'Male' }, { value: 'FEMALE', label: 'Female' }]} />
           </div>
-          <label className="checkbox-label" style={{ marginTop: '0.5rem' }}><input type="checkbox" checked={form.isNominee} onChange={e => setForm({...form, isNominee: e.target.checked})} /> Is Nominee</label>
-          <div style={{ marginTop: '1rem' }}><button className="btn btn-success btn-sm" onClick={handleAdd}>Add Dependent</button></div>
-        </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <Checkbox label="Is Nominee" checked={form.isNominee} onChange={v => setForm({ ...form, isNominee: v })} />
+          </div>
+          <div style={{ marginTop: '1rem' }}><Button size="sm" variant="success" onClick={handleAdd}>Add Dependent</Button></div>
+        </Card>
       )}
-      {employee.dependents?.length > 0 ? (
-        <table className="data-table">
-          <thead><tr><th>Name</th><th>Relationship</th><th>DOB</th><th>Gender</th><th>Status</th><th>Nominee</th>{canEdit && <th></th>}</tr></thead>
-          <tbody>{employee.dependents.map((d: any) => (
-            <tr key={d.id} style={{ opacity: d.isActive ? 1 : 0.6 }}>
-              <td style={{ fontWeight: 600 }}>{d.name}</td><td><span className="badge badge-info">{d.relationship}</span></td>
-              <td>{d.dateOfBirth ? new Date(d.dateOfBirth).toLocaleDateString() : '-'}</td><td>{d.gender || '-'}</td>
-              <td>{d.isActive ? <span className="badge badge-success">Active</span> : <span className="badge badge-danger">Inactive</span>}</td>
-              <td>{d.isNominee ? <span className="badge badge-success">Yes ({d.nomineePercent || 100}%)</span> : 'No'}</td>
-              {canEdit && d.isActive && <td><button className="btn btn-danger btn-sm" onClick={() => handleDel(d.id)}>Make Inactive</button></td>}
-            </tr>
-          ))}</tbody>
-        </table>
-      ) : <p style={{ color: 'var(--text-muted)' }}>No dependents recorded.</p>}
+      <DataTable
+        columns={columns}
+        rows={employee.dependents || []}
+        rowKey={(d) => d.id}
+        emptyTitle="No dependents recorded"
+      />
+      <ConfirmDialog
+        open={!!delId}
+        title="Mark Dependent Inactive"
+        message="Provide a reason for marking this dependent as inactive."
+        requireReason
+        reasonLabel="Reason for marking this dependent as inactive"
+        confirmLabel="Make Inactive"
+        tone="danger"
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDelId(null)}
+      />
     </div>
   );
 }
@@ -61,19 +86,23 @@ export function ExitTab({ employee, canEdit, onReload }: any) {
   const exit = employee.exitDetails;
   const [editing, setEditing] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [form, setForm] = useState({ exitType: exit?.exitType||'', resignationDate: exit?.resignationDate?.split('T')[0]||'', lastWorkingDate: exit?.lastWorkingDate?.split('T')[0]||'', noticePeriodDays: exit?.noticePeriodDays||'', exitReason: exit?.exitReason||'', exitInterview: exit?.exitInterview||false, rehireEligible: exit?.rehireEligible!==false, fnfStatus: exit?.fnfStatus||'PENDING', fnfAmount: exit?.fnfAmount||'' });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ exitType: exit?.exitType || '', resignationDate: exit?.resignationDate?.split('T')[0] || '', lastWorkingDate: exit?.lastWorkingDate?.split('T')[0] || '', noticePeriodDays: exit?.noticePeriodDays || '', exitReason: exit?.exitReason || '', exitInterview: exit?.exitInterview || false, rehireEligible: exit?.rehireEligible !== false, fnfStatus: exit?.fnfStatus || 'PENDING', fnfAmount: exit?.fnfAmount || '' });
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setSubmitted(true);
     const { isValid } = validateForm(
       { noticePeriodDays: String(form.noticePeriodDays), fnfAmount: String(form.fnfAmount) },
       { noticePeriodDays: optional(integer('Notice period')), fnfAmount: optional(nonNegative('F&F amount')) }
     );
     if (!isValid) { alert('Please correct the highlighted fields.'); return; }
-    const reason = prompt('Reason for updating Exit Details:');
-    if (reason === null) return;
-    if (reason.trim() === '') { alert('Reason required'); return; }
-    try { await upsertExitDetails(employee.id, { ...form, changeReason: reason }); setEditing(false); onReload(); } catch { alert('Error'); }
+    setConfirmOpen(true);
+  };
+
+  const handleConfirm = async (reason?: string) => {
+    setSaving(true);
+    try { await upsertExitDetails(employee.id, { ...form, changeReason: reason }); setConfirmOpen(false); setEditing(false); onReload(); } catch { alert('Error'); } finally { setSaving(false); }
   };
 
   if (editing) {
@@ -81,39 +110,53 @@ export function ExitTab({ employee, canEdit, onReload }: any) {
       <div>
         <div className="section-header"><h2 className="section-title">Exit Details</h2></div>
         <div className="form-grid">
-          <div className="form-group"><label className="form-label">Exit Type</label><select className="select-field" value={form.exitType} onChange={e=>setForm({...form,exitType:e.target.value})}><option value="">Select</option><option value="RESIGNATION">Resignation</option><option value="TERMINATION">Termination</option><option value="RETIREMENT">Retirement</option><option value="ABSCONDING">Absconding</option></select></div>
-          <div className="form-group"><label className="form-label">Resignation Date</label><input type="date" className="input-field" value={form.resignationDate} onChange={e=>setForm({...form,resignationDate:e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">Last Working Date</label><input type="date" className="input-field" value={form.lastWorkingDate} onChange={e=>setForm({...form,lastWorkingDate:e.target.value})} /></div>
-          <div className="form-group"><label className="form-label">Notice Period (days)</label><ValidatedInput type="text" inputMode="numeric" className="input-field" value={String(form.noticePeriodDays)} onChange={v=>setForm({...form,noticePeriodDays:v})} validator={optional(integer('Notice period'))} restrict="digits" forceError={submitted} /></div>
-          <div className="form-group"><label className="form-label">Exit Reason</label><ValidatedInput className="input-field" value={form.exitReason} onChange={v=>setForm({...form,exitReason:v})} /></div>
-          <div className="form-group"><label className="form-label">F&amp;F Status</label><select className="select-field" value={form.fnfStatus} onChange={e=>setForm({...form,fnfStatus:e.target.value})}><option value="PENDING">Pending</option><option value="PROCESSED">Processed</option><option value="PAID">Paid</option></select></div>
-          <div className="form-group"><label className="form-label">F&amp;F Amount</label><ValidatedInput type="text" inputMode="decimal" className="input-field" value={String(form.fnfAmount)} onChange={v=>setForm({...form,fnfAmount:v})} validator={optional(nonNegative('F&F amount'))} restrict="decimal" forceError={submitted} /></div>
+          <Select label="Exit Type" value={form.exitType} onChange={v => setForm({ ...form, exitType: v })} placeholder="Select" options={[{ value: 'RESIGNATION', label: 'Resignation' }, { value: 'TERMINATION', label: 'Termination' }, { value: 'RETIREMENT', label: 'Retirement' }, { value: 'ABSCONDING', label: 'Absconding' }]} />
+          <DateField label="Resignation Date" value={form.resignationDate} onChange={v => setForm({ ...form, resignationDate: v })} />
+          <DateField label="Last Working Date" value={form.lastWorkingDate} onChange={v => setForm({ ...form, lastWorkingDate: v })} />
+          <TextField label="Notice Period (days)" value={String(form.noticePeriodDays)} onChange={v => setForm({ ...form, noticePeriodDays: v })} validator={optional(integer('Notice period'))} restrict="digits" forceError={submitted} />
+          <TextField label="Exit Reason" value={form.exitReason} onChange={v => setForm({ ...form, exitReason: v })} />
+          <Select label="F&F Status" value={form.fnfStatus} onChange={v => setForm({ ...form, fnfStatus: v })} options={[{ value: 'PENDING', label: 'Pending' }, { value: 'PROCESSED', label: 'Processed' }, { value: 'PAID', label: 'Paid' }]} />
+          <TextField label="F&F Amount" value={String(form.fnfAmount)} onChange={v => setForm({ ...form, fnfAmount: v })} validator={optional(nonNegative('F&F amount'))} restrict="decimal" forceError={submitted} />
         </div>
-        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem' }}>
-          <label className="checkbox-label"><input type="checkbox" checked={form.exitInterview} onChange={e=>setForm({...form,exitInterview:e.target.checked})} /> Exit Interview Done</label>
-          <label className="checkbox-label"><input type="checkbox" checked={form.rehireEligible} onChange={e=>setForm({...form,rehireEligible:e.target.checked})} /> Rehire Eligible</label>
+        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1.5rem' }}>
+          <Checkbox label="Exit Interview Done" checked={form.exitInterview} onChange={v => setForm({ ...form, exitInterview: v })} />
+          <Checkbox label="Rehire Eligible" checked={form.rehireEligible} onChange={v => setForm({ ...form, rehireEligible: v })} />
         </div>
-        <div style={{display:'flex',gap:'0.5rem',marginTop:'1rem'}}><button className="btn btn-primary btn-sm" onClick={handleSave}>Save</button><button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button></div>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+          <Button size="sm" onClick={handleSave}>Save</Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+        </div>
+        <ConfirmDialog
+          open={confirmOpen}
+          title="Update Exit Details"
+          message="Provide a reason for updating these exit details."
+          requireReason
+          reasonLabel="Reason for updating Exit Details"
+          confirmLabel="Save"
+          loading={saving}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirmOpen(false)}
+        />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="section-header"><h2 className="section-title">Exit Details</h2>{canEdit && <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✎ Edit</button>}</div>
+      <div className="section-header"><h2 className="section-title">Exit Details</h2>{canEdit && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>✎ Edit</Button>}</div>
       {exit ? (
-        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem' }}>
-          <div className="info-field"><div className="info-field-label">Exit Type</div><div className="info-field-value"><span className="badge badge-warning">{exit.exitType||'N/A'}</span></div></div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="info-field"><div className="info-field-label">Exit Type</div><div className="info-field-value">{exit.exitType ? <Badge tone="warning">{exit.exitType}</Badge> : 'N/A'}</div></div>
           <div className="info-field"><div className="info-field-label">Resignation Date</div><div className="info-field-value">{exit.resignationDate ? new Date(exit.resignationDate).toLocaleDateString() : 'N/A'}</div></div>
           <div className="info-field"><div className="info-field-label">Last Working Date</div><div className="info-field-value">{exit.lastWorkingDate ? new Date(exit.lastWorkingDate).toLocaleDateString() : 'N/A'}</div></div>
           <div className="info-field"><div className="info-field-label">Notice Period</div><div className="info-field-value">{exit.noticePeriodDays ? `${exit.noticePeriodDays} days` : 'N/A'}</div></div>
           <div className="info-field"><div className="info-field-label">Reason</div><div className="info-field-value">{exit.exitReason || 'N/A'}</div></div>
-          <div className="info-field"><div className="info-field-label">F&amp;F Status</div><div className="info-field-value"><span className={`badge ${exit.fnfStatus==='PAID'?'badge-success':exit.fnfStatus==='PROCESSED'?'badge-warning':'badge-neutral'}`}>{exit.fnfStatus}</span></div></div>
+          <div className="info-field"><div className="info-field-label">F&amp;F Status</div><div className="info-field-value"><StatusChip status={exit.fnfStatus} /></div></div>
           <div className="info-field"><div className="info-field-label">F&amp;F Amount</div><div className="info-field-value">{exit.fnfAmount ? `₹${exit.fnfAmount.toLocaleString()}` : 'N/A'}</div></div>
           <div className="info-field"><div className="info-field-label">Exit Interview</div><div className="info-field-value">{exit.exitInterview ? 'Yes' : 'No'}</div></div>
-          <div className="info-field"><div className="info-field-label">Rehire Eligible</div><div className="info-field-value">{exit.rehireEligible ? <span className="badge badge-success">Yes</span> : <span className="badge badge-danger">No</span>}</div></div>
+          <div className="info-field"><div className="info-field-label">Rehire Eligible</div><div className="info-field-value">{exit.rehireEligible ? <Badge tone="success">Yes</Badge> : <Badge tone="danger">No</Badge>}</div></div>
         </div>
-      ) : <p style={{color:'var(--text-muted)'}}>No exit details recorded.{canEdit && ' Click Edit to add.'}</p>}
+      ) : <p style={{ color: 'var(--text-muted)' }}>No exit details recorded.{canEdit && ' Click Edit to add.'}</p>}
     </div>
   );
 }
@@ -122,66 +165,82 @@ export function AddressTab({ employee, canEdit, onReload }: any) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ type: 'CURRENT', line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' });
 
-  const handleEdit = (a: any) => { setEditingId(a.id); setForm({ type: a.type, line1: a.line1, line2: a.line2||'', city: a.city, state: a.state, pincode: a.pincode, country: a.country }); };
+  const handleEdit = (a: any) => { setEditingId(a.id); setForm({ type: a.type, line1: a.line1, line2: a.line2 || '', city: a.city, state: a.state, pincode: a.pincode, country: a.country }); };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setSubmitted(true);
     const { isValid } = validateForm(
       { line1: form.line1, city: form.city, state: form.state, pincode: form.pincode },
       { line1: required('Address line 1'), city: required('City'), state: required('State'), pincode }
     );
     if (!isValid) { alert('Please correct the highlighted fields.'); return; }
-    const reason = prompt('Reason for updating Address:');
-    if (reason === null) return;
-    if (reason.trim() === '') { alert('Reason required'); return; }
+    setConfirmOpen(true);
+  };
+
+  const handleConfirm = async (reason?: string) => {
+    setSaving(true);
     try {
       if (editingId) await updateEmployeeAddress(editingId, { ...form, changeReason: reason });
       else await addEmployeeAddress(employee.id, { ...form, changeReason: reason });
-      setEditingId(null); setShowAdd(false); setSubmitted(false); setForm({ type: 'CURRENT', line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' }); onReload();
-    } catch { alert('Error saving address'); }
+      setConfirmOpen(false); setEditingId(null); setShowAdd(false); setSubmitted(false); setForm({ type: 'CURRENT', line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' }); onReload();
+    } catch { alert('Error saving address'); } finally { setSaving(false); }
   };
 
   return (
     <div>
       <div className="section-header">
-        <h2 className="section-title"><span style={{ fontSize: '1.2rem', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>🏠</span> Addresses</h2>
-        {canEdit && !editingId && !showAdd && <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>+ Add Address</button>}
+        <h2 className="section-title"><span aria-hidden="true" style={{ fontSize: '1.2rem' }}>🏠</span> Addresses</h2>
+        {canEdit && !editingId && !showAdd && <Button size="sm" onClick={() => setShowAdd(true)}>+ Add Address</Button>}
       </div>
 
       {(showAdd || editingId) && (
-        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <Card style={{ marginBottom: '1.5rem' }}>
           <div className="form-grid">
-            <div className="form-group"><label className="form-label">Type</label><select className="select-field" value={form.type} onChange={e=>setForm({...form, type:e.target.value})}><option value="CURRENT">Current</option><option value="PERMANENT">Permanent</option></select></div>
-            <div className="form-group"><label className="form-label">Line 1 *</label><ValidatedInput className="input-field" value={form.line1} onChange={v=>setForm({...form, line1:v})} validator={required('Address line 1')} forceError={submitted} /></div>
-            <div className="form-group"><label className="form-label">Line 2</label><ValidatedInput className="input-field" value={form.line2} onChange={v=>setForm({...form, line2:v})} /></div>
-            <div className="form-group"><label className="form-label">City *</label><ValidatedInput className="input-field" value={form.city} onChange={v=>setForm({...form, city:v})} validator={required('City')} forceError={submitted} /></div>
-            <div className="form-group"><label className="form-label">State *</label><ValidatedInput className="input-field" value={form.state} onChange={v=>setForm({...form, state:v})} validator={required('State')} forceError={submitted} /></div>
-            <div className="form-group"><label className="form-label">Pincode *</label><ValidatedInput className="input-field" value={form.pincode} onChange={v=>setForm({...form, pincode:v})} validator={pincode} restrict="digits" maxLength={6} forceError={submitted} /></div>
-            <div className="form-group"><label className="form-label">Country</label><ValidatedInput className="input-field" value={form.country} onChange={v=>setForm({...form, country:v})} /></div>
+            <Select label="Type" value={form.type} onChange={v => setForm({ ...form, type: v })} options={[{ value: 'CURRENT', label: 'Current' }, { value: 'PERMANENT', label: 'Permanent' }]} />
+            <TextField label="Line 1" required value={form.line1} onChange={v => setForm({ ...form, line1: v })} validator={required('Address line 1')} forceError={submitted} />
+            <TextField label="Line 2" value={form.line2} onChange={v => setForm({ ...form, line2: v })} />
+            <TextField label="City" required value={form.city} onChange={v => setForm({ ...form, city: v })} validator={required('City')} forceError={submitted} />
+            <TextField label="State" required value={form.state} onChange={v => setForm({ ...form, state: v })} validator={required('State')} forceError={submitted} />
+            <TextField label="Pincode" required value={form.pincode} onChange={v => setForm({ ...form, pincode: v })} validator={pincode} restrict="digits" maxLength={6} forceError={submitted} />
+            <TextField label="Country" value={form.country} onChange={v => setForm({ ...form, country: v })} />
           </div>
-          <div style={{display:'flex',gap:'0.5rem',marginTop:'1rem'}}>
-            <button className="btn btn-primary btn-sm" onClick={handleSave}>Save</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingId(null); setShowAdd(false); }}>Cancel</button>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+            <Button size="sm" onClick={handleSave}>Save</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setShowAdd(false); }}>Cancel</Button>
           </div>
-        </div>
+        </Card>
       )}
 
       <div style={{ display: 'grid', gap: '1.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
         {employee.addresses?.map((a: any) => (
-          <div key={a.id} className="glass-card glass-card-glow" style={{ padding: '1.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <Card key={a.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <h3 style={{ fontSize: '0.85rem', color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '1px' }}>{a.type} Address</h3>
-              {canEdit && <button className="btn btn-ghost btn-sm" onClick={() => handleEdit(a)}>✎ Edit</button>}
+              <h3 style={{ fontSize: '0.85rem', color: 'var(--trust)', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>{a.type} Address</h3>
+              {canEdit && <Button size="sm" variant="ghost" onClick={() => handleEdit(a)}>✎ Edit</Button>}
             </div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.8 }}>
-              {a.line1}<br/>{a.line2 && <>{a.line2}<br/></>}{a.city}, {a.state} - {a.pincode}<br/>{a.country}
+              {a.line1}<br />{a.line2 && <>{a.line2}<br /></>}{a.city}, {a.state} - {a.pincode}<br />{a.country}
             </div>
-          </div>
+          </Card>
         ))}
         {(!employee.addresses || employee.addresses.length === 0) && <p style={{ color: 'var(--text-muted)' }}>No addresses recorded.</p>}
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Update Address"
+        message="Provide a reason for updating this address."
+        requireReason
+        reasonLabel="Reason for updating Address"
+        confirmLabel="Save"
+        loading={saving}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }
@@ -192,30 +251,25 @@ export function HistoryTab({ employeeId }: { employeeId: string }) {
 
   // Use a simple fetch on mount instead of complex top-level await imports
   useState(() => {
-    getChangeHistory(employeeId).then(data => { setHistory(data); setLoading(false); }).catch(()=>setLoading(false));
+    getChangeHistory(employeeId).then(data => { setHistory(data); setLoading(false); }).catch(() => setLoading(false));
   });
 
-  if (loading) return <div>Loading history...</div>;
+  const columns: Column<any>[] = [
+    { key: 'createdAt', header: 'Date', render: (h) => <span style={{ whiteSpace: 'nowrap' }}>{new Date(h.createdAt).toLocaleString()}</span> },
+    { key: 'changedBy', header: 'Admin' },
+    { key: 'entity', header: 'Entity', render: (h) => <Badge tone="info">{h.entity}</Badge> },
+    { key: 'field', header: 'Field', render: (h) => <span style={{ color: 'var(--accent)' }}>{h.field}</span> },
+    { key: 'oldValue', header: 'Old Value', render: (h) => <span style={{ opacity: 0.7 }}>{h.oldValue || '-'}</span> },
+    { key: 'newValue', header: 'New Value', render: (h) => <span style={{ color: 'var(--success-fg)', fontWeight: 500 }}>{h.newValue || '-'}</span> },
+    { key: 'reason', header: 'Reason', render: (h) => <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>{h.reason}</span> },
+  ];
+
+  if (loading) return <LoadingBlock label="Loading history…" />;
 
   return (
     <div>
-      <div className="section-header"><h2 className="section-title"><span style={{ fontSize: '1.2rem', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>📝</span> Change History</h2></div>
-      {history.length > 0 ? (
-        <table className="data-table">
-          <thead><tr><th>Date</th><th>Admin</th><th>Entity</th><th>Field</th><th>Old Value</th><th>New Value</th><th>Reason</th></tr></thead>
-          <tbody>{history.map((h: any) => (
-            <tr key={h.id}>
-              <td style={{ whiteSpace:'nowrap' }}>{new Date(h.createdAt).toLocaleString()}</td>
-              <td>{h.changedBy}</td>
-              <td><span className="badge badge-info">{h.entity}</span></td>
-              <td style={{ color: 'var(--accent-cyan)' }}>{h.field}</td>
-              <td style={{ opacity: 0.7 }}>{h.oldValue || '-'}</td>
-              <td style={{ color: 'var(--success)', fontWeight: 500 }}>{h.newValue || '-'}</td>
-              <td style={{ fontStyle: 'italic', color: 'var(--accent-violet)' }}>{h.reason}</td>
-            </tr>
-          ))}</tbody>
-        </table>
-      ) : <p style={{color:'var(--text-muted)'}}>No change history recorded.</p>}
+      <div className="section-header"><h2 className="section-title"><span aria-hidden="true" style={{ fontSize: '1.2rem' }}>📝</span> Change History</h2></div>
+      <DataTable columns={columns} rows={history} rowKey={(h) => h.id} emptyTitle="No change history recorded" />
     </div>
   );
 }

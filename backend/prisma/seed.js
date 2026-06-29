@@ -173,7 +173,13 @@ const COMPANIES = ['TCS','Infosys','Wipro','HCL','Tech Mahindra','Cognizant','Ac
 async function main() {
   console.log('🌱 Starting comprehensive seed...');
 
-  // Clear all data
+  // Clear all data. Incremental `prisma db push` on SQLite can leave child foreign
+  // keys non-cascading (table recreation drift), so disable FK enforcement for the
+  // wipe (per-connection; does not affect the running server).
+  await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF');
+  await prisma.customModule.deleteMany();
+  await prisma.supportAssignment.deleteMany();
+  await prisma.notification.deleteMany();
   await prisma.contactRequest.deleteMany();
   await prisma.paymentTransaction.deleteMany();
   await prisma.subscription.deleteMany();
@@ -227,6 +233,7 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.attendanceSettings.deleteMany();
   await prisma.payrollSettings.deleteMany();
+  await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
   console.log('✅ Cleared existing data');
 
   console.log('🌱 Creating SaaS Plans...');
@@ -268,6 +275,7 @@ async function main() {
     data: {
       name: 'PID hcms Corp',
       code: 'pid-hcms',
+      subdomain: 'pid-hcms',
       email: 'contact@pid-hcms.com',
       phone: '+919876543210',
       address: '101 Corporate Towers, Tech Park, Bangalore, India',
@@ -371,11 +379,27 @@ async function main() {
     { email:'superadmin@hrms.com', name:'Super Admin', role:'SUPER_ADMIN', companyId: null },
     { email:'admin@hrms.com', name:'Admin User', role:'ADMIN', companyId: defaultCompany.id },
     { email:'manager@hrms.com', name:'Manager User', role:'MANAGER', companyId: defaultCompany.id },
+    // Platform (owner-side) staff — separation of duties. No home company.
+    { email:'platformadmin@hrms.com', name:'Platform Admin', role:'PLATFORM_ADMIN', companyId: null },
+    { email:'compliance@hrms.com', name:'Compliance Officer', role:'COMPLIANCE', companyId: null },
+    { email:'billing@hrms.com', name:'Billing Officer', role:'BILLING', companyId: null },
+    { email:'sales@hrms.com', name:'Sales Rep', role:'SALES', companyId: null },
+    { email:'auditor@hrms.com', name:'Auditor', role:'AUDITOR', companyId: null },
   ];
   for (const u of sysUsers) {
     await prisma.user.create({ data:{ email:u.email, password:hashedAdmin, name:u.name, role:u.role, companyId:u.companyId, permissions:{ create:getPermissions(u.role) } } });
   }
   console.log('✅ System users created');
+
+  // Platform support/maintenance staff (read-only, no home company), pre-assigned
+  // to the default tenant so the feature is testable out of the box.
+  const supportUser = await prisma.user.create({
+    data: { email: 'support@hrms.com', password: hashedAdmin, name: 'Support Staff', role: 'SUPPORT', companyId: null },
+  });
+  await prisma.supportAssignment.create({
+    data: { staffUserId: supportUser.id, companyId: defaultCompany.id, status: 'ACTIVE' },
+  });
+  console.log('✅ Support staff created (support@hrms.com / admin123)');
 
   // Settings
   await prisma.attendanceSettings.create({ data:{} });

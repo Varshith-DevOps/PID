@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-
-const _bg = Color(0xFF0B1020);
-const _panel = Color(0xFF111827);
-const _panelSoft = Color(0xFF172033);
-const _line = Color(0xFF263247);
-const _text = Color(0xFFE5E7EB);
-const _muted = Color(0xFF94A3B8);
-const _teal = Color(0xFF2DD4BF);
+import '../theme/app_theme.dart';
+import '../widgets/ui.dart';
 
 /// Board columns in the order the backend uses for the Jira-style board.
 const _statuses = <String, String>{
@@ -18,13 +12,23 @@ const _statuses = <String, String>{
   'COMPLETED': 'Completed',
 };
 
-const _statusColors = <String, Color>{
-  'TODO': Color(0xFF94A3B8),
-  'IN_PROGRESS': Color(0xFF818CF8),
-  'AWAITING_APPROVAL': Color(0xFFF59E0B),
-  'REWORK': Color(0xFFFB7185),
-  'COMPLETED': Color(0xFF2DD4BF),
-};
+/// Semantic token resolver for each board status (themes in light + dark).
+Color _statusColor(BuildContext context, String status) {
+  final c = context.colors;
+  switch (status) {
+    case 'IN_PROGRESS':
+      return c.info;
+    case 'AWAITING_APPROVAL':
+      return c.warning;
+    case 'REWORK':
+      return c.danger;
+    case 'COMPLETED':
+      return c.accent;
+    case 'TODO':
+    default:
+      return c.textMuted;
+  }
+}
 
 Map<String, dynamic> _map(dynamic v) => v is Map ? Map<String, dynamic>.from(v) : {};
 List<dynamic> _list(dynamic v) {
@@ -118,37 +122,41 @@ class _ProjectBoardScreenState extends State<ProjectBoardScreen> {
     final id = task['id']?.toString();
     if (id == null) return;
     final current = task['status']?.toString() ?? 'TODO';
+    final c = context.colors;
 
     final newStatus = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: _panel,
+      backgroundColor: c.raised,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(task['title']?.toString() ?? 'Task',
-                        style: const TextStyle(color: _text, fontWeight: FontWeight.w800, fontSize: 16)),
-                  ),
-                ],
+      builder: (context) {
+        final c = context.colors;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(task['title']?.toString() ?? 'Task',
+                          style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w800, fontSize: 16)),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const Divider(color: _line, height: 1),
-            ..._statuses.entries.map((e) => ListTile(
-                  leading: Icon(Icons.circle, size: 12, color: _statusColors[e.key]),
-                  title: Text(e.value, style: const TextStyle(color: _text)),
-                  trailing: e.key == current ? const Icon(Icons.check, color: _teal, size: 18) : null,
-                  onTap: () => Navigator.pop(context, e.key),
-                )),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+              Divider(color: c.border, height: 1),
+              ..._statuses.entries.map((e) => ListTile(
+                    leading: Icon(Icons.circle, size: 12, color: _statusColor(context, e.key)),
+                    title: Text(e.value, style: TextStyle(color: c.textPrimary)),
+                    trailing: e.key == current ? Icon(Icons.check, color: c.accent, size: 18) : null,
+                    onTap: () => Navigator.pop(context, e.key),
+                  )),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
 
     if (newStatus == null || newStatus == current) return;
@@ -163,22 +171,21 @@ class _ProjectBoardScreenState extends State<ProjectBoardScreen> {
 
   void _toast(String text, {bool error = false}) {
     if (!mounted) return;
+    final c = context.colors;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), backgroundColor: error ? const Color(0xFFFB7185) : _teal),
+      SnackBar(content: Text(text), backgroundColor: error ? c.danger : c.accent),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: c.canvas,
       appBar: AppBar(
-        backgroundColor: _bg,
-        elevation: 0,
-        title: const Text('Project Board', style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
-        iconTheme: const IconThemeData(color: _muted),
+        title: const Text('Project Board', style: TextStyle(fontWeight: FontWeight.w800)),
         actions: [
-          IconButton(onPressed: _loadBoard, icon: const Icon(Icons.refresh_rounded, color: _muted)),
+          IconButton(onPressed: _loadBoard, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
       body: Column(
@@ -188,15 +195,11 @@ class _ProjectBoardScreenState extends State<ProjectBoardScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: DropdownButtonFormField<String>(
                 value: _projectId,
-                dropdownColor: _panel,
+                dropdownColor: c.raised,
                 isExpanded: true,
-                style: const TextStyle(color: _text),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: _panelSoft,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _line)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _line)),
+                style: TextStyle(color: c.textPrimary),
+                decoration: const InputDecoration(
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
                 items: _projects.map((p) {
                   final project = _map(p);
@@ -214,20 +217,20 @@ class _ProjectBoardScreenState extends State<ProjectBoardScreen> {
           if (_message != null)
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(_message!, style: const TextStyle(color: Color(0xFFFB7185))),
+              child: Text(_message!, style: TextStyle(color: c.danger)),
             ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: _teal))
+                ? const LoadingView()
                 : _projects.isEmpty
-                    ? const Center(child: Text('No projects assigned.', style: TextStyle(color: _muted)))
+                    ? const EmptyView(icon: Icons.folder_open_outlined, message: 'No projects assigned.')
                     : ListView(
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.fromLTRB(12, 6, 12, 16),
                         children: _statuses.keys.map((status) => _BoardColumn(
                               status: status,
                               title: _statuses[status]!,
-                              color: _statusColors[status]!,
+                              color: _statusColor(context, status),
                               tasks: _columnTasks(status),
                               onTapTask: _moveTask,
                             )).toList(),
@@ -256,10 +259,11 @@ class _BoardColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       width: 270,
       margin: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: _line)),
+      decoration: BoxDecoration(color: c.raised, borderRadius: BorderRadius.circular(12), border: Border.all(color: c.border)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -269,7 +273,7 @@ class _BoardColumn extends StatelessWidget {
               children: [
                 Icon(Icons.circle, size: 10, color: color),
                 const SizedBox(width: 8),
-                Text(title, style: const TextStyle(color: _text, fontWeight: FontWeight.w800)),
+                Text(title, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w800)),
                 const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -279,10 +283,10 @@ class _BoardColumn extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(color: _line, height: 1),
+          Divider(color: c.border, height: 1),
           Expanded(
             child: tasks.isEmpty
-                ? const Center(child: Text('No tasks', style: TextStyle(color: _muted, fontSize: 12)))
+                ? Center(child: Text('No tasks', style: TextStyle(color: c.textMuted, fontSize: 12)))
                 : ListView.builder(
                     padding: const EdgeInsets.all(10),
                     itemCount: tasks.length,
@@ -304,6 +308,7 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final assignee = _map(task['assignee']);
     final assigneeName = assignee.isNotEmpty
         ? '${assignee['firstName'] ?? ''} ${assignee['lastName'] ?? ''}'.trim()
@@ -315,13 +320,13 @@ class _TaskCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: _panelSoft, borderRadius: BorderRadius.circular(10), border: Border.all(color: _line)),
+        decoration: BoxDecoration(color: c.sunken, borderRadius: BorderRadius.circular(10), border: Border.all(color: c.border)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(task['title']?.toString() ?? 'Task',
                 maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _text, fontWeight: FontWeight.w700, fontSize: 13)),
+                style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w700, fontSize: 13)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -334,7 +339,7 @@ class _TaskCard extends StatelessWidget {
                 const Spacer(),
                 if (assigneeName.isNotEmpty)
                   Text(assigneeName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: _muted, fontSize: 11)),
+                      style: TextStyle(color: c.textMuted, fontSize: 11)),
               ],
             ),
           ],

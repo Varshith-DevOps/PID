@@ -10,8 +10,24 @@ import {
   createTravelAdvance,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
-import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
 import { validateForm, required, amount as vAmount } from '@/lib/validators';
+import {
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  ErrorState,
+  FileDrop,
+  LoadingBlock,
+  Modal,
+  PageHeader,
+  Select,
+  StatCard,
+  StatusChip,
+  TextField,
+  Textarea,
+} from '@/components/ui';
+import type { Column } from '@/components/ui';
 
 interface ExpenseClaim {
   id: string;
@@ -39,6 +55,20 @@ interface TravelAdvance {
   claimDate: string;
 }
 
+const EXPENSE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" /><line x1="12" y1="4" x2="12" y2="20" /><line x1="2" y1="12" x2="22" y2="12" />
+  </svg>
+);
+
+const CATEGORY_OPTIONS = [
+  { value: 'TRAVEL', label: 'Travel' },
+  { value: 'MEALS', label: 'Meals & Diners' },
+  { value: 'ACCOMMODATION', label: 'Accommodation' },
+  { value: 'EQUIPMENT', label: 'Equipment & Assets' },
+  { value: 'OTHER', label: 'Other category' },
+];
+
 export default function ExpensesDashboard() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -46,6 +76,7 @@ export default function ExpensesDashboard() {
   const [claims, setClaims] = useState<ExpenseClaim[]>([]);
   const [advances, setAdvances] = useState<TravelAdvance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   // Modals & Panels
   const [showClaimModal, setShowClaimModal] = useState(false);
@@ -61,12 +92,14 @@ export default function ExpensesDashboard() {
     currency: 'INR',
   });
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [claimSubmitting, setClaimSubmitting] = useState(false);
 
   // Travel Advance Form State
   const [advanceForm, setAdvanceForm] = useState({
     purpose: '',
     amountRequested: '',
   });
+  const [advanceSubmitting, setAdvanceSubmitting] = useState(false);
 
   // Validation submit flags
   const [claimSubmitted, setClaimSubmitted] = useState(false);
@@ -84,6 +117,7 @@ export default function ExpensesDashboard() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(false);
     try {
       const [claimsData, advancesData] = await Promise.all([
         getExpenseClaims(),
@@ -93,6 +127,7 @@ export default function ExpensesDashboard() {
       setAdvances(advancesData);
     } catch (err) {
       console.error(err);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -109,6 +144,7 @@ export default function ExpensesDashboard() {
       alert(firstError || 'Please correct the highlighted fields.');
       return;
     }
+    setClaimSubmitting(true);
     try {
       const formData = new FormData();
       formData.append('title', claimForm.title);
@@ -129,6 +165,8 @@ export default function ExpensesDashboard() {
     } catch (err: any) {
       console.error(err);
       alert(err.response?.data?.error || 'Failed to submit expense claim');
+    } finally {
+      setClaimSubmitting(false);
     }
   };
 
@@ -143,6 +181,7 @@ export default function ExpensesDashboard() {
       alert(firstError || 'Please correct the highlighted fields.');
       return;
     }
+    setAdvanceSubmitting(true);
     try {
       await createTravelAdvance({
         purpose: advanceForm.purpose,
@@ -155,11 +194,13 @@ export default function ExpensesDashboard() {
     } catch (err) {
       console.error(err);
       alert('Failed to request travel cash advance');
+    } finally {
+      setAdvanceSubmitting(false);
     }
   };
 
   if (authLoading || !user) {
-    return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
+    return <LoadingBlock label="Loading…" />;
   }
 
   const isAdminOrHROrFinance = user.role === 'ADMIN' || user.role === 'HR' || user.role === 'FINANCE';
@@ -173,276 +214,290 @@ export default function ExpensesDashboard() {
     .filter(c => c.status === 'PENDING' || c.status === 'APPROVED_BY_MANAGER')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
+  const advancesOutstanding = advances
+    .filter(a => a.status === 'APPROVED' || a.status === 'PAID')
+    .reduce((acc, curr) => acc + curr.amountRequested, 0);
+
+  const advancesPendingCount = advances.filter(a => a.status === 'PENDING').length;
+
+  const claimColumns: Column<ExpenseClaim>[] = [
+    {
+      key: 'title',
+      header: 'Title',
+      render: (claim) => (
+        <div>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{claim.title}</div>
+          {claim.description && <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{claim.description}</div>}
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      render: (claim) => <Badge tone="neutral">{claim.category}</Badge>,
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      align: 'right',
+      render: (claim) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{claim.currency} {claim.amount.toLocaleString()}</span>,
+    },
+    {
+      key: 'claimDate',
+      header: 'Date',
+      render: (claim) => <span style={{ fontSize: '0.75rem' }}>{new Date(claim.claimDate).toLocaleDateString()}</span>,
+    },
+    {
+      key: 'receipt',
+      header: 'Receipt',
+      render: (claim) =>
+        claim.receiptUrl ? (
+          <Button variant="ghost" size="sm" onClick={() => setSelectedReceiptUrl(claim.receiptUrl || null)}>
+            View File
+          </Button>
+        ) : (
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>None</span>
+        ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (claim) => <StatusChip status={claim.status} />,
+    },
+  ];
+
   return (
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        
-        {/* Header */}
-        <div className="page-header">
-          <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
-                <rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="2" y1="12" x2="22" y2="12"/>
-              </svg>
+
+        <PageHeader
+          title="Expense & Travel Claims"
+          subtitle="File out-of-pocket expenses, attach receipts, and request travel advance cash"
+          icon={<div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>{EXPENSE_ICON}</div>}
+          actions={
+            <>
+              {isAdminOrHROrFinance && (
+                <Button variant="ghost" onClick={() => router.push('/expenses/approvals')}>
+                  Approvals Center
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => setShowAdvanceModal(true)}>
+                Request Advance Cash
+              </Button>
+              <Button variant="success" onClick={() => setShowClaimModal(true)}>
+                + File Out-Of-Pocket
+              </Button>
+            </>
+          }
+        />
+
+        {error ? (
+          <ErrorState
+            title="Couldn’t load expenses"
+            message="We couldn’t load your claims and advances. Please try again."
+            onRetry={loadData}
+          />
+        ) : (
+          <>
+            {/* Aggregate Stats */}
+            <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+              <StatCard
+                label="Total Reimbursed"
+                value={`INR ${totalApprovedClaimsSum.toLocaleString()}`}
+                trend={{ value: 'Paid & settled in full', direction: 'up' }}
+              />
+              <StatCard
+                label="Pending Settlements"
+                value={`INR ${totalPendingClaimsSum.toLocaleString()}`}
+                trend={{ value: 'Awaiting manager or finance signs', direction: 'flat' }}
+              />
+              <StatCard
+                label="Advances Outstanding"
+                value={`INR ${advancesOutstanding.toLocaleString()}`}
+                trend={{ value: `${advancesPendingCount} advance request pending`, direction: 'flat' }}
+              />
             </div>
-            <div>
-              <h1 className="page-title">Expense & Travel Claims</h1>
-              <p className="page-subtitle">File out-of-pocket expenses, attach receipts, and request travel advance cash</p>
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            {isAdminOrHROrFinance && (
-              <button onClick={() => router.push('/expenses/approvals')} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                📥 Approvals Center
-              </button>
-            )}
-            <button onClick={() => setShowAdvanceModal(true)} className="btn btn-secondary" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-              Request Advance Cash
-            </button>
-            <button onClick={() => setShowClaimModal(true)} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}>
-              + File Out-Of-Pocket
-            </button>
-          </div>
-        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', alignItems: 'start', marginTop: '1.5rem' }}>
 
-        {/* Aggregate Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div className="glass-card" style={{ padding: '1.25rem' }}>
-            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Total Reimbursed</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.5rem', display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-              INR {totalApprovedClaimsSum.toLocaleString()}
-            </div>
-            <div style={{ fontSize: '0.68rem', color: '#10b981', marginTop: '0.5rem' }}>Paid & settled in full</div>
-          </div>
+              {/* Expense Claims Table Block */}
+              <Card title="Your Out-of-Pocket Claims">
+                <DataTable
+                  columns={claimColumns}
+                  rows={claims}
+                  loading={loading}
+                  rowKey={(claim) => claim.id}
+                  emptyTitle="No expense claims filed yet"
+                  emptyMessage="File an out-of-pocket expense to see it here."
+                />
+              </Card>
 
-          <div className="glass-card" style={{ padding: '1.25rem' }}>
-            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Pending Settlements</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.5rem', display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-              INR {totalPendingClaimsSum.toLocaleString()}
-            </div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Awaiting manager or finance signs</div>
-          </div>
+              {/* Travel Cash Advances Block */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Travel Cash Advances</h2>
 
-          <div className="glass-card" style={{ padding: '1.25rem' }}>
-            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Advances Outstanding</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.5rem' }}>
-              INR {advances.filter(a => a.status === 'APPROVED' || a.status === 'PAID').reduce((acc, curr) => acc + curr.amountRequested, 0).toLocaleString()}
-            </div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>{advances.filter(a => a.status === 'PENDING').length} advance request pending</div>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
-          
-          {/* Expense Claims Table Block */}
-          <div className="glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'white' }}>Your Out-of-Pocket Claims</h2>
-
-            {loading ? (
-              <div className="loading-container"><div className="loading-spinner" />Loading expense claims...</div>
-            ) : claims.length === 0 ? (
-              <div className="empty-state" style={{ minHeight: '200px' }}>No expense claims filed yet.</div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table" style={{ width: '100%', minWidth: '550px' }}>
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Category</th>
-                      <th>Amount</th>
-                      <th>Date</th>
-                      <th>Receipt</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {claims.map(claim => (
-                      <tr key={claim.id}>
-                        <td>
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'white', fontSize: '0.88rem' }}>{claim.title}</div>
-                            {claim.description && <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{claim.description}</div>}
-                          </div>
-                        </td>
-                        <td><span style={{ textTransform: 'uppercase', fontSize: '0.72rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>{claim.category}</span></td>
-                        <td style={{ fontWeight: 600, color: 'white' }}>{claim.currency} {claim.amount.toLocaleString()}</td>
-                        <td style={{ fontSize: '0.75rem' }}>{new Date(claim.claimDate).toLocaleDateString()}</td>
-                        <td>
-                          {claim.receiptUrl ? (
-                            <button onClick={() => setSelectedReceiptUrl(claim.receiptUrl || null)} className="btn btn-secondary" style={{ padding: '0.2rem 0.4rem', fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              📎 View File
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>None</span>
-                          )}
-                        </td>
-                        <td>
-                          <span className="badge" style={{
-                            background: claim.status === 'PAID' ? '#10b981' : claim.status.startsWith('APPROVED') ? '#00A7B5' : claim.status === 'REJECTED' ? '#ef4444' : '#eab308',
-                            color: 'white', fontSize: '0.65rem'
-                          }}>
-                            {claim.status.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Travel Cash Advances Block */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'white' }}>Travel Cash Advances</h2>
-
-            {loading ? (
-              <div className="loading-container"><div className="loading-spinner" />Loading advances...</div>
-            ) : advances.length === 0 ? (
-              <div className="empty-state" style={{ minHeight: '200px' }}>No cash advances requested.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {advances.map(adv => (
-                  <div key={adv.id} className="glass-card" style={{ padding: '1.25rem', borderLeft: adv.status === 'SETTLED' ? '4px solid #10b981' : adv.status === 'APPROVED' ? '4px solid #00A7B5' : '4px solid #eab308', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'white' }}>{adv.purpose}</h3>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Timeline: Requested {new Date(adv.claimDate).toLocaleDateString()}</span>
-                      </div>
-                      <span className="badge" style={{
-                        background: adv.status === 'SETTLED' ? '#10b981' : adv.status === 'APPROVED' ? '#00A7B5' : '#eab308',
-                        color: 'white', fontSize: '0.65rem'
-                      }}>
-                        {adv.status}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      <div>Requested: <strong>INR {adv.amountRequested.toLocaleString()}</strong></div>
-                      {adv.amountApproved && <div>Approved: <strong style={{ color: '#00A7B5' }}>INR {adv.amountApproved.toLocaleString()}</strong></div>}
-                    </div>
-
-                    {adv.advanceRemarks && (
-                      <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.1)', padding: '0.35rem', borderRadius: '4px', fontStyle: 'italic', marginTop: '0.25rem' }}>
-                        "{adv.advanceRemarks}"
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-        </div>
-
-        {/* Receipt View Modal */}
-        {selectedReceiptUrl && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setSelectedReceiptUrl(null)}>
-            <div className="glass-card" style={{ maxWidth: '600px', width: '90%', padding: '1rem', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'white' }}>Receipt Attachment Preview</span>
-                <button onClick={() => setSelectedReceiptUrl(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
-              </div>
-              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '4px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-                {selectedReceiptUrl.endsWith('.pdf') ? (
-                  <embed src={`http://localhost:5000${selectedReceiptUrl}`} type="application/pdf" width="100%" height="450px" />
+                {loading ? (
+                  <LoadingBlock label="Loading advances…" />
+                ) : advances.length === 0 ? (
+                  <Card>
+                    <div className="empty-state" style={{ minHeight: '200px' }}>No cash advances requested.</div>
+                  </Card>
                 ) : (
-                  <img src={`http://localhost:5000${selectedReceiptUrl}`} alt="Receipt attachment" style={{ maxWidth: '100%', maxHeight: '450px', objectFit: 'contain' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {advances.map(adv => (
+                      <Card key={adv.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+                          <div>
+                            <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{adv.purpose}</h3>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Timeline: Requested {new Date(adv.claimDate).toLocaleDateString()}</span>
+                          </div>
+                          <StatusChip status={adv.status} />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          <div>Requested: <strong>INR {adv.amountRequested.toLocaleString()}</strong></div>
+                          {adv.amountApproved && <div>Approved: <strong style={{ color: 'var(--accent)' }}>INR {adv.amountApproved.toLocaleString()}</strong></div>}
+                        </div>
+
+                        {adv.advanceRemarks && (
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'var(--surface-sunken)', padding: '0.35rem 0.5rem', borderRadius: 'var(--radius-sm)', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                            &ldquo;{adv.advanceRemarks}&rdquo;
+                          </p>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
                 )}
               </div>
+
             </div>
-          </div>
+          </>
         )}
+
+        {/* Receipt View Modal */}
+        <Modal
+          open={!!selectedReceiptUrl}
+          onClose={() => setSelectedReceiptUrl(null)}
+          title="Receipt Attachment Preview"
+          width={600}
+        >
+          {selectedReceiptUrl && (
+            <div style={{ background: 'var(--surface-sunken)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
+              {selectedReceiptUrl.endsWith('.pdf') ? (
+                <embed src={`http://localhost:5000${selectedReceiptUrl}`} type="application/pdf" width="100%" height="450px" />
+              ) : (
+                <img src={`http://localhost:5000${selectedReceiptUrl}`} alt="Receipt attachment" style={{ maxWidth: '100%', maxHeight: '450px', objectFit: 'contain' }} />
+              )}
+            </div>
+          )}
+        </Modal>
 
         {/* File Out of Pocket Modal */}
-        {showClaimModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>File Out-of-Pocket Expense</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Claim a reimburse for personal business expenses</p>
-              </div>
+        <Modal
+          open={showClaimModal}
+          onClose={() => setShowClaimModal(false)}
+          title="File Out-of-Pocket Expense"
+          width={440}
+        >
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 0 }}>Claim a reimburse for personal business expenses</p>
 
-              <form onSubmit={handleClaimSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Claim Title</label>
-                  <ValidatedInput type="text" placeholder="e.g. Bangalore Client dinner" required value={claimForm.title} onChange={v => setClaimForm({ ...claimForm, title: v })} validator={required('Title')} forceError={claimSubmitted} className="input-field" />
-                </div>
+          <form onSubmit={handleClaimSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <TextField
+              label="Claim Title"
+              placeholder="e.g. Bangalore Client dinner"
+              required
+              value={claimForm.title}
+              onChange={v => setClaimForm({ ...claimForm, title: v })}
+              validator={required('Title')}
+              forceError={claimSubmitted}
+            />
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Category</label>
-                    <select value={claimForm.category} onChange={e => setClaimForm({ ...claimForm, category: e.target.value })} className="select-field">
-                      <option value="TRAVEL">Travel</option>
-                      <option value="MEALS">Meals & Diners</option>
-                      <option value="ACCOMMODATION">Accommodation</option>
-                      <option value="EQUIPMENT">Equipment & Assets</option>
-                      <option value="OTHER">Other category</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Amount</label>
-                    <ValidatedInput type="text" inputMode="decimal" placeholder="5000" required value={claimForm.amount} onChange={v => setClaimForm({ ...claimForm, amount: v })} validator={vAmount} restrict="decimal" forceError={claimSubmitted} className="input-field" />
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Description & Scope</label>
-                  <ValidatedTextarea placeholder="Outline items purchased and purpose of business claim..." value={claimForm.description} onChange={v => setClaimForm({ ...claimForm, description: v })} className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Receipt Attachment File (PDF or Image)</label>
-                  <input type="file" accept="image/*,application/pdf" onChange={e => setReceiptFile(e.target.files ? e.target.files[0] : null)} className="input-field" style={{ padding: '0.35rem 0.5rem', background: 'rgba(255,255,255,0.03)' }} />
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowClaimModal(false)} className="btn btn-secondary">
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}>
-                    File Reimburse
-                  </button>
-                </div>
-              </form>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
+              <Select
+                label="Category"
+                value={claimForm.category}
+                onChange={v => setClaimForm({ ...claimForm, category: v })}
+                options={CATEGORY_OPTIONS}
+              />
+              <TextField
+                label="Amount"
+                placeholder="5000"
+                required
+                value={claimForm.amount}
+                onChange={v => setClaimForm({ ...claimForm, amount: v })}
+                validator={vAmount}
+                restrict="decimal"
+                forceError={claimSubmitted}
+              />
             </div>
-          </div>
-        )}
+
+            <Textarea
+              label="Description & Scope"
+              placeholder="Outline items purchased and purpose of business claim..."
+              value={claimForm.description}
+              onChange={v => setClaimForm({ ...claimForm, description: v })}
+            />
+
+            <FileDrop
+              label="Receipt Attachment File (PDF or Image)"
+              accept="image/*,application/pdf"
+              hint={receiptFile ? receiptFile.name : 'PDF or image up to your org limit'}
+              onFile={(f) => setReceiptFile(f)}
+            />
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <Button type="button" variant="ghost" onClick={() => setShowClaimModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="success" loading={claimSubmitting}>
+                File Reimburse
+              </Button>
+            </div>
+          </form>
+        </Modal>
 
         {/* Cash Advance Modal */}
-        {showAdvanceModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '400px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>Request Travel Cash Advance</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Receive an advance cash for scheduled business travels</p>
-              </div>
+        <Modal
+          open={showAdvanceModal}
+          onClose={() => setShowAdvanceModal(false)}
+          title="Request Travel Cash Advance"
+          width={400}
+        >
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 0 }}>Receive an advance cash for scheduled business travels</p>
 
-              <form onSubmit={handleAdvanceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Purpose & Travel Detail</label>
-                  <ValidatedInput type="text" placeholder="e.g. Flight + hotel for Bangalore client meet" required value={advanceForm.purpose} onChange={v => setAdvanceForm({ ...advanceForm, purpose: v })} validator={required('Purpose')} forceError={advanceSubmitted} className="input-field" />
-                </div>
+          <form onSubmit={handleAdvanceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <TextField
+              label="Purpose & Travel Detail"
+              placeholder="e.g. Flight + hotel for Bangalore client meet"
+              required
+              value={advanceForm.purpose}
+              onChange={v => setAdvanceForm({ ...advanceForm, purpose: v })}
+              validator={required('Purpose')}
+              forceError={advanceSubmitted}
+            />
 
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Cash Amount Requested (INR)</label>
-                  <ValidatedInput type="text" inputMode="decimal" placeholder="e.g. 15000" required value={advanceForm.amountRequested} onChange={v => setAdvanceForm({ ...advanceForm, amountRequested: v })} validator={vAmount} restrict="decimal" forceError={advanceSubmitted} className="input-field" />
-                </div>
+            <TextField
+              label="Cash Amount Requested (INR)"
+              placeholder="e.g. 15000"
+              required
+              value={advanceForm.amountRequested}
+              onChange={v => setAdvanceForm({ ...advanceForm, amountRequested: v })}
+              validator={vAmount}
+              restrict="decimal"
+              forceError={advanceSubmitted}
+            />
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowAdvanceModal(false)} className="btn btn-secondary">
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}>
-                    Submit Cash Request
-                  </button>
-                </div>
-              </form>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <Button type="button" variant="ghost" onClick={() => setShowAdvanceModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="success" loading={advanceSubmitting}>
+                Submit Cash Request
+              </Button>
             </div>
-          </div>
-        )}
+          </form>
+        </Modal>
       </main>
     </div>
   );

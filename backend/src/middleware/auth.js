@@ -7,6 +7,7 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/database');
 const { runWithCompanyId } = require('../utils/tenantContext');
+const { paidThroughFor, assessBilling } = require('../services/dunningService');
 
 /**
  * Middleware to authenticate requests via JWT Bearer token.
@@ -74,23 +75,75 @@ const authenticate = async (req, res, next) => {
       if (!isBillingRoute) {
         if (company.kycStatus === 'APPROVED') {
           const activeSub = company.subscriptions[0];
-          if (!activeSub || new Date(activeSub.endDate) < new Date()) {
-            return res.status(402).json({ error: 'Subscription expired or inactive. Please update your payment plan.' });
+          const paidThrough = paidThroughFor(company, activeSub);
+          if (!paidThrough) {
+            return res.status(402).json({ error: 'No active subscription. Please choose a plan to continue.', billingSuspended: true });
+          }
+          // Past-due tenants keep access during the grace window; once grace lapses
+          // (auto-suspended for non-payment) access is blocked until payment.
+          const { state } = assessBilling(paidThrough);
+          if (state === 'SUSPENDED_NONPAYMENT') {
+            return res.status(402).json({ error: 'Your subscription is past due and access is suspended. Please complete payment to continue.', billingSuspended: true });
           }
         }
+      }
+    }
+
+    // Platform support/maintenance staff: read-only, scoped to an assigned tenant.
+    let effectiveCompanyId = user.companyId;
+    let supportViewCompanyId = null;
+    if (user.role === 'SUPPORT') {
+      // Narrow write exception: support may change a tenant's workspace subdomain
+      // (an owner-side platform action, not tenant data). Everything else is read-only.
+      const isSubdomainEdit = req.method === 'PUT'
+        && /^\/api\/platform-admin\/companies\/[^/]+\/subdomain(?:\?.*)?$/.test(req.originalUrl);
+
+      if (!isSubdomainEdit) {
+        // 1. Read-only — reject any mutation outside the auth namespace
+        //    (logout / change-password / MFA remain allowed).
+        const isAuthPath = req.originalUrl.startsWith('/api/auth/');
+        const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+        if (isWrite && !isAuthPath) {
+          return res.status(403).json({ error: 'Support accounts have read-only access and cannot modify customer data.' });
+        }
+      }
+      // 2. Resolve the customer being viewed from the request header, and verify
+      //    the support user is actively assigned to it.
+      const headerCompany = req.headers['x-support-company-id'];
+      if (headerCompany) {
+        const assignment = await prisma.supportAssignment.findFirst({
+          where: { staffUserId: user.id, companyId: String(headerCompany), status: 'ACTIVE' },
+        });
+        if (!assignment) {
+          return res.status(403).json({ error: 'You are not assigned to this customer.' });
+        }
+        effectiveCompanyId = String(headerCompany);
+        supportViewCompanyId = effectiveCompanyId;
+      } else {
+        // No tenant selected. A null company context is UNSCOPED (cross-tenant),
+        // so restrict an unselected support user to the support console + auth
+        // namespaces only — never let them read tenant data unscoped.
+        const allowed = isSubdomainEdit
+          || req.originalUrl.startsWith('/api/support/')
+          || req.originalUrl.startsWith('/api/auth/');
+        if (!allowed) {
+          return res.status(409).json({ error: 'Select a customer to view before accessing this data.' });
+        }
+        effectiveCompanyId = null;
       }
     }
 
     req.user = {
       ...decoded,
       role: user.role,
-      companyId: user.companyId,
+      companyId: effectiveCompanyId,
+      supportViewCompanyId,
       employeeId: user.employee?.id || null,
       employeeCode: user.employee?.employeeId || null,
     };
 
-    // Run the rest of the request within the tenant company context
-    runWithCompanyId(user.companyId, () => {
+    // Run the rest of the request within the (possibly support-scoped) tenant context
+    runWithCompanyId(effectiveCompanyId, () => {
       next();
     });
   } catch (error) {

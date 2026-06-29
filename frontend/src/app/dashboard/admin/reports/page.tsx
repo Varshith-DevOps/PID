@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import {
@@ -16,10 +15,30 @@ import {
   updateAuditPackStatus,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  Field,
+  KpiBar,
+  KpiPie,
+  PageHeader,
+  Select,
+  SkeletonTable,
+  StatCard,
+  StatusChip,
+  Tabs,
+} from '@/components/ui';
+import type { Column } from '@/components/ui';
 
 type TabType = 'center' | 'statutory' | 'internal' | 'builder';
 type ExportFormat = 'xlsx' | 'csv' | 'pdf';
+type Row = Record<string, unknown>;
 
 const EXPORT_REPORTS = [
   { value: 'employee-master', label: 'Employee Master' },
@@ -41,6 +60,34 @@ const EXPORT_REPORTS = [
   { value: 'audit:payroll-log', label: 'Payroll Audit Log' },
 ];
 
+const FORMAT_OPTIONS = [
+  { value: 'xlsx', label: 'Excel' },
+  { value: 'csv', label: 'CSV' },
+  { value: 'pdf', label: 'PDF' },
+];
+
+const BUILDER_COLUMNS = [
+  'employeeId', 'firstName', 'lastName', 'email', 'gender',
+  'jobTitle', 'department', 'location', 'employmentType', 'salary',
+];
+
+const FILTER_FIELD_OPTIONS = [
+  { value: '', label: 'Field' },
+  { value: 'gender', label: 'Gender' },
+  { value: 'department', label: 'Department' },
+  { value: 'location', label: 'Location' },
+  { value: 'employmentType', label: 'Employment Type' },
+  { value: 'age', label: 'Age' },
+  { value: 'experience', label: 'Experience' },
+];
+
+const FILTER_OPERATOR_OPTIONS = [
+  { value: 'EQUALS', label: 'Equals' },
+  { value: 'CONTAINS', label: 'Contains' },
+  { value: 'GREATER_THAN', label: 'Greater Than' },
+  { value: 'LESS_THAN', label: 'Less Than' },
+];
+
 const allowedRoles = new Set([
   'SUPER_ADMIN',
   'ADMIN',
@@ -54,23 +101,35 @@ const allowedRoles = new Set([
 
 const monthName = (month: number) => new Date(2026, month - 1, 1).toLocaleString('en-IN', { month: 'long' });
 
+const MONTH_OPTIONS = Array.from({ length: 12 }).map((_, index) => ({
+  value: String(index + 1),
+  label: monthName(index + 1),
+}));
+
 const money = (value: any) => {
   if (typeof value !== 'number') return value ?? 'NA';
   return `INR ${value.toLocaleString('en-IN')}`;
 };
 
-const statusColor = (status: string) => {
-  if (['LOW', 'GENERATED', 'SIGNED_OFF', 'APPROVED', 'COMPLIANT'].includes(status)) return '#10b981';
-  if (['MEDIUM', 'UNDER_REVIEW', 'ATTENTION_REQUIRED', 'PENDING'].includes(status)) return '#f59e0b';
-  return '#ef4444';
+/** Maps a status/severity string onto a Badge tone (color is never the only signal — Badge dots + text). */
+const statusTone = (status: string): 'success' | 'warning' | 'danger' => {
+  if (['LOW', 'GENERATED', 'SIGNED_OFF', 'APPROVED', 'COMPLIANT'].includes(status)) return 'success';
+  if (['MEDIUM', 'UNDER_REVIEW', 'ATTENTION_REQUIRED', 'PENDING'].includes(status)) return 'warning';
+  return 'danger';
 };
 
-const compactCard: CSSProperties = {
-  background: 'rgba(15, 23, 42, 0.72)',
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  borderRadius: '8px',
-  padding: '1rem',
-};
+const StatusBadge = ({ value }: { value: string }) => (
+  <Badge tone={statusTone(value)} dot>{value}</Badge>
+);
+
+/** Column helper: capitalize key into a header label, matching the old SimpleTable behavior. */
+const labelize = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+
+const cell = (value: unknown): React.ReactNode =>
+  value === null || value === undefined ? 'NA' : (value as React.ReactNode);
+
+const textColumns = (keys: string[]): Column<Row>[] =>
+  keys.map((key) => ({ key, header: labelize(key), render: (row) => cell(row[key]) }));
 
 export default function ReportsDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -79,6 +138,7 @@ export default function ReportsDashboard() {
   const now = new Date();
   const [activeTab, setActiveTab] = useState<TabType>('center');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedPack, setSelectedPack] = useState('monthly-statutory-pack');
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -100,6 +160,8 @@ export default function ReportsDashboard() {
   const [builderFilters, setBuilderFilters] = useState<any[]>([{ field: 'department', operator: 'CONTAINS', value: '' }]);
   const [builderResult, setBuilderResult] = useState<any[]>([]);
   const [builderRunning, setBuilderRunning] = useState(false);
+
+  const [statusPrompt, setStatusPrompt] = useState<{ id: string; status: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || !allowedRoles.has(user.role))) {
@@ -127,6 +189,7 @@ export default function ReportsDashboard() {
   const loadAll = async () => {
     try {
       setLoading(true);
+      setLoadError(false);
       const [auditCenter, chro, comp, epf, esi, minWage, payGap, diversity] = await Promise.all([
         getAuditReportCenter({ month, year, financialYear }),
         getDashboardData('chro'),
@@ -148,6 +211,7 @@ export default function ReportsDashboard() {
       setDiversityData(diversity.data || []);
     } catch (err) {
       console.error('Failed to load compliance and audit center:', err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -191,10 +255,10 @@ export default function ReportsDashboard() {
     }
   };
 
-  const handleStatus = async (id: string, status: string) => {
+  const handleStatus = async (id: string, status: string, remarks?: string) => {
     try {
       setActionLoading(true);
-      await updateAuditPackStatus(id, { status, remarks: `Marked ${status} from Audit Report Center` });
+      await updateAuditPackStatus(id, { status, remarks: remarks || `Marked ${status} from Audit Report Center` });
       await loadAll();
     } catch (err) {
       alert('Failed to update audit pack status');
@@ -219,122 +283,200 @@ export default function ReportsDashboard() {
   }
 
   const summary = center?.summary || {};
-  const tabStyle = (tab: TabType): CSSProperties => ({
-    background: activeTab === tab ? 'rgba(37, 99, 235, 0.16)' : 'transparent',
-    border: activeTab === tab ? '1px solid rgba(96, 165, 250, 0.55)' : '1px solid rgba(148, 163, 184, 0.18)',
-    borderRadius: '8px',
-    color: activeTab === tab ? '#BFEFF4' : 'var(--text-secondary)',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    padding: '0.55rem 0.8rem',
-  });
+
+  // Turn enum-style values (e.g. NOT_RUN) into readable labels (e.g. "Not Run").
+  const humanize = (v: unknown) =>
+    v == null ? 'NA' : String(v).replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const statCards: { label: string; value: React.ReactNode }[] = [
+    { label: 'Active Headcount', value: String(summary.activeEmployees ?? 'NA') },
+    { label: 'Payroll Status', value: humanize(summary.payrollStatus) },
+    { label: 'Gross Payroll', value: String(money(summary.totalGross)) },
+    { label: 'PF Compliance', value: `${compStats?.pfCompliancePercent ?? 0}%` },
+    { label: 'ESI Compliance', value: `${compStats?.esiCompliancePercent ?? 0}%` },
+    { label: 'Risk Exceptions', value: String(summary.riskItems ?? 'NA') },
+    { label: 'Overdue Obligations', value: String(summary.overdueObligations ?? 'NA') },
+    { label: 'Master Completeness', value: `${summary.employeeMasterCompleteness ?? 0}%` },
+  ];
+
+  // ---- Column definitions (logic-preserving renders) ----
+  const auditRunRows: Row[] = (center?.generatedReports || [])
+    .filter((row: any) => row.type?.startsWith('AUDIT_PACK_'));
+
+  const auditRunColumns: Column<Row>[] = [
+    { key: 'type', header: 'Type', render: (row) => String((row.type as string).replace('AUDIT_PACK_', '').replaceAll('_', ' ')) },
+    { key: 'status', header: 'Status', render: (row) => <StatusBadge value={String(row.status)} /> },
+    { key: 'period', header: 'Period', render: (row) => String(row.financialYear || `${row.month || ''}/${row.year || ''}`) },
+    { key: 'generatedBy', header: 'Generated By', render: (row) => cell(row.generatedBy) },
+    { key: 'createdAt', header: 'Created At', render: (row) => new Date(row.createdAt as string).toLocaleString('en-IN') },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (row) => (
+        <div style={{ display: 'flex', gap: '0.35rem' }}>
+          <Button variant="ghost" size="sm" onClick={() => setStatusPrompt({ id: String(row.id), status: 'UNDER_REVIEW' })}>Review</Button>
+          <Button variant="primary" size="sm" onClick={() => setStatusPrompt({ id: String(row.id), status: 'SIGNED_OFF' })}>Sign Off</Button>
+        </div>
+      ),
+    },
+  ];
+
+  const statutoryCheckColumns: Column<Row>[] = [
+    { key: 'code', header: 'Code', render: (row) => cell(row.code) },
+    { key: 'label', header: 'Label', render: (row) => cell(row.label) },
+    { key: 'status', header: 'Status', render: (row) => cell(row.status) },
+    { key: 'severity', header: 'Severity', render: (row) => <StatusBadge value={String(row.severity)} /> },
+  ];
+
+  const epfColumns: Column<Row>[] = [
+    ...textColumns(['employeeId', 'name', 'uan']),
+    { key: 'pfWages', header: 'Pf Wages', render: (row) => String(money(row.pfWages)) },
+    { key: 'employeePf', header: 'Employee Pf', render: (row) => String(money(row.employeePf)) },
+    { key: 'employerPf', header: 'Employer Pf', render: (row) => String(money(row.employerPf)) },
+  ];
+
+  const esiColumns: Column<Row>[] = [
+    ...textColumns(['employeeId', 'name', 'esiNumber']),
+    { key: 'esiWages', header: 'Esi Wages', render: (row) => String(money(row.esiWages)) },
+    { key: 'employeeContribution', header: 'Employee Contribution', render: (row) => String(money(row.employeeContribution)) },
+    { key: 'employerContribution', header: 'Employer Contribution', render: (row) => String(money(row.employerContribution)) },
+  ];
+
+  const minWageColumns: Column<Row>[] = [
+    ...textColumns(['employeeId', 'name', 'state', 'designation']),
+    { key: 'currentWage', header: 'Current Wage', render: (row) => String(money(row.currentWage)) },
+    { key: 'minimumWage', header: 'Minimum Wage', render: (row) => String(money(row.minimumWage)) },
+    { key: 'complianceStatus', header: 'Compliance Status', render: (row) => cell(row.complianceStatus) },
+  ];
+
+  const genderGapColumns: Column<Row>[] = [
+    { key: 'department', header: 'Department', render: (row) => cell(row.department) },
+    { key: 'maleAvgSalary', header: 'Male Avg Salary', render: (row) => String(money(row.maleAvgSalary)) },
+    { key: 'femaleAvgSalary', header: 'Female Avg Salary', render: (row) => String(money(row.femaleAvgSalary)) },
+    { key: 'genderGapPercent', header: 'Gender Gap Percent', render: (row) => cell(row.genderGapPercent) },
+  ];
+
+  const obligationColumns: Column<Row>[] = [
+    { key: 'name', header: 'Name', render: (row) => cell(row.name) },
+    { key: 'obligationType', header: 'Obligation Type', render: (row) => cell(row.obligationType) },
+    { key: 'dueDate', header: 'Due Date', render: (row) => new Date(row.dueDate as string).toLocaleDateString('en-IN') },
+    { key: 'status', header: 'Status', render: (row) => <StatusBadge value={String(row.status)} /> },
+    { key: 'riskLevel', header: 'Risk Level', render: (row) => <StatusChip status={String(row.riskLevel ?? '')} /> },
+    { key: 'ownerRole', header: 'Owner Role', render: (row) => String(row.ownerRole || 'NA') },
+  ];
+
+  const auditTrailRows: Row[] = [...(center?.auditLogs || []), ...(center?.payrollAuditLogs || [])].slice(0, 14);
+  const auditTrailColumns: Column<Row>[] = [
+    { key: 'createdAt', header: 'Created At', render: (row) => new Date(row.createdAt as string).toLocaleString('en-IN') },
+    { key: 'userEmail', header: 'User Email', render: (row) => String(row.userEmail || 'system') },
+    { key: 'action', header: 'Action', render: (row) => cell(row.action) },
+    { key: 'entity', header: 'Entity', render: (row) => cell(row.entity) },
+  ];
+
+  const builderColumns: Column<Row>[] = textColumns(builderCols);
+
+  const tabItems = [
+    { key: 'center', label: 'Audit Center' },
+    { key: 'statutory', label: 'Statutory Reports' },
+    { key: 'internal', label: 'Internal Controls' },
+    { key: 'builder', label: 'Report Builder' },
+  ];
 
   return (
     <div className="app-layout">
       <Sidebar />
       <main className="main-content" style={{ padding: '1.5rem' }}>
         <div style={{ maxWidth: '1480px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-            <div>
-              <h1 style={{ fontSize: '1.55rem', fontWeight: 800, color: 'white', margin: 0 }}>
-                Compliance & Audit Report Center
-              </h1>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.35rem 0 0' }}>
-                India statutory packs, internal controls, access review, audit trails, evidence export, and management reporting.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <select className="form-control" value={month} onChange={(event) => setMonth(Number(event.target.value))} style={{ width: '120px', height: '36px' }}>
-                {Array.from({ length: 12 }).map((_, index) => (
-                  <option key={index + 1} value={index + 1}>{monthName(index + 1)}</option>
-                ))}
-              </select>
-              <input className="form-control" type="number" value={year} onChange={(event) => setYear(Number(event.target.value))} style={{ width: '96px', height: '36px' }} />
-              <input className="form-control" value={financialYear} onChange={(event) => setFinancialYear(event.target.value)} style={{ width: '100px', height: '36px' }} />
-              <button className="btn btn-neutral btn-sm" onClick={loadAll}>Refresh</button>
-            </div>
-          </div>
+          <PageHeader
+            title="Compliance & Audit Report Center"
+            subtitle="India statutory packs, internal controls, access review, audit trails, evidence export, and management reporting."
+            actions={(
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ width: 140 }}>
+                  <Select label="Month" value={String(month)} onChange={(v) => setMonth(Number(v))} options={MONTH_OPTIONS} />
+                </div>
+                <div style={{ width: 110 }}>
+                  <Field label="Year">
+                    <input className="input-field" type="number" value={year} onChange={(event) => setYear(Number(event.target.value))} />
+                  </Field>
+                </div>
+                <div style={{ width: 120 }}>
+                  <Field label="Financial Year">
+                    <input className="input-field" value={financialYear} onChange={(event) => setFinancialYear(event.target.value)} />
+                  </Field>
+                </div>
+                <Button variant="ghost" onClick={loadAll} loading={loading}>Refresh</Button>
+              </div>
+            )}
+          />
 
-          <div style={{ ...compactCard, display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-            <div style={{ minWidth: '190px' }}>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Universal Export</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Choose any report and output format.</div>
+          <Card padded style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: '200px', alignSelf: 'center' }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.25rem' }}>Universal Export</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Choose any report and output format.</div>
+              </div>
+              <div style={{ width: 260 }}>
+                <Select label="Report" value={selectedReport} onChange={setSelectedReport} options={EXPORT_REPORTS} />
+              </div>
+              <div style={{ width: 140 }}>
+                <Select label="Format" value={exportFormat} onChange={(v) => setExportFormat(v as ExportFormat)} options={FORMAT_OPTIONS} />
+              </div>
+              <Button variant="primary" onClick={handleMasterExport} loading={actionLoading}>Export Report</Button>
             </div>
-            <select className="form-control" value={selectedReport} onChange={(event) => setSelectedReport(event.target.value)} style={{ width: '240px', height: '36px' }}>
-              {EXPORT_REPORTS.map((report) => (
-                <option key={report.value} value={report.value}>{report.label}</option>
-              ))}
-            </select>
-            <select className="form-control" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)} style={{ width: '120px', height: '36px' }}>
-              <option value="xlsx">Excel</option>
-              <option value="csv">CSV</option>
-              <option value="pdf">PDF</option>
-            </select>
-            <button className="btn btn-primary btn-sm" onClick={handleMasterExport} disabled={actionLoading}>
-              {actionLoading ? 'Exporting...' : 'Export Report'}
-            </button>
-          </div>
+          </Card>
 
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
-              <div className="loading-spinner" />
-            </div>
+            <Card padded><SkeletonTable rows={6} cols={6} /></Card>
+          ) : loadError ? (
+            <Card padded>
+              <ErrorState
+                title="Couldn’t load the audit center"
+                message="We couldn’t reach the compliance and audit services. Please try again."
+                onRetry={loadAll}
+              />
+            </Card>
           ) : (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
-                {[
-                  ['Active Headcount', summary.activeEmployees],
-                  ['Payroll Status', summary.payrollStatus],
-                  ['Gross Payroll', money(summary.totalGross)],
-                  ['PF Compliance', `${compStats?.pfCompliancePercent ?? 0}%`],
-                  ['ESI Compliance', `${compStats?.esiCompliancePercent ?? 0}%`],
-                  ['Risk Exceptions', summary.riskItems],
-                  ['Overdue Obligations', summary.overdueObligations],
-                  ['Master Completeness', `${summary.employeeMasterCompleteness ?? 0}%`],
-                ].map(([label, value]) => (
-                  <div key={String(label)} style={compactCard}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.68rem', textTransform: 'uppercase', fontWeight: 700 }}>{label}</div>
-                    <div style={{ color: 'white', fontSize: '1.15rem', fontWeight: 800, marginTop: '0.35rem', wordBreak: 'break-word' }}>{String(value ?? 'NA')}</div>
-                  </div>
+              <div className="stat-grid" style={{ marginBottom: '1rem' }}>
+                {statCards.map((card) => (
+                  <StatCard key={card.label} label={card.label} value={card.value} />
                 ))}
               </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                <button style={tabStyle('center')} onClick={() => setActiveTab('center')}>Audit Center</button>
-                <button style={tabStyle('statutory')} onClick={() => setActiveTab('statutory')}>Statutory Reports</button>
-                <button style={tabStyle('internal')} onClick={() => setActiveTab('internal')}>Internal Controls</button>
-                <button style={tabStyle('builder')} onClick={() => setActiveTab('builder')}>Report Builder</button>
+              <div style={{ marginBottom: '1rem' }}>
+                <Tabs items={tabItems} value={activeTab} onChange={(key) => setActiveTab(key as TabType)} />
               </div>
 
               {activeTab === 'center' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(320px, 0.9fr)', gap: '1rem' }}>
-                  <section style={compactCard}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                      <div>
-                        <h2 style={{ color: 'white', fontSize: '1rem', margin: 0 }}>Audit Pack Generator</h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', margin: '0.25rem 0 0' }}>Generate monthly, quarterly, annual, internal, and external audit evidence packs.</p>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="btn btn-neutral btn-sm" disabled={actionLoading} onClick={handleGeneratePack}>Generate Run</button>
-                        <button className="btn btn-primary btn-sm" disabled={actionLoading} onClick={handleExportPack}>Export XLSX Pack</button>
-                      </div>
-                    </div>
+                  <Card
+                    title="Audit Pack Generator"
+                    actions={(
+                      <>
+                        <Button variant="ghost" size="sm" loading={actionLoading} onClick={handleGeneratePack}>Generate Run</Button>
+                        <Button variant="primary" size="sm" loading={actionLoading} onClick={handleExportPack}>Export XLSX Pack</Button>
+                      </>
+                    )}
+                  >
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', margin: '-0.5rem 0 0.85rem' }}>
+                      Generate monthly, quarterly, annual, internal, and external audit evidence packs.
+                    </p>
 
-                    <select className="form-control" value={selectedPack} onChange={(event) => setSelectedPack(event.target.value)} style={{ marginBottom: '0.85rem' }}>
-                      {(center?.catalog || []).map((pack: any) => (
-                        <option key={pack.id} value={pack.id}>{pack.name}</option>
-                      ))}
-                    </select>
+                    <Select
+                      value={selectedPack}
+                      onChange={setSelectedPack}
+                      options={(center?.catalog || []).map((pack: any) => ({ value: pack.id, label: pack.name }))}
+                    />
 
                     {selectedPackMeta && (
-                      <div style={{ border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: '8px', padding: '0.9rem', marginBottom: '1rem' }}>
+                      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '0.9rem', margin: '0.5rem 0 1rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                          <span className="badge" style={{ background: 'rgba(0, 167, 181, 0.14)', color: '#BFEFF4' }}>{selectedPackMeta.category}</span>
-                          <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.14)', color: '#fbbf24' }}>{selectedPackMeta.frequency}</span>
-                          <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.14)', color: '#fca5a5' }}>{selectedPackMeta.riskLevel}</span>
+                          <Badge tone="compliance">{selectedPackMeta.category}</Badge>
+                          <Badge tone="warning">{selectedPackMeta.frequency}</Badge>
+                          <Badge tone="risk">{selectedPackMeta.riskLevel}</Badge>
                         </div>
-                        <div style={{ color: 'white', fontWeight: 700 }}>{selectedPackMeta.name}</div>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{selectedPackMeta.name}</div>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', lineHeight: 1.5 }}>{selectedPackMeta.audience}</p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
                           <ListBlock title="Laws / Controls" items={selectedPackMeta.laws} />
@@ -344,234 +486,209 @@ export default function ReportsDashboard() {
                       </div>
                     )}
 
-                    <h3 style={{ color: 'white', fontSize: '0.9rem', margin: '0 0 0.6rem' }}>Generated Runs</h3>
-                    <SimpleTable
-                      columns={['type', 'status', 'period', 'generatedBy', 'createdAt', 'actions']}
-                      rows={(center?.generatedReports || []).filter((row: any) => row.type?.startsWith('AUDIT_PACK_')).map((row: any) => ({
-                        type: row.type.replace('AUDIT_PACK_', '').replaceAll('_', ' '),
-                        status: <span style={{ color: statusColor(row.status), fontWeight: 800 }}>{row.status}</span>,
-                        period: row.financialYear || `${row.month || ''}/${row.year || ''}`,
-                        generatedBy: row.generatedBy,
-                        createdAt: new Date(row.createdAt).toLocaleString('en-IN'),
-                        actions: (
-                          <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            <button className="btn btn-neutral btn-sm" onClick={() => handleStatus(row.id, 'UNDER_REVIEW')}>Review</button>
-                            <button className="btn btn-primary btn-sm" onClick={() => handleStatus(row.id, 'SIGNED_OFF')}>Sign Off</button>
-                          </div>
-                        ),
-                      }))}
-                      empty="No audit packs generated yet."
+                    <h3 style={{ color: 'var(--text-primary)', fontSize: '0.9rem', margin: '0 0 0.6rem' }}>Generated Runs</h3>
+                    <DataTable
+                      columns={auditRunColumns}
+                      rows={auditRunRows}
+                      rowKey={(row) => String(row.id)}
+                      empty={<EmptyState title="No audit packs yet" message="No audit packs generated yet." />}
                     />
-                  </section>
+                  </Card>
 
-                  <section style={compactCard}>
-                    <h2 style={{ color: 'white', fontSize: '1rem', margin: '0 0 0.75rem' }}>Risk Register</h2>
-                    <div style={{ height: 190, marginBottom: '1rem' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={riskChart}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.14)" />
-                          <XAxis dataKey="severity" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                          <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-                          <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
+                  <Card title="Risk Register">
+                    <div style={{ marginBottom: '1rem' }}>
+                      <KpiBar
+                        data={riskChart}
+                        xKey="severity"
+                        bars={[{ key: 'count', name: 'Exceptions', color: 'var(--risk-fg)' }]}
+                        height={190}
+                      />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
                       {(center?.riskItems || []).slice(0, 8).map((item: any) => (
-                        <div key={item.code} style={{ border: '1px solid rgba(148,163,184,0.14)', borderRadius: '8px', padding: '0.65rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
-                            <span style={{ color: 'white', fontSize: '0.78rem', fontWeight: 700 }}>{item.label}</span>
-                            <span style={{ color: statusColor(item.severity), fontSize: '0.7rem', fontWeight: 800 }}>{item.severity}</span>
+                        <div key={item.code} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '0.65rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-primary)', fontSize: '0.78rem', fontWeight: 700 }}>{item.label}</span>
+                            <Badge tone={statusTone(item.severity)} dot>{item.severity}</Badge>
                           </div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.25rem' }}>Status: {String(item.status)}</div>
                         </div>
                       ))}
-                      {(center?.riskItems || []).length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>No open risk exceptions for this period.</p>}
+                      {(center?.riskItems || []).length === 0 && (
+                        <EmptyState title="No open risk exceptions" message="No open risk exceptions for this period." />
+                      )}
                     </div>
-                  </section>
+                  </Card>
                 </div>
               )}
 
               {activeTab === 'statutory' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '1rem' }}>
-                  <section style={compactCard}>
-                    <h2 style={{ color: 'white', fontSize: '1rem', margin: '0 0 0.75rem' }}>Statutory Readiness Checks</h2>
-                    <SimpleTable
-                      columns={['code', 'label', 'status', 'severity']}
-                      rows={(center?.statutoryChecks || []).map((row: any) => ({
-                        ...row,
-                        severity: <span style={{ color: statusColor(row.severity), fontWeight: 800 }}>{row.severity}</span>,
-                      }))}
-                      empty="No statutory checks available."
+                  <Card title="Statutory Readiness Checks">
+                    <DataTable
+                      columns={statutoryCheckColumns}
+                      rows={(center?.statutoryChecks || []) as Row[]}
+                      empty={<EmptyState title="No statutory checks" message="No statutory checks available." />}
                     />
-                  </section>
+                  </Card>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1rem' }}>
-                    <section style={compactCard}>
-                      <h3 style={{ color: 'white', fontSize: '0.95rem', margin: '0 0 0.75rem' }}>EPF Register</h3>
-                      <SimpleTable
-                        columns={['employeeId', 'name', 'uan', 'pfWages', 'employeePf', 'employerPf']}
-                        rows={epfData.slice(0, 12).map((row) => ({ ...row, pfWages: money(row.pfWages), employeePf: money(row.employeePf), employerPf: money(row.employerPf) }))}
-                        empty="No EPF rows found."
+                    <Card title="EPF Register">
+                      <DataTable
+                        columns={epfColumns}
+                        rows={epfData.slice(0, 12) as Row[]}
+                        empty={<EmptyState title="No EPF rows" message="No EPF rows found." />}
                       />
-                    </section>
-                    <section style={compactCard}>
-                      <h3 style={{ color: 'white', fontSize: '0.95rem', margin: '0 0 0.75rem' }}>ESIC Register</h3>
-                      <SimpleTable
-                        columns={['employeeId', 'name', 'esiNumber', 'esiWages', 'employeeContribution', 'employerContribution']}
-                        rows={esiData.slice(0, 12).map((row) => ({ ...row, esiWages: money(row.esiWages), employeeContribution: money(row.employeeContribution), employerContribution: money(row.employerContribution) }))}
-                        empty="No ESIC rows found."
+                    </Card>
+                    <Card title="ESIC Register">
+                      <DataTable
+                        columns={esiColumns}
+                        rows={esiData.slice(0, 12) as Row[]}
+                        empty={<EmptyState title="No ESIC rows" message="No ESIC rows found." />}
                       />
-                    </section>
-                    <section style={compactCard}>
-                      <h3 style={{ color: 'white', fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Minimum Wage Exceptions</h3>
-                      <SimpleTable
-                        columns={['employeeId', 'name', 'state', 'designation', 'currentWage', 'minimumWage', 'complianceStatus']}
-                        rows={minWageData.map((row) => ({ ...row, currentWage: money(row.currentWage), minimumWage: money(row.minimumWage) }))}
-                        empty="No minimum wage records found."
+                    </Card>
+                    <Card title="Minimum Wage Exceptions">
+                      <DataTable
+                        columns={minWageColumns}
+                        rows={minWageData as Row[]}
+                        empty={<EmptyState title="No minimum wage records" message="No minimum wage records found." />}
                       />
-                    </section>
-                    <section style={compactCard}>
-                      <h3 style={{ color: 'white', fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Diversity and Pay Gap</h3>
-                      <div style={{ height: 230 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={diversityData} dataKey="count" nameKey="gender" innerRadius={54} outerRadius={84}>
-                              {diversityData.map((_, index) => <Cell key={index} fill={['#2563eb', '#10b981', '#f59e0b', '#ef4444'][index % 4]} />)}
-                            </Pie>
-                            <Tooltip />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <SimpleTable
-                        columns={['department', 'maleAvgSalary', 'femaleAvgSalary', 'genderGapPercent']}
-                        rows={genderGapData.map((row) => ({ ...row, maleAvgSalary: money(row.maleAvgSalary), femaleAvgSalary: money(row.femaleAvgSalary) }))}
-                        empty="No pay gap rows found."
+                    </Card>
+                    <Card title="Diversity and Pay Gap">
+                      {diversityData.length > 0 ? (
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          <KpiPie data={diversityData} dataKey="count" nameKey="gender" height={230} />
+                        </div>
+                      ) : (
+                        <EmptyState title="No diversity data" message="No diversity data available." />
+                      )}
+                      <DataTable
+                        columns={genderGapColumns}
+                        rows={genderGapData as Row[]}
+                        empty={<EmptyState title="No pay gap rows" message="No pay gap rows found." />}
                       />
-                    </section>
+                    </Card>
                   </div>
                 </div>
               )}
 
               {activeTab === 'internal' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(360px, 0.8fr)', gap: '1rem' }}>
-                  <section style={compactCard}>
-                    <h2 style={{ color: 'white', fontSize: '1rem', margin: '0 0 0.75rem' }}>Operational Control Evidence</h2>
-                    <SimpleTable columns={['area', 'metric', 'value']} rows={center?.operationalControls || []} empty="No controls available." />
-
-                    <h2 style={{ color: 'white', fontSize: '1rem', margin: '1.25rem 0 0.75rem' }}>Compliance Obligations Calendar</h2>
-                    <SimpleTable
-                      columns={['name', 'obligationType', 'dueDate', 'status', 'riskLevel', 'ownerRole']}
-                      rows={(center?.obligations || []).map((row: any) => ({
-                        name: row.name,
-                        obligationType: row.obligationType,
-                        dueDate: new Date(row.dueDate).toLocaleDateString('en-IN'),
-                        status: <span style={{ color: statusColor(row.status), fontWeight: 800 }}>{row.status}</span>,
-                        riskLevel: row.riskLevel,
-                        ownerRole: row.ownerRole || 'NA',
-                      }))}
-                      empty="No compliance obligations configured."
-                    />
-                  </section>
-
-                  <section style={compactCard}>
-                    <h2 style={{ color: 'white', fontSize: '1rem', margin: '0 0 0.75rem' }}>Access Review</h2>
-                    <SimpleTable
-                      columns={['name', 'email', 'role']}
-                      rows={(center?.privilegedUsers || []).slice(0, 12)}
-                      empty="No privileged users found."
+                  <Card title="Operational Control Evidence">
+                    <DataTable
+                      columns={textColumns(['area', 'metric', 'value'])}
+                      rows={(center?.operationalControls || []) as Row[]}
+                      empty={<EmptyState title="No controls" message="No controls available." />}
                     />
 
-                    <h2 style={{ color: 'white', fontSize: '1rem', margin: '1.25rem 0 0.75rem' }}>Recent Audit Trail</h2>
-                    <SimpleTable
-                      columns={['createdAt', 'userEmail', 'action', 'entity']}
-                      rows={[...(center?.auditLogs || []), ...(center?.payrollAuditLogs || [])].slice(0, 14).map((row: any) => ({
-                        createdAt: new Date(row.createdAt).toLocaleString('en-IN'),
-                        userEmail: row.userEmail || 'system',
-                        action: row.action,
-                        entity: row.entity,
-                      }))}
-                      empty="No audit logs available."
+                    <h2 style={{ color: 'var(--text-primary)', fontSize: '1rem', margin: '1.25rem 0 0.75rem' }}>Compliance Obligations Calendar</h2>
+                    <DataTable
+                      columns={obligationColumns}
+                      rows={(center?.obligations || []) as Row[]}
+                      empty={<EmptyState title="No obligations" message="No compliance obligations configured." />}
                     />
-                  </section>
+                  </Card>
+
+                  <Card title="Access Review">
+                    <DataTable
+                      columns={textColumns(['name', 'email', 'role'])}
+                      rows={((center?.privilegedUsers || []) as Row[]).slice(0, 12)}
+                      empty={<EmptyState title="No privileged users" message="No privileged users found." />}
+                    />
+
+                    <h2 style={{ color: 'var(--text-primary)', fontSize: '1rem', margin: '1.25rem 0 0.75rem' }}>Recent Audit Trail</h2>
+                    <DataTable
+                      columns={auditTrailColumns}
+                      rows={auditTrailRows}
+                      empty={<EmptyState title="No audit logs" message="No audit logs available." />}
+                    />
+                  </Card>
                 </div>
               )}
 
               {activeTab === 'builder' && (
-                <section style={compactCard}>
-                  <h2 style={{ color: 'white', fontSize: '1rem', margin: '0 0 0.75rem' }}>Ad-Hoc Employee Report Builder</h2>
+                <Card title="Ad-Hoc Employee Report Builder">
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
                     <div>
-                      <label style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', fontWeight: 700 }}>Output Columns</label>
+                      <label className="form-label">Output Columns</label>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.45rem', marginTop: '0.5rem' }}>
-                        {['employeeId', 'firstName', 'lastName', 'email', 'gender', 'jobTitle', 'department', 'location', 'employmentType', 'salary'].map((column) => (
-                          <label key={column} style={{ color: 'var(--text-secondary)', fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <input
-                              type="checkbox"
-                              checked={builderCols.includes(column)}
-                              onChange={(event) => setBuilderCols(event.target.checked ? [...builderCols, column] : builderCols.filter((item) => item !== column))}
-                            />
-                            {column}
-                          </label>
+                        {BUILDER_COLUMNS.map((column) => (
+                          <Checkbox
+                            key={column}
+                            label={column}
+                            checked={builderCols.includes(column)}
+                            onChange={(checked) => setBuilderCols(checked ? [...builderCols, column] : builderCols.filter((item) => item !== column))}
+                          />
                         ))}
                       </div>
                     </div>
 
                     <div>
-                      <label style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', fontWeight: 700 }}>Filters</label>
+                      <label className="form-label">Filters</label>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginTop: '0.5rem' }}>
                         {builderFilters.map((filter, index) => (
-                          <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.35rem' }}>
-                            <select className="form-control" value={filter.field} onChange={(event) => {
+                          <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '0.35rem', alignItems: 'center' }}>
+                            <select className="select-field" value={filter.field} onChange={(event) => {
                               const list = [...builderFilters];
                               list[index].field = event.target.value;
                               setBuilderFilters(list);
                             }}>
-                              <option value="">Field</option>
-                              <option value="gender">Gender</option>
-                              <option value="department">Department</option>
-                              <option value="location">Location</option>
-                              <option value="employmentType">Employment Type</option>
-                              <option value="age">Age</option>
-                              <option value="experience">Experience</option>
+                              {FILTER_FIELD_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
-                            <select className="form-control" value={filter.operator} onChange={(event) => {
+                            <select className="select-field" value={filter.operator} onChange={(event) => {
                               const list = [...builderFilters];
                               list[index].operator = event.target.value;
                               setBuilderFilters(list);
                             }}>
-                              <option value="EQUALS">Equals</option>
-                              <option value="CONTAINS">Contains</option>
-                              <option value="GREATER_THAN">Greater Than</option>
-                              <option value="LESS_THAN">Less Than</option>
+                              {FILTER_OPERATOR_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
-                            <input className="form-control" value={filter.value} placeholder="Value" onChange={(event) => {
+                            <input className="input-field" value={filter.value} placeholder="Value" onChange={(event) => {
                               const list = [...builderFilters];
                               list[index].value = event.target.value;
                               setBuilderFilters(list);
                             }} />
-                            <button className="btn btn-neutral btn-sm" onClick={() => setBuilderFilters(builderFilters.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
+                            <Button variant="ghost" size="sm" onClick={() => setBuilderFilters(builderFilters.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button>
                           </div>
                         ))}
-                        <button className="btn btn-neutral btn-sm" style={{ width: 'fit-content' }} onClick={() => setBuilderFilters([...builderFilters, { field: '', operator: 'EQUALS', value: '' }])}>Add Filter</button>
+                        <Button variant="ghost" size="sm" style={{ width: 'fit-content' }} onClick={() => setBuilderFilters([...builderFilters, { field: '', operator: 'EQUALS', value: '' }])}>Add Filter</Button>
                       </div>
                     </div>
                   </div>
 
-                  <button className="btn btn-primary btn-sm" disabled={builderRunning} onClick={runBuilderQuery}>
-                    {builderRunning ? 'Running...' : 'Run Query'}
-                  </button>
+                  <Button variant="primary" size="sm" loading={builderRunning} onClick={runBuilderQuery}>Run Query</Button>
 
                   <div style={{ marginTop: '1rem' }}>
-                    <SimpleTable columns={builderCols} rows={builderResult} empty="Run a query to view matching records." />
+                    <DataTable
+                      columns={builderColumns}
+                      rows={builderResult as Row[]}
+                      empty={<EmptyState title="No results" message="Run a query to view matching records." />}
+                    />
                   </div>
-                </section>
+                </Card>
               )}
             </>
           )}
         </div>
       </main>
+
+      <ConfirmDialog
+        open={!!statusPrompt}
+        title={statusPrompt?.status === 'SIGNED_OFF' ? 'Sign off audit pack' : 'Mark under review'}
+        message={statusPrompt?.status === 'SIGNED_OFF'
+          ? 'Record your sign-off on this audit pack. This adds your remarks to the audit trail.'
+          : 'Move this audit pack into review. Add remarks for the audit trail.'}
+        confirmLabel={statusPrompt?.status === 'SIGNED_OFF' ? 'Sign Off' : 'Mark Under Review'}
+        requireReason
+        reasonLabel="Remarks"
+        loading={actionLoading}
+        onCancel={() => setStatusPrompt(null)}
+        onConfirm={async (reason) => {
+          if (!statusPrompt) return;
+          const { id, status } = statusPrompt;
+          setStatusPrompt(null);
+          await handleStatus(id, status, reason);
+        }}
+      />
     </div>
   );
 }
@@ -583,39 +700,6 @@ function ListBlock({ title, items }: { title: string; items: string[] }) {
       <ul style={{ margin: 0, paddingLeft: '1rem', color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.55 }}>
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
-    </div>
-  );
-}
-
-function SimpleTable({ columns, rows, empty }: { columns: string[]; rows: any[]; empty: string }) {
-  return (
-    <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', minWidth: columns.length > 4 ? '720px' : '420px' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.18)' }}>
-            {columns.map((column) => (
-              <th key={column} style={{ color: 'var(--text-secondary)', padding: '0.55rem', textAlign: 'left', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
-                {column.replace(/([A-Z])/g, ' $1')}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} style={{ color: 'var(--text-muted)', padding: '1rem', textAlign: 'center' }}>{empty}</td>
-            </tr>
-          ) : rows.map((row, index) => (
-            <tr key={index} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.08)' }}>
-              {columns.map((column) => (
-                <td key={column} style={{ color: 'var(--text-secondary)', padding: '0.52rem', verticalAlign: 'top', maxWidth: '260px', wordBreak: 'break-word' }}>
-                  {row[column] === null || row[column] === undefined ? 'NA' : row[column]}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

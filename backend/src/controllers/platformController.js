@@ -301,7 +301,8 @@ const startWorkflow = async (req, res) => {
     });
     res.status(201).json(instance);
   } catch (error) {
-    res.status(500).json({ error: error.message || 'Server error' });
+    console.error('CREATE WORKFLOW INSTANCE ERROR:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 };
 

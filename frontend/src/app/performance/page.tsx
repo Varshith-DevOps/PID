@@ -13,8 +13,22 @@ import {
   getEmployees,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
-import { ValidatedInput, ValidatedTextarea } from '@/components/ValidatedField';
 import { validateForm, required, percentage } from '@/lib/validators';
+import {
+  Banner,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingBlock,
+  Modal,
+  PageHeader,
+  Select,
+  StatCard,
+  TextField,
+  Textarea,
+} from '@/components/ui';
 
 interface KRA {
   id: string;
@@ -40,6 +54,12 @@ interface Feedback {
   };
 }
 
+const PERF_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
+  </svg>
+);
+
 export default function PerformanceDashboard() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -48,6 +68,7 @@ export default function PerformanceDashboard() {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   // Modals & Drawers
   const [showGoalModal, setShowGoalModal] = useState(false);
@@ -87,17 +108,24 @@ export default function PerformanceDashboard() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(false);
     try {
-      const [krasData, feedbackData, employeesData] = await Promise.all([
-        getKras(),
-        getFeedback360(),
-        getEmployees(),
-      ]);
-      setKras(krasData);
-      setFeedbacks(feedbackData);
+      // Always load the directory (used for the peer-review picker).
+      const employeesData = await getEmployees();
       setEmployees(employeesData.employees.filter((e: any) => e.id !== user?.employeeId));
+      // Personal KRAs and 360° reviews require an employee profile. Admin/owner
+      // accounts that aren't employees skip these (instead of erroring out).
+      if (user?.employeeId) {
+        const [krasData, feedbackData] = await Promise.all([getKras(), getFeedback360()]);
+        setKras(krasData);
+        setFeedbacks(feedbackData);
+      } else {
+        setKras([]);
+        setFeedbacks([]);
+      }
     } catch (err) {
       console.error(err);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -178,95 +206,114 @@ export default function PerformanceDashboard() {
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        
-        {/* Header */}
-        <div className="page-header">
-          <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
-                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-              </svg>
-            </div>
-            <div>
-              <h1 className="page-title">Performance & Goals</h1>
-              <p className="page-subtitle">Track your Key Result Areas (KRAs), continuous peer reviews, and appraisals</p>
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button onClick={() => router.push('/performance/appraisals')} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              📋 Appraisal Cycles
-            </button>
-            <button onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', border: 'none', boxShadow: '0 4px 15px rgba(236,72,153,0.3)' }}>
-              + Define Goal KRA
-            </button>
+        <PageHeader
+          title="Performance & Goals"
+          subtitle="Track your Key Result Areas (KRAs), continuous peer reviews, and appraisals"
+          icon={PERF_ICON}
+          actions={
+            <>
+              <Button variant="ghost" onClick={() => router.push('/performance/appraisals')}>
+                Appraisal Cycles
+              </Button>
+              <Button variant="primary" onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }}>
+                + Define Goal KRA
+              </Button>
+            </>
+          }
+        />
+
+        {!user?.employeeId && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <Banner tone="info" title="Viewing as an administrator">
+              This account isn&apos;t linked to an employee profile, so personal KRAs and 360° reviews aren&apos;t shown here.
+              Open an employee from the directory to review their performance.
+            </Banner>
           </div>
-        </div>
+        )}
 
         {/* Aggregate Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div className="glass-card" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>KRA Target Weightage</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.5rem', display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-              {totalWeightage}% <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ 100%</span>
-            </div>
-            <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', marginTop: '0.75rem', overflow: 'hidden' }}>
-              <div style={{ width: `${totalWeightage}%`, height: '100%', background: 'linear-gradient(90deg, #ec4899, #f43f5e)' }}></div>
-            </div>
-          </div>
-
-          <div className="glass-card" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>360 Peer Evaluation</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.5rem', display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-              {averageFeedbackRating} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: '#eab308' }}>★</span>
-            </div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Based on {feedbacks.length} peer feedback responses</div>
-          </div>
-
-          <div className="glass-card" style={{ padding: '1.25rem', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>Active Goals</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.5rem' }}>
-              {kras.filter(k => k.status === 'IN_PROGRESS' || k.status === 'PENDING').length}
-            </div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>{kras.filter(k => k.status === 'ACHIEVED').length} goals achieved</div>
-          </div>
+          <StatCard
+            label="KRA Target Weightage"
+            value={
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: '0.25rem' }}>
+                {totalWeightage}%
+                <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ 100%</span>
+              </span>
+            }
+          />
+          <StatCard
+            label="360 Peer Evaluation"
+            value={
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: '0.25rem' }}>
+                {averageFeedbackRating}
+                <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--warning-fg)' }}>★</span>
+              </span>
+            }
+          />
+          <StatCard
+            label="Active Goals"
+            value={kras.filter(k => k.status === 'IN_PROGRESS' || k.status === 'PENDING').length}
+          />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
-          
+
           {/* Personal Goals (KRAs) Block */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'white' }}>Key Result Areas (KRAs)</h2>
+              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Key Result Areas (KRAs)</h2>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Year 2026 Goals</span>
             </div>
 
             {loading ? (
-              <div className="loading-container"><div className="loading-spinner" />Loading goals...</div>
+              <LoadingBlock label="Loading goals..." />
+            ) : error ? (
+              <ErrorState onRetry={loadData} />
             ) : kras.length === 0 ? (
-              <div className="empty-state" style={{ minHeight: '200px' }}>No active goals defined. Click "Define Goal KRA" to start.</div>
+              <EmptyState
+                title="No active goals defined"
+                message='Click "Define Goal KRA" to start.'
+                action={<Button variant="primary" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }}>+ Define Goal KRA</Button>}
+              />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {kras.map(kra => (
-                  <div key={kra.id} className="glass-card" style={{ padding: '1.25rem', borderLeft: kra.status === 'ACHIEVED' ? '4px solid #10b981' : kra.status === 'MISSED' ? '4px solid #ef4444' : '4px solid #ec4899', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'white' }}>{kra.title}</h3>
-                        {kra.description && <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{kra.description}</p>}
+                  <Card
+                    key={kra.id}
+                    style={{
+                      borderLeft: kra.status === 'ACHIEVED' ? '4px solid var(--success-fg)'
+                        : kra.status === 'MISSED' ? '4px solid var(--danger-fg)'
+                        : '4px solid var(--accent)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>{kra.title}</h3>
+                          {kra.description && <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{kra.description}</p>}
+                        </div>
+                        <div style={{ width: 150, flexShrink: 0 }}>
+                          <Select
+                            value={kra.status}
+                            onChange={v => handleStatusChange(kra.id, v)}
+                            options={[
+                              { value: 'PENDING', label: 'Pending' },
+                              { value: 'IN_PROGRESS', label: 'In Progress' },
+                              { value: 'ACHIEVED', label: 'Achieved' },
+                              { value: 'MISSED', label: 'Missed' },
+                            ]}
+                          />
+                        </div>
                       </div>
-                      <select value={kra.status} onChange={e => handleStatusChange(kra.id, e.target.value)} className="select-field" style={{ width: '120px', padding: '0.2rem', fontSize: '0.7rem' }}>
-                        <option value="PENDING">Pending</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="ACHIEVED">Achieved</option>
-                        <option value="MISSED">Missed</option>
-                      </select>
-                    </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                      <div>🎯 Target: <strong>{kra.target || '—'}</strong></div>
-                      <div>Weightage: <span style={{ color: '#ec4899', fontWeight: 600 }}>{kra.weightage}%</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                        <div>🎯 Target: <strong>{kra.target || '—'}</strong></div>
+                        <div>Weightage: <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{kra.weightage}%</span></div>
+                      </div>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}
@@ -275,37 +322,41 @@ export default function PerformanceDashboard() {
           {/* 360 Continuous Feedback Block */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'white' }}>360 Peer Reviews</h2>
-              <button onClick={() => { setSubmitted(false); setFormError(''); setShowFeedbackModal(true); }} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem' }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>360 Peer Reviews</h2>
+              <Button variant="ghost" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setShowFeedbackModal(true); }}>
                 ✍️ Write Peer Review
-              </button>
+              </Button>
             </div>
 
             {loading ? (
-              <div className="loading-container"><div className="loading-spinner" />Loading feedback...</div>
+              <LoadingBlock label="Loading feedback..." />
+            ) : error ? (
+              <ErrorState onRetry={loadData} />
             ) : feedbacks.length === 0 ? (
-              <div className="empty-state" style={{ minHeight: '200px' }}>No anonymous peer reviews recorded yet.</div>
+              <EmptyState title="No peer reviews yet" message="No anonymous peer reviews recorded yet." />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {feedbacks.map(fb => (
-                  <div key={fb.id} className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'white' }}>
-                        {fb.reviewer.firstName} {fb.reviewer.lastName} ({fb.relationship})
-                      </span>
-                      <span style={{ color: '#eab308', fontSize: '0.7rem' }}>
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <span key={i}>{i < fb.rating ? '★' : '☆'}</span>
-                        ))}
-                      </span>
+                  <Card key={fb.id} style={{ padding: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {fb.reviewer.firstName} {fb.reviewer.lastName} ({fb.relationship})
+                        </span>
+                        <span style={{ color: 'var(--warning-fg)', fontSize: '0.7rem' }}>
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <span key={i}>{i < fb.rating ? '★' : '☆'}</span>
+                          ))}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--surface-sunken)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', fontStyle: 'italic' }}>
+                        "{fb.feedback}"
+                      </p>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', alignSelf: 'flex-end' }}>
+                        {new Date(fb.createdAt).toLocaleDateString()}
+                      </div>
                     </div>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.15)', padding: '0.5rem', borderRadius: '4px', fontStyle: 'italic' }}>
-                      "{fb.feedback}"
-                    </p>
-                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', alignSelf: 'flex-end' }}>
-                      {new Date(fb.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}
@@ -314,127 +365,147 @@ export default function PerformanceDashboard() {
         </div>
 
         {/* Define Goal Modal */}
-        {showGoalModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>Define KRA Goal</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Create a Key Result Area target metric</p>
-              </div>
+        <Modal
+          open={showGoalModal}
+          onClose={() => setShowGoalModal(false)}
+          title="Define KRA Goal"
+          width={440}
+        >
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-0.5rem', marginBottom: '1rem' }}>
+            Create a Key Result Area target metric
+          </p>
 
-              {formError && (
-                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
-                  {formError}
-                </div>
-              )}
-
-              <form onSubmit={handleCreateGoal} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Goal Title</label>
-                  <ValidatedInput type="text" placeholder="e.g., Deliver Next.js App migration" required value={goalForm.title} onChange={v => setGoalForm({ ...goalForm, title: v })} validator={required('Goal title')} forceError={submitted} className="input-field" />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Description</label>
-                  <ValidatedTextarea placeholder="Detail target scope and milestones..." value={goalForm.description} onChange={v => setGoalForm({ ...goalForm, description: v })} className="input-field" style={{ minHeight: '60px', fontFamily: 'inherit' }} />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Weightage (%)</label>
-                    <ValidatedInput type="text" inputMode="numeric" required value={String(goalForm.weightage)} onChange={v => setGoalForm({ ...goalForm, weightage: v === '' ? 0 : parseInt(v) })} validator={percentage} restrict="digits" maxLength={3} forceError={submitted} className="input-field" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Target Metric</label>
-                    <ValidatedInput type="text" placeholder="e.g. 100% test coverage" value={goalForm.target} onChange={v => setGoalForm({ ...goalForm, target: v })} className="input-field" />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowGoalModal(false)} className="btn btn-secondary">
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', border: 'none' }}>
-                    Record Goal
-                  </button>
-                </div>
-              </form>
+          {formError && (
+            <div style={{ marginBottom: '1rem' }}>
+              <Banner tone="danger">{formError}</Banner>
             </div>
-          </div>
-        )}
+          )}
+
+          <form onSubmit={handleCreateGoal} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <TextField
+              label="Goal Title"
+              type="text"
+              placeholder="e.g., Deliver Next.js App migration"
+              required
+              value={goalForm.title}
+              onChange={v => setGoalForm({ ...goalForm, title: v })}
+              validator={required('Goal title')}
+              forceError={submitted}
+            />
+
+            <Textarea
+              label="Description"
+              placeholder="Detail target scope and milestones..."
+              value={goalForm.description}
+              onChange={v => setGoalForm({ ...goalForm, description: v })}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <TextField
+                label="Weightage (%)"
+                type="text"
+                required
+                value={String(goalForm.weightage)}
+                onChange={v => setGoalForm({ ...goalForm, weightage: v === '' ? 0 : parseInt(v) })}
+                validator={percentage}
+                restrict="digits"
+                maxLength={3}
+                forceError={submitted}
+              />
+              <TextField
+                label="Target Metric"
+                type="text"
+                placeholder="e.g. 100% test coverage"
+                value={goalForm.target}
+                onChange={v => setGoalForm({ ...goalForm, target: v })}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <Button type="button" variant="ghost" onClick={() => setShowGoalModal(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Record Goal</Button>
+            </div>
+          </form>
+        </Modal>
 
         {/* Continuous 360 Review Modal */}
-        {showFeedbackModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>Write Peer Review</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Provide continuous performance insights</p>
-              </div>
+        <Modal
+          open={showFeedbackModal}
+          onClose={() => setShowFeedbackModal(false)}
+          title="Write Peer Review"
+          width={440}
+        >
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '-0.5rem', marginBottom: '1rem' }}>
+            Provide continuous performance insights
+          </p>
 
-              {formError && (
-                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.8rem' }}>
-                  {formError}
-                </div>
-              )}
-
-              <form onSubmit={handleCreateFeedback} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Select Team Member</label>
-                  <select required value={feedbackForm.employeeId} onChange={e => setFeedbackForm({ ...feedbackForm, employeeId: e.target.value })} className="select-field">
-                    <option value="">Choose colleague...</option>
-                    {employees.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} ({emp.jobTitle})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Colleague Relationship</label>
-                    <select value={feedbackForm.relationship} onChange={e => setFeedbackForm({ ...feedbackForm, relationship: e.target.value })} className="select-field">
-                      <option value="PEER">Peer</option>
-                      <option value="SUBORDINATE">Subordinate</option>
-                      <option value="MANAGER">Manager</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Anonymity</label>
-                    <select value={feedbackForm.anonymous ? 'true' : 'false'} onChange={e => setFeedbackForm({ ...feedbackForm, anonymous: e.target.value === 'true' })} className="select-field">
-                      <option value="false">Share My Name</option>
-                      <option value="true">Make Anonymous</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Colleague Evaluation Score</label>
-                  <select value={feedbackForm.rating} onChange={e => setFeedbackForm({ ...feedbackForm, rating: parseInt(e.target.value) })} className="select-field">
-                    <option value="5">5 - Masterful / Outperforming</option>
-                    <option value="4">4 - High Quality / Strong</option>
-                    <option value="3">3 - Fully Competent</option>
-                    <option value="2">2 - Needs Improvement</option>
-                    <option value="1">1 - Severe Performance Gaps</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Written Review & Feedback</label>
-                  <ValidatedTextarea placeholder="Describe how this colleague contributes to the team and project success..." required value={feedbackForm.feedback} onChange={v => setFeedbackForm({ ...feedbackForm, feedback: v })} validator={required('Feedback')} forceError={submitted} className="input-field" style={{ minHeight: '80px', fontFamily: 'inherit' }} />
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowFeedbackModal(false)} className="btn btn-secondary">
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)', border: 'none' }}>
-                    Submit Review
-                  </button>
-                </div>
-              </form>
+          {formError && (
+            <div style={{ marginBottom: '1rem' }}>
+              <Banner tone="danger">{formError}</Banner>
             </div>
-          </div>
-        )}
+          )}
+
+          <form onSubmit={handleCreateFeedback} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <Field label="Select Team Member" required>
+              <select required value={feedbackForm.employeeId} onChange={e => setFeedbackForm({ ...feedbackForm, employeeId: e.target.value })} className="select-field">
+                <option value="">Choose colleague...</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} ({emp.jobTitle})</option>
+                ))}
+              </select>
+            </Field>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <Select
+                label="Colleague Relationship"
+                value={feedbackForm.relationship}
+                onChange={v => setFeedbackForm({ ...feedbackForm, relationship: v })}
+                options={[
+                  { value: 'PEER', label: 'Peer' },
+                  { value: 'SUBORDINATE', label: 'Subordinate' },
+                  { value: 'MANAGER', label: 'Manager' },
+                ]}
+              />
+              <Select
+                label="Anonymity"
+                value={feedbackForm.anonymous ? 'true' : 'false'}
+                onChange={v => setFeedbackForm({ ...feedbackForm, anonymous: v === 'true' })}
+                options={[
+                  { value: 'false', label: 'Share My Name' },
+                  { value: 'true', label: 'Make Anonymous' },
+                ]}
+              />
+            </div>
+
+            <Select
+              label="Colleague Evaluation Score"
+              value={String(feedbackForm.rating)}
+              onChange={v => setFeedbackForm({ ...feedbackForm, rating: parseInt(v) })}
+              options={[
+                { value: '5', label: '5 - Masterful / Outperforming' },
+                { value: '4', label: '4 - High Quality / Strong' },
+                { value: '3', label: '3 - Fully Competent' },
+                { value: '2', label: '2 - Needs Improvement' },
+                { value: '1', label: '1 - Severe Performance Gaps' },
+              ]}
+            />
+
+            <Textarea
+              label="Written Review & Feedback"
+              placeholder="Describe how this colleague contributes to the team and project success..."
+              required
+              value={feedbackForm.feedback}
+              onChange={v => setFeedbackForm({ ...feedbackForm, feedback: v })}
+              validator={required('Feedback')}
+              forceError={submitted}
+            />
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <Button type="button" variant="ghost" onClick={() => setShowFeedbackModal(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Submit Review</Button>
+            </div>
+          </form>
+        </Modal>
       </main>
     </div>
   );

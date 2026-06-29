@@ -7,6 +7,19 @@ import {
   auditTdsProof,
   regularizeAttendanceWinston
 } from '@/lib/api';
+import {
+  PageHeader, Card, Badge, Button, Banner, StatusChip,
+  Field, Select, TextField, NumberField, FileDrop, EmptyState,
+} from '@/components/ui';
+
+type AgentKey = 'athena' | 'jarvis' | 'sherlock' | 'winston';
+
+const AGENTS: { key: AgentKey; name: string; role: string; icon: string; accent: string }[] = [
+  { key: 'athena', name: 'Athena', role: 'Policy & RAG Coordinator', icon: '💬', accent: 'var(--accent)' },
+  { key: 'jarvis', name: 'Jarvis', role: 'Statutory Payroll Auditor', icon: '📊', accent: 'var(--success-fg)' },
+  { key: 'sherlock', name: 'Sherlock', role: 'TDS Document Assessor', icon: '🔍', accent: 'var(--warning-fg)' },
+  { key: 'winston', name: 'Winston', role: 'Roster & Attendance Arbiter', icon: '⚡', accent: 'var(--danger-fg)' },
+];
 
 export default function AIAgentsPage() {
   // Athena state
@@ -21,6 +34,7 @@ export default function AIAgentsPage() {
   const [jarvisYear, setJarvisYear] = useState(2026);
   const [jarvisReport, setJarvisReport] = useState<any>(null);
   const [jarvisLoading, setJarvisLoading] = useState(false);
+  const [jarvisError, setJarvisError] = useState(false);
 
   // Sherlock state
   const [sherlockCategory, setSherlockCategory] = useState('HRA');
@@ -29,14 +43,16 @@ export default function AIAgentsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sherlockReport, setSherlockReport] = useState<any>(null);
   const [sherlockLoading, setSherlockLoading] = useState(false);
+  const [sherlockError, setSherlockError] = useState(false);
 
   // Winston state
   const [winstonDate, setWinstonDate] = useState('2026-06-12');
   const [winstonReport, setWinstonReport] = useState<any>(null);
   const [winstonLoading, setWinstonLoading] = useState(false);
+  const [winstonError, setWinstonError] = useState(false);
 
   // Active Tab
-  const [activeAgent, setActiveAgent] = useState<'athena' | 'jarvis' | 'sherlock' | 'winston'>('athena');
+  const [activeAgent, setActiveAgent] = useState<AgentKey>('athena');
 
   // Handle Athena Question
   const handleAthenaSubmit = async (e: React.FormEvent) => {
@@ -62,11 +78,13 @@ export default function AIAgentsPage() {
   const handleJarvisRun = async () => {
     setJarvisLoading(true);
     setJarvisReport(null);
+    setJarvisError(false);
     try {
       const res = await auditPayrollCompliance(jarvisMonth, jarvisYear);
       setJarvisReport(res);
     } catch (err) {
       console.error(err);
+      setJarvisError(true);
     } finally {
       setJarvisLoading(false);
     }
@@ -76,11 +94,13 @@ export default function AIAgentsPage() {
   const handleWinstonRun = async () => {
     setWinstonLoading(true);
     setWinstonReport(null);
+    setWinstonError(false);
     try {
       const res = await regularizeAttendanceWinston({ dateStr: winstonDate });
       setWinstonReport(res);
     } catch (err) {
       console.error(err);
+      setWinstonError(true);
     } finally {
       setWinstonLoading(false);
     }
@@ -91,6 +111,7 @@ export default function AIAgentsPage() {
     e.preventDefault();
     setSherlockLoading(true);
     setSherlockReport(null);
+    setSherlockError(false);
 
     try {
       const fd = new FormData();
@@ -105,180 +126,156 @@ export default function AIAgentsPage() {
       setSherlockReport(res);
     } catch (err) {
       console.error(err);
+      setSherlockError(true);
     } finally {
       setSherlockLoading(false);
     }
   };
 
+  const sectionHeaderStyle: React.CSSProperties = {
+    borderBottom: '1px solid var(--border-subtle)',
+    paddingBottom: '1.25rem',
+    marginBottom: '1.5rem',
+  };
+
   return (
-    <div style={{ padding: '2rem', minHeight: '100vh', backgroundColor: '#0A0E1A', color: '#FFFFFF' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '2.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-          <span style={{ padding: '0.4rem 0.8rem', background: 'rgba(0,167,181,0.1)', color: '#73E0E7', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>
-            INTELLIGENT LAYER ACTIVE
-          </span>
-        </div>
-        <h1 style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.75px', margin: 0, background: 'linear-gradient(to right, #FFFFFF, #94A3B8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          AI Command Center
-        </h1>
-        <p style={{ color: '#94A3B8', marginTop: '0.5rem', fontSize: '1rem' }}>
-          Orchestrate and query PID hcms's four master-level autonomous AI compliance agents.
-        </p>
-      </div>
+    <div style={{ padding: '2rem', minHeight: '100vh' }}>
+      <PageHeader
+        title="AI Command Center"
+        subtitle="Orchestrate and query PID HRMS's four master-level autonomous AI compliance agents."
+        actions={<Badge tone="info" dot>Intelligent Layer Active</Badge>}
+      />
 
       {/* Agents Selection Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '3rem' }}>
-        {/* Athena */}
-        <div 
-          onClick={() => setActiveAgent('athena')}
-          style={{ 
-            padding: '1.5rem', 
-            borderRadius: '16px', 
-            background: activeAgent === 'athena' ? 'rgba(0,167,181,0.1)' : '#0F172A',
-            border: activeAgent === 'athena' ? '2px solid #00A7B5' : '1px solid #1E293B',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ width: '40px', height: '40px', background: 'rgba(24,43,109,0.1)', color: '#00A7B5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              💬
-            </div>
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
-          </div>
-          <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontWeight: 'bold' }}>Athena</h3>
-          <p style={{ margin: 0, color: '#64748B', fontSize: '0.85rem' }}>Policy & RAG Coordinator</p>
-        </div>
-
-        {/* Jarvis */}
-        <div 
-          onClick={() => setActiveAgent('jarvis')}
-          style={{ 
-            padding: '1.5rem', 
-            borderRadius: '16px', 
-            background: activeAgent === 'jarvis' ? 'rgba(0,167,181,0.1)' : '#0F172A',
-            border: activeAgent === 'jarvis' ? '2px solid #00A7B5' : '1px solid #1E293B',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ width: '40px', height: '40px', background: 'rgba(16,185,129,0.1)', color: '#34D399', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              📊
-            </div>
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
-          </div>
-          <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontWeight: 'bold' }}>Jarvis</h3>
-          <p style={{ margin: 0, color: '#64748B', fontSize: '0.85rem' }}>Statutory Payroll Auditor</p>
-        </div>
-
-        {/* Sherlock */}
-        <div 
-          onClick={() => setActiveAgent('sherlock')}
-          style={{ 
-            padding: '1.5rem', 
-            borderRadius: '16px', 
-            background: activeAgent === 'sherlock' ? 'rgba(0,167,181,0.1)' : '#0F172A',
-            border: activeAgent === 'sherlock' ? '2px solid #00A7B5' : '1px solid #1E293B',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ width: '40px', height: '40px', background: 'rgba(245,158,11,0.1)', color: '#FBBF24', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              🔍
-            </div>
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
-          </div>
-          <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontWeight: 'bold' }}>Sherlock</h3>
-          <p style={{ margin: 0, color: '#64748B', fontSize: '0.85rem' }}>TDS Document Assessor</p>
-        </div>
-
-        {/* Winston */}
-        <div 
-          onClick={() => setActiveAgent('winston')}
-          style={{ 
-            padding: '1.5rem', 
-            borderRadius: '16px', 
-            background: activeAgent === 'winston' ? 'rgba(0,167,181,0.1)' : '#0F172A',
-            border: activeAgent === 'winston' ? '2px solid #00A7B5' : '1px solid #1E293B',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ width: '40px', height: '40px', background: 'rgba(239,68,68,0.1)', color: '#F87171', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              ⚡
-            </div>
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 8px #10B981' }} />
-          </div>
-          <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontWeight: 'bold' }}>Winston</h3>
-          <p style={{ margin: 0, color: '#64748B', fontSize: '0.85rem' }}>Roster & Attendance Arbiter</p>
-        </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '1.25rem',
+          marginBottom: '2.5rem',
+        }}
+      >
+        {AGENTS.map((agent) => {
+          const active = activeAgent === agent.key;
+          return (
+            <button
+              key={agent.key}
+              type="button"
+              onClick={() => setActiveAgent(agent.key)}
+              className="card"
+              style={{
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                background: active ? 'var(--accent-soft)' : 'var(--surface-raised)',
+                border: active ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
+                transition: 'var(--transition)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div
+                  style={{
+                    width: '40px', height: '40px', borderRadius: 'var(--radius-md)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--surface-sunken)', fontSize: '1.1rem',
+                  }}
+                >
+                  {agent.icon}
+                </div>
+                <span
+                  title="Online"
+                  style={{
+                    display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+                    background: 'var(--success-fg)', boxShadow: '0 0 8px var(--success-fg)',
+                  }}
+                />
+              </div>
+              <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{agent.name}</h3>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>{agent.role}</p>
+            </button>
+          );
+        })}
       </div>
 
       {/* Main Agent Interface Console */}
-      <div style={{ background: '#0F172A', border: '1px solid #1E293B', borderRadius: '20px', padding: '2rem' }}>
-        
+      <Card>
         {/* Tab 1: Athena */}
         {activeAgent === 'athena' && (
           <div>
-            <div style={{ borderBottom: '1px solid #1E293B', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>Athena: Policy Copilot Console</h2>
-              <p style={{ margin: '0.5rem 0 0 0', color: '#64748B', fontSize: '0.9rem' }}>
+            <div style={sectionHeaderStyle}>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>Athena: Policy Copilot Console</h2>
+              <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Ask Athena semantic questions regarding maternity benefits, gratuity clauses, or organizational policies.
               </p>
             </div>
 
             {/* Chat Box */}
-            <div style={{ background: '#070D19', border: '1px solid #1E293B', borderRadius: '12px', height: '360px', overflowY: 'auto', padding: '1.5rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div
+              style={{
+                background: 'var(--surface-sunken)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                height: '360px',
+                overflowY: 'auto',
+                padding: '1.5rem',
+                marginBottom: '1.5rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1rem',
+              }}
+            >
               {athenaChat.map((msg, index) => (
                 <div key={index} style={{ alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
-                  <div style={{
-                    padding: '1rem',
-                    borderRadius: '12px',
-                    background: msg.sender === 'user' ? '#00A7B5' : '#1E293B',
-                    color: '#FFFFFF',
-                    fontSize: '0.9rem',
-                    lineHeight: '1.5'
-                  }}>
+                  <div
+                    style={{
+                      padding: '0.85rem 1rem',
+                      borderRadius: 'var(--radius-md)',
+                      background: msg.sender === 'user' ? 'var(--accent)' : 'var(--surface-raised)',
+                      color: msg.sender === 'user' ? 'var(--text-on-accent)' : 'var(--text-primary)',
+                      border: msg.sender === 'user' ? 'none' : '1px solid var(--border-subtle)',
+                      fontSize: '0.9rem',
+                      lineHeight: 1.5,
+                    }}
+                  >
                     {msg.text}
                   </div>
                   {msg.citations && msg.citations.length > 0 && (
                     <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {msg.citations.map((c, i) => (
-                        <span key={i} style={{ fontSize: '10px', color: '#73E0E7', background: 'rgba(0,167,181,0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-                          📜 {c}
-                        </span>
+                        <Badge key={i} tone="info">📜 {c}</Badge>
                       ))}
                     </div>
                   )}
                 </div>
               ))}
               {athenaLoading && (
-                <div style={{ alignSelf: 'flex-start', padding: '0.5rem 1rem', background: '#1E293B', borderRadius: '12px', color: '#94A3B8', fontSize: '0.85rem' }}>
-                  Athena is searching policy guides...
+                <div
+                  style={{
+                    alignSelf: 'flex-start',
+                    padding: '0.5rem 1rem',
+                    background: 'var(--surface-raised)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  Athena is searching policy guides…
                 </div>
               )}
             </div>
 
             {/* Input Form */}
-            <form onSubmit={handleAthenaSubmit} style={{ display: 'flex', gap: '1rem' }}>
-              <input 
-                type="text"
-                value={athenaQuestion}
-                onChange={(e) => setAthenaQuestion(e.target.value)}
-                placeholder="Ask Athena e.g. How is gratuity calculated or what is our leave policy?"
-                style={{ flex: 1, padding: '0.9rem 1.2rem', borderRadius: '10px', background: '#070D19', border: '1px solid #1E293B', color: '#FFFFFF', outline: 'none' }}
-              />
-              <button 
-                type="submit"
-                disabled={athenaLoading}
-                style={{ padding: '0 2rem', background: '#00A7B5', border: 'none', borderRadius: '10px', color: '#FFFFFF', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                Send
-              </button>
+            <form onSubmit={handleAthenaSubmit} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <TextField
+                  label=""
+                  value={athenaQuestion}
+                  onChange={setAthenaQuestion}
+                  placeholder="Ask Athena e.g. How is gratuity calculated or what is our leave policy?"
+                />
+              </div>
+              <Button type="submit" loading={athenaLoading} disabled={athenaLoading}>Send</Button>
             </form>
           </div>
         )}
@@ -286,79 +283,94 @@ export default function AIAgentsPage() {
         {/* Tab 2: Jarvis */}
         {activeAgent === 'jarvis' && (
           <div>
-            <div style={{ borderBottom: '1px solid #1E293B', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>Jarvis: Statutory Payroll Compliance</h2>
-              <p style={{ margin: '0.5rem 0 0 0', color: '#64748B', fontSize: '0.9rem' }}>
+            <div style={sectionHeaderStyle}>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>Jarvis: Statutory Payroll Compliance</h2>
+              <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Run Jarvis to scan all active salary structures, EPF basic thresholds, and ESI gross eligibility limits.
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', alignItems: 'center' }}>
-              <div>
-                <label style={{ display: 'block', color: '#64748B', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>AUDIT MONTH</label>
-                <select 
-                  value={jarvisMonth} 
-                  onChange={(e) => setJarvisMonth(parseInt(e.target.value))}
-                  style={{ padding: '0.75rem 1rem', borderRadius: '8px', background: '#070D19', border: '1px solid #1E293B', color: '#FFFFFF' }}
-                >
-                  <option value={6}>June</option>
-                  <option value={7}>July</option>
-                  <option value={8}>August</option>
-                </select>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 160 }}>
+                <Select
+                  label="Audit Month"
+                  value={String(jarvisMonth)}
+                  onChange={(v) => setJarvisMonth(parseInt(v))}
+                  options={[
+                    { value: '6', label: 'June' },
+                    { value: '7', label: 'July' },
+                    { value: '8', label: 'August' },
+                  ]}
+                />
               </div>
-
-              <div>
-                <label style={{ display: 'block', color: '#64748B', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>AUDIT YEAR</label>
-                <select 
-                  value={jarvisYear} 
-                  onChange={(e) => setJarvisYear(parseInt(e.target.value))}
-                  style={{ padding: '0.75rem 1rem', borderRadius: '8px', background: '#070D19', border: '1px solid #1E293B', color: '#FFFFFF' }}
-                >
-                  <option value={2026}>2026</option>
-                  <option value={2027}>2027</option>
-                </select>
+              <div style={{ minWidth: 160 }}>
+                <Select
+                  label="Audit Year"
+                  value={String(jarvisYear)}
+                  onChange={(v) => setJarvisYear(parseInt(v))}
+                  options={[
+                    { value: '2026', label: '2026' },
+                    { value: '2027', label: '2027' },
+                  ]}
+                />
               </div>
-
-              <button 
-                onClick={handleJarvisRun}
-                disabled={jarvisLoading}
-                style={{ padding: '0.75rem 2rem', background: '#10B981', border: 'none', borderRadius: '8px', color: '#FFFFFF', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}
-              >
-                {jarvisLoading ? 'Running Auditor...' : 'Run Compliance Audit'}
-              </button>
+              <Button variant="success" onClick={handleJarvisRun} loading={jarvisLoading} disabled={jarvisLoading}>
+                {jarvisLoading ? 'Running Auditor…' : 'Run Compliance Audit'}
+              </Button>
             </div>
 
+            {jarvisError && (
+              <Banner tone="danger" title="Audit failed">
+                Jarvis could not complete the compliance audit. Please try again.
+              </Banner>
+            )}
+
             {jarvisReport && (
-              <div style={{ background: '#070D19', border: '1px solid #1E293B', borderRadius: '12px', padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1E293B', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+              <div
+                style={{
+                  background: 'var(--surface-sunken)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '1.5rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem', marginBottom: '1.5rem', gap: '1rem' }}>
                   <div>
-                    <h3 style={{ margin: 0, fontWeight: 'bold' }}>Compliance Score: {jarvisReport.complianceScore}%</h3>
-                    <p style={{ margin: '0.2rem 0 0 0', color: '#64748B', fontSize: '0.8rem' }}>Scanned {jarvisReport.totalAuditedEmployees} employee structures</p>
+                    <h3 style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>Compliance Score: {jarvisReport.complianceScore}%</h3>
+                    <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Scanned {jarvisReport.totalAuditedEmployees} employee structures</p>
                   </div>
-                  <span style={{ padding: '0.3rem 0.6rem', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', background: jarvisReport.complianceScore > 90 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: jarvisReport.complianceScore > 90 ? '#10B981' : '#EF4444' }}>
-                    {jarvisReport.complianceScore > 90 ? 'COMPLIANT' : 'ATTENTION REQUIRED'}
-                  </span>
+                  <StatusChip status={jarvisReport.complianceScore > 90 ? 'COMPLIANT' : 'ATTENTION REQUIRED'} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {jarvisReport.anomalies.length === 0 ? (
-                    <p style={{ color: '#10B981', fontSize: '0.9rem', margin: 0 }}>✓ Zero compliance anomalies detected. Ready for payroll run.</p>
+                    <Banner tone="success">✓ Zero compliance anomalies detected. Ready for payroll run.</Banner>
                   ) : (
                     jarvisReport.anomalies.map((anom: any, idx: number) => (
-                      <div key={idx} style={{ padding: '1rem', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.03)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                          <span style={{ fontWeight: 'bold', color: '#FFFFFF', fontSize: '0.9rem' }}>{anom.employeeName}</span>
-                          <span style={{ fontSize: '10px', fontWeight: 'bold', color: anom.severity === 'HIGH' ? '#EF4444' : '#F59E0B', background: anom.severity === 'HIGH' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)', padding: '0.1rem 0.4rem', borderRadius: '3px' }}>
-                            {anom.severity} RISK
-                          </span>
+                      <div
+                        key={idx}
+                        style={{
+                          padding: '1rem',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--danger-border)',
+                          background: 'var(--danger-bg)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', gap: '0.75rem' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{anom.employeeName}</span>
+                          <Badge tone={anom.severity === 'HIGH' ? 'danger' : 'warning'}>{anom.severity} RISK</Badge>
                         </div>
-                        <p style={{ margin: '0 0 0.25rem 0', color: '#E2E8F0', fontSize: '0.85rem', fontWeight: 'bold' }}>{anom.rule}</p>
-                        <p style={{ margin: 0, color: '#94A3B8', fontSize: '0.8rem' }}>{anom.description}</p>
+                        <p style={{ margin: '0 0 0.25rem 0', color: 'var(--text-primary)', fontSize: '0.85rem', fontWeight: 700 }}>{anom.rule}</p>
+                        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{anom.description}</p>
                       </div>
                     ))
                   )}
                 </div>
               </div>
+            )}
+
+            {!jarvisReport && !jarvisLoading && !jarvisError && (
+              <EmptyState title="No audit yet" message="Select a month and year, then run the compliance audit to see Jarvis's findings." />
             )}
           </div>
         )}
@@ -366,111 +378,113 @@ export default function AIAgentsPage() {
         {/* Tab 3: Sherlock */}
         {activeAgent === 'sherlock' && (
           <div>
-            <div style={{ borderBottom: '1px solid #1E293B', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>Sherlock: TDS Verification & Fraud Control</h2>
-              <p style={{ margin: '0.5rem 0 0 0', color: '#64748B', fontSize: '0.9rem' }}>
+            <div style={sectionHeaderStyle}>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>Sherlock: TDS Verification & Fraud Control</h2>
+              <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Simulate uploading landlord rent receipts or LIC declarations to audit landlord PAN accuracy and verification status.
               </p>
             </div>
 
             <form onSubmit={handleSherlockRun} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-              <div>
-                <label style={{ display: 'block', color: '#64748B', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>CLAIM CATEGORY</label>
-                <select 
-                  value={sherlockCategory} 
-                  onChange={(e) => setSherlockCategory(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', background: '#070D19', border: '1px solid #1E293B', color: '#FFFFFF' }}
-                >
-                  <option value="HRA">House Rent Allowance (HRA)</option>
-                  <option value="LIC">LIC Premium Proof</option>
-                  <option value="MEDICAL">Medical Insurance 80D</option>
-                </select>
-              </div>
+              <Select
+                label="Claim Category"
+                value={sherlockCategory}
+                onChange={setSherlockCategory}
+                options={[
+                  { value: 'HRA', label: 'House Rent Allowance (HRA)' },
+                  { value: 'LIC', label: 'LIC Premium Proof' },
+                  { value: 'MEDICAL', label: 'Medical Insurance 80D' },
+                ]}
+              />
 
-              <div>
-                <label style={{ display: 'block', color: '#64748B', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>CLAIMED AMOUNT (INR)</label>
-                <input 
-                  type="number"
-                  value={sherlockAmount}
-                  onChange={(e) => setSherlockAmount(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', background: '#070D19', border: '1px solid #1E293B', color: '#FFFFFF', outline: 'none' }}
-                />
-              </div>
+              <NumberField
+                label="Claimed Amount (INR)"
+                value={sherlockAmount}
+                onChange={setSherlockAmount}
+              />
 
               {sherlockCategory === 'HRA' && (
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', color: '#64748B', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>LANDLORD PAN (Provide 10-char format, e.g., ABCDE1234F)</label>
-                  <input 
-                    type="text"
+                  <TextField
+                    label="Landlord PAN"
+                    help="Provide 10-char format, e.g., ABCDE1234F"
                     value={landlordPan}
-                    onChange={(e) => setLandlordPan(e.target.value)}
-                    style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', background: '#070D19', border: '1px solid #1E293B', color: '#FFFFFF', outline: 'none' }}
+                    onChange={setLandlordPan}
                   />
                 </div>
               )}
 
               <div style={{ gridColumn: 'span 2' }}>
-                <label style={{ display: 'block', color: '#64748B', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>UPLOAD SIMULATED FILE (Upload files named 'sample_fake.pdf' to trigger Sherlock's fraud audit alerts)</label>
-                <input 
-                  type="file"
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                  style={{ color: '#94A3B8' }}
+                <FileDrop
+                  label="Upload Simulated File"
+                  hint="Upload files named 'sample_fake.pdf' to trigger Sherlock's fraud audit alerts"
+                  onFile={(f) => setSelectedFile(f)}
                 />
               </div>
 
               <div style={{ gridColumn: 'span 2' }}>
-                <button 
-                  type="submit"
-                  disabled={sherlockLoading}
-                  style={{ padding: '0.75rem 2.5rem', background: '#F59E0B', border: 'none', borderRadius: '8px', color: '#0F172A', fontWeight: 'extrabold', cursor: 'pointer' }}
-                >
-                  {sherlockLoading ? 'Sherlock is auditing document...' : 'Audit Document Validation'}
-                </button>
+                <Button type="submit" variant="warning" loading={sherlockLoading} disabled={sherlockLoading}>
+                  {sherlockLoading ? 'Sherlock is auditing document…' : 'Audit Document Validation'}
+                </Button>
               </div>
             </form>
 
+            {sherlockError && (
+              <Banner tone="danger" title="Audit failed">
+                Sherlock could not complete the document audit. Please try again.
+              </Banner>
+            )}
+
             {sherlockReport && (
-              <div style={{ background: '#070D19', border: '1px solid #1E293B', borderRadius: '12px', padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1E293B', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+              <div
+                style={{
+                  background: 'var(--surface-sunken)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '1.5rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem', marginBottom: '1.25rem', gap: '1rem' }}>
                   <div>
-                    <h3 style={{ margin: 0, fontWeight: 'bold' }}>Sherlock Verdict</h3>
-                    <p style={{ margin: '0.2rem 0 0 0', color: '#64748B', fontSize: '0.8rem' }}>Scanned: {sherlockReport.extractedDetails.documentDetected}</p>
+                    <h3 style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>Sherlock Verdict</h3>
+                    <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Scanned: {sherlockReport.extractedDetails.documentDetected}</p>
                   </div>
-                  <span style={{ padding: '0.3rem 0.6rem', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', background: sherlockReport.auditResult.status === 'APPROVED' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: sherlockReport.auditResult.status === 'APPROVED' ? '#10B981' : '#EF4444' }}>
-                    {sherlockReport.auditResult.status}
-                  </span>
+                  <StatusChip status={sherlockReport.auditResult.status} />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                  <div style={{ padding: '0.75rem', background: '#0F172A', borderRadius: '6px' }}>
-                    <span style={{ color: '#64748B', fontSize: '11px', fontWeight: 'bold', display: 'block' }}>FRAUD INDEX SCORE</span>
-                    <span style={{ color: sherlockReport.auditResult.fraudScore > 50 ? '#EF4444' : '#10B981', fontSize: '18px', fontWeight: 'bold' }}>
+                  <div style={{ padding: '0.75rem', background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fraud Index Score</span>
+                    <span style={{ color: sherlockReport.auditResult.fraudScore > 50 ? 'var(--danger-fg)' : 'var(--success-fg)', fontSize: '18px', fontWeight: 700 }}>
                       {sherlockReport.auditResult.fraudScore} / 100
                     </span>
                   </div>
-                  <div style={{ padding: '0.75rem', background: '#0F172A', borderRadius: '6px' }}>
-                    <span style={{ color: '#64748B', fontSize: '11px', fontWeight: 'bold', display: 'block' }}>COMPUTED TAX EXEMPTION</span>
-                    <span style={{ color: '#00A7B5', fontSize: '18px', fontWeight: 'bold' }}>
+                  <div style={{ padding: '0.75rem', background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: 700, display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Computed Tax Exemption</span>
+                    <span style={{ color: 'var(--accent)', fontSize: '18px', fontWeight: 700 }}>
                       ₹{sherlockReport.extractedDetails.computedExemption}
                     </span>
                   </div>
                 </div>
 
-                <p style={{ margin: '0 0 1rem 0', color: '#E2E8F0', fontSize: '0.85rem', lineHeight: '1.5' }}>
-                  <strong>Explanation:</strong> {sherlockReport.auditResult.explanation}
+                <p style={{ margin: '0 0 1rem 0', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>Explanation:</strong> {sherlockReport.auditResult.explanation}
                 </p>
 
                 {sherlockReport.auditResult.warnings.length > 0 && (
-                  <div>
-                    <span style={{ color: '#EF4444', fontSize: '11px', fontWeight: 'bold', display: 'block', marginBottom: '0.4rem' }}>DETECTED WARNINGS</span>
-                    <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#EF4444', fontSize: '0.8rem' }}>
+                  <Banner tone="danger" title="Detected Warnings">
+                    <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.2rem' }}>
                       {sherlockReport.auditResult.warnings.map((w: string, idx: number) => (
                         <li key={idx} style={{ marginBottom: '0.25rem' }}>{w}</li>
                       ))}
                     </ul>
-                  </div>
+                  </Banner>
                 )}
               </div>
+            )}
+
+            {!sherlockReport && !sherlockLoading && !sherlockError && (
+              <EmptyState title="No audit yet" message="Complete the claim details and run the document validation to see Sherlock's verdict." />
             )}
           </div>
         )}
@@ -478,73 +492,78 @@ export default function AIAgentsPage() {
         {/* Tab 4: Winston */}
         {activeAgent === 'winston' && (
           <div>
-            <div style={{ borderBottom: '1px solid #1E293B', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>Winston: Roster & Work Footprint Arbitration</h2>
-              <p style={{ margin: '0.5rem 0 0 0', color: '#64748B', fontSize: '0.9rem' }}>
+            <div style={sectionHeaderStyle}>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>Winston: Roster & Work Footprint Arbitration</h2>
+              <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Winston auto-resolves regularization claims by matching network activity footprints (Slack, Git, VPN logs).
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', alignItems: 'center' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', color: '#64748B', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>REGULARIZATION TARGET DATE</label>
-                <input 
-                  type="text"
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <TextField
+                  label="Regularization Target Date"
                   value={winstonDate}
-                  onChange={(e) => setWinstonDate(e.target.value)}
+                  onChange={setWinstonDate}
                   placeholder="e.g. 2026-06-12"
-                  style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '8px', background: '#070D19', border: '1px solid #1E293B', color: '#FFFFFF', outline: 'none' }}
                 />
               </div>
-
-              <button 
-                onClick={handleWinstonRun}
-                disabled={winstonLoading}
-                style={{ padding: '0.75rem 2rem', background: '#EF4444', border: 'none', borderRadius: '8px', color: '#FFFFFF', fontWeight: 'bold', marginTop: '1.25rem', cursor: 'pointer' }}
-              >
-                {winstonLoading ? 'Winston is auditing network logs...' : 'Validate Regularization'}
-              </button>
+              <Button variant="danger" onClick={handleWinstonRun} loading={winstonLoading} disabled={winstonLoading}>
+                {winstonLoading ? 'Winston is auditing network logs…' : 'Validate Regularization'}
+              </Button>
             </div>
 
+            {winstonError && (
+              <Banner tone="danger" title="Validation failed">
+                Winston could not complete the regularization validation. Please try again.
+              </Banner>
+            )}
+
             {winstonReport && (
-              <div style={{ background: '#070D19', border: '1px solid #1E293B', borderRadius: '12px', padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1E293B', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+              <div
+                style={{
+                  background: 'var(--surface-sunken)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '1.5rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem', marginBottom: '1.25rem', gap: '1rem' }}>
                   <div>
-                    <h3 style={{ margin: 0, fontWeight: 'bold' }}>Winston Verdict</h3>
-                    <p style={{ margin: '0.2rem 0 0 0', color: '#64748B', fontSize: '0.8rem' }}>Verification Confidence: {winstonReport.confidence}%</p>
+                    <h3 style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>Winston Verdict</h3>
+                    <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Verification Confidence: {winstonReport.confidence}%</p>
                   </div>
-                  <span style={{ padding: '0.3rem 0.6rem', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', background: winstonReport.resolution === 'AUTO_APPROVED' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: winstonReport.resolution === 'AUTO_APPROVED' ? '#10B981' : '#F59E0B' }}>
-                    {winstonReport.resolution.replaceAll('_', ' ')}
-                  </span>
+                  <StatusChip status={winstonReport.resolution} />
                 </div>
 
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <span style={{ color: '#64748B', fontSize: '11px', fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>EXAMINED NETWORK SIGNALS</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: 700, display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Examined Network Signals</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                    <div style={{ padding: '0.75rem', background: '#0F172A', borderRadius: '6px' }}>
-                      <span style={{ display: 'block', fontSize: '10px', color: '#64748B', fontWeight: 'bold' }}>SLACK ACTIVITY</span>
-                      <span style={{ fontSize: '12.5px', color: '#FFFFFF', fontWeight: 'w600' }}>{winstonReport.auditLog.slackActivity}</span>
-                    </div>
-                    <div style={{ padding: '0.75rem', background: '#0F172A', borderRadius: '6px' }}>
-                      <span style={{ display: 'block', fontSize: '10px', color: '#64748B', fontWeight: 'bold' }}>GIT REPOSITORIES</span>
-                      <span style={{ fontSize: '12.5px', color: '#FFFFFF', fontWeight: 'w600' }}>{winstonReport.auditLog.gitCommits}</span>
-                    </div>
-                    <div style={{ padding: '0.75rem', background: '#0F172A', borderRadius: '6px' }}>
-                      <span style={{ display: 'block', fontSize: '10px', color: '#64748B', fontWeight: 'bold' }}>VPN TUNNELS</span>
-                      <span style={{ fontSize: '12.5px', color: '#FFFFFF', fontWeight: 'w600' }}>{winstonReport.auditLog.vpnConnection}</span>
-                    </div>
+                    {[
+                      { label: 'Slack Activity', value: winstonReport.auditLog.slackActivity },
+                      { label: 'Git Repositories', value: winstonReport.auditLog.gitCommits },
+                      { label: 'VPN Tunnels', value: winstonReport.auditLog.vpnConnection },
+                    ].map((signal) => (
+                      <div key={signal.label} style={{ padding: '0.75rem', background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                        <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{signal.label}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 600 }}>{signal.value}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                <p style={{ margin: 0, color: '#E2E8F0', fontSize: '0.85rem', lineHeight: '1.5' }}>
-                  <strong>Explanation:</strong> {winstonReport.explanation}
+                <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>Explanation:</strong> {winstonReport.explanation}
                 </p>
               </div>
             )}
+
+            {!winstonReport && !winstonLoading && !winstonError && (
+              <EmptyState title="No validation yet" message="Enter a target date and run the validation to see Winston's verdict." />
+            )}
           </div>
         )}
-
-      </div>
+      </Card>
     </div>
   );
 }

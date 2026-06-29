@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import Sidebar from '@/components/Sidebar';
 import { getPayslipTemplate, updatePayslipTemplate } from '@/lib/api';
+import {
+  PageHeader, Banner, Button, Card, ColorField, Checkbox, TextField,
+  LoadingBlock,
+} from '@/components/ui';
 
 interface Template {
   id: string;
@@ -92,42 +96,40 @@ export default function PayslipFormatPage() {
     return (
       <div className="app-layout">
         <Sidebar activePath="/payroll/payslip-format" />
-        <main className="main-content"><div style={{ padding: '2rem', color: '#94a3b8' }}>Loading payslip formats…</div></main>
+        <main className="main-content"><LoadingBlock label="Loading payslip formats…" /></main>
       </div>
     );
   }
 
+  const lockIcon = (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  );
+
   return (
     <div className="app-layout">
       <Sidebar activePath="/payroll/payslip-format" />
-      <main className="main-content" style={{ padding: '1.5rem 2rem 3rem' }}>
-        <div style={{ marginBottom: '1.25rem' }}>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#e5e7eb', margin: 0 }}>Payslip Format</h1>
-          <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginTop: '0.35rem' }}>
-            Choose one of 8 formats for your company payslips. Every format shows all mandatory payroll data.
-          </p>
-        </div>
+      <main className="main-content">
+        <PageHeader
+          title="Payslip Format"
+          subtitle="Choose one of 8 formats for your company payslips. Every format shows all mandatory payroll data."
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>}
+        />
 
         {/* Lock / permission banner */}
         {locked && (
-          <div style={{
-            display: 'flex', gap: '0.6rem', alignItems: 'flex-start', padding: '0.9rem 1rem', borderRadius: '10px',
-            marginBottom: '1.25rem',
-            background: canEdit ? 'rgba(124,58,237,0.1)' : 'rgba(245,158,11,0.1)',
-            border: `1px solid ${canEdit ? 'rgba(124,58,237,0.35)' : 'rgba(245,158,11,0.35)'}`,
-            color: canEdit ? '#c4b5fd' : '#fcd34d',
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <div style={{ fontSize: '0.85rem', lineHeight: 1.4 }}>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <Banner tone={canEdit ? 'info' : 'warning'} icon={lockIcon}>
               {canEdit
                 ? 'This format is locked for the company Admin. As PID hcms Super Admin, you can still change it.'
                 : (lockedMessage || 'This payslip format is locked. Contact the PID hcms Super Admin team to make further changes.')}
-            </div>
+            </Banner>
           </div>
         )}
         {!locked && canEdit && (
-          <div style={{ padding: '0.9rem 1rem', borderRadius: '10px', marginBottom: '1.25rem', background: 'rgba(0,167,181,0.08)', border: '1px solid rgba(0,167,181,0.3)', color: '#67e8f9', fontSize: '0.85rem', lineHeight: 1.4 }}>
-            You can choose and customize the payslip format <strong>once</strong>. After you save, further changes will require the PID hcms Super Admin team.
+          <div style={{ marginBottom: '1.25rem' }}>
+            <Banner tone="info">
+              You can choose and customize the payslip format <strong>once</strong>. After you save, further changes will require the PID hcms Super Admin team.
+            </Banner>
           </div>
         )}
 
@@ -143,37 +145,32 @@ export default function PayslipFormatPage() {
                     onClick={() => canEdit && setSelectedId(t.id)}
                     disabled={!canEdit}
                     style={{
-                      textAlign: 'left', padding: '0.9rem', borderRadius: '12px', cursor: canEdit ? 'pointer' : 'not-allowed',
-                      background: active ? 'rgba(0,167,181,0.08)' : 'rgba(255,255,255,0.02)',
-                      border: `2px solid ${active ? '#00A7B5' : 'rgba(255,255,255,0.08)'}`,
-                      opacity: canEdit || active ? 1 : 0.7, transition: 'all 0.2s',
+                      textAlign: 'left', padding: '0.9rem', borderRadius: 'var(--radius-md)', cursor: canEdit ? 'pointer' : 'not-allowed',
+                      background: active ? 'var(--accent-soft, var(--surface-sunken))' : 'var(--surface-raised)',
+                      border: `2px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                      opacity: canEdit || active ? 1 : 0.7, transition: 'all var(--motion-base) var(--ease-out)',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
-                      <span style={{ width: 14, height: 14, borderRadius: 4, background: t.accent, display: 'inline-block', border: '1px solid rgba(255,255,255,0.2)' }} />
-                      <span style={{ fontWeight: 700, color: '#e5e7eb', fontSize: '0.95rem' }}>{t.name}</span>
-                      {active && <span style={{ marginLeft: 'auto', color: '#00A7B5', fontSize: '0.75rem', fontWeight: 700 }}>SELECTED</span>}
+                      <span style={{ width: 14, height: 14, borderRadius: 4, background: t.accent, display: 'inline-block', border: '1px solid var(--border-subtle)' }} />
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>{t.name}</span>
+                      {active && <span style={{ marginLeft: 'auto', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 700 }}>SELECTED</span>}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.4 }}>{t.description}</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{t.description}</div>
                   </button>
                 );
               })}
             </div>
 
             {/* Customization */}
-            <div style={{ marginTop: '1.5rem', padding: '1.1rem', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#e5e7eb', margin: '0 0 0.85rem' }}>Customize</h3>
+            <Card title="Customize" style={{ marginTop: '1.5rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
-                  <span style={{ width: 120 }}>Accent colour</span>
-                  <input type="color" value={accent} disabled={!canEdit}
-                    onChange={(e) => setConfig({ ...config, accent: e.target.value })}
-                    style={{ width: 44, height: 30, background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'not-allowed' }} />
-                  <button type="button" disabled={!canEdit} onClick={() => setConfig({ ...config, accent: null })}
-                    style={{ fontSize: '0.72rem', color: '#94a3b8', background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '0.25rem 0.5rem', cursor: canEdit ? 'pointer' : 'not-allowed' }}>
-                    Use template default
-                  </button>
-                </label>
+                <ColorField
+                  label="Accent colour"
+                  value={accent}
+                  onChange={(v) => canEdit && setConfig({ ...config, accent: v })}
+                  onReset={canEdit ? () => setConfig({ ...config, accent: null }) : undefined}
+                />
 
                 {([
                   ['showLogo', 'Show company logo'],
@@ -181,39 +178,44 @@ export default function PayslipFormatPage() {
                   ['showAttendance', 'Show attendance / paid days'],
                   ['showYearToDate', 'Show year-to-date summary'],
                 ] as [keyof Config, string][]).map(([key, label]) => (
-                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
-                    <input type="checkbox" checked={Boolean(config[key])} disabled={!canEdit}
-                      onChange={(e) => setConfig({ ...config, [key]: e.target.checked })} />
-                    {label}
-                  </label>
+                  <Checkbox
+                    key={key}
+                    label={label}
+                    checked={Boolean(config[key])}
+                    disabled={!canEdit}
+                    onChange={(v) => setConfig({ ...config, [key]: v })}
+                  />
                 ))}
 
-                <label style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
-                  <div style={{ marginBottom: 4 }}>Header note (address / tagline)</div>
-                  <input type="text" value={config.headerNote} disabled={!canEdit} maxLength={120}
-                    onChange={(e) => setConfig({ ...config, headerNote: e.target.value })}
-                    placeholder="e.g. 12 MG Road, Bengaluru 560001"
-                    className="input-field" style={{ width: '100%' }} />
-                </label>
-                <label style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
-                  <div style={{ marginBottom: 4 }}>Signatory label (optional)</div>
-                  <input type="text" value={config.signatoryLabel} disabled={!canEdit} maxLength={80}
-                    onChange={(e) => setConfig({ ...config, signatoryLabel: e.target.value })}
-                    placeholder="e.g. For Acme Pvt Ltd"
-                    className="input-field" style={{ width: '100%' }} />
-                </label>
+                <TextField
+                  label="Header note (address / tagline)"
+                  value={config.headerNote}
+                  disabled={!canEdit}
+                  maxLength={120}
+                  onChange={(v) => setConfig({ ...config, headerNote: v })}
+                  placeholder="e.g. 12 MG Road, Bengaluru 560001"
+                />
+                <TextField
+                  label="Signatory label (optional)"
+                  value={config.signatoryLabel}
+                  disabled={!canEdit}
+                  maxLength={80}
+                  onChange={(v) => setConfig({ ...config, signatoryLabel: v })}
+                  placeholder="e.g. For Acme Pvt Ltd"
+                />
               </div>
 
-              <button onClick={handleSave} disabled={!canEdit || saving}
-                style={{
-                  marginTop: '1.1rem', width: '100%', padding: '0.75rem', borderRadius: '10px', border: 'none',
-                  fontWeight: 700, fontSize: '0.9rem', color: '#fff',
-                  background: canEdit ? 'linear-gradient(135deg, #00A7B5, #182B6D)' : 'rgba(255,255,255,0.1)',
-                  cursor: canEdit && !saving ? 'pointer' : 'not-allowed', opacity: saving ? 0.7 : 1,
-                }}>
+              <Button
+                variant="primary"
+                fullWidth
+                onClick={handleSave}
+                disabled={!canEdit || saving}
+                loading={saving}
+                style={{ marginTop: '1.1rem' }}
+              >
                 {saving ? 'Saving…' : (isSuperAdmin ? 'Save format (Super Admin)' : 'Save format (one-time)')}
-              </button>
-            </div>
+              </Button>
+            </Card>
           </div>
 
           {/* Live preview */}
@@ -232,8 +234,8 @@ function PayslipPreview({ accent, config, template }: { accent: string; config: 
   );
   return (
     <div style={{ position: 'sticky', top: '1rem' }}>
-      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Live preview — {template?.name || 'Format'}</div>
-      <div style={{ background: '#fff', color: '#111', borderRadius: 8, padding: '1rem', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', fontFamily: 'Helvetica, Arial, sans-serif' }}>
+      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Live preview — {template?.name || 'Format'}</div>
+      <div style={{ background: '#fff', color: '#111', borderRadius: 8, padding: '1rem', boxShadow: 'var(--shadow-3)', fontFamily: 'Helvetica, Arial, sans-serif' }}>
         {/* header */}
         <div style={{ background: template?.header === 'band' ? accent : 'transparent', color: template?.header === 'band' ? '#fff' : accent, padding: template?.header === 'band' ? '0.6rem' : 0, borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: template?.header === 'band' ? 'none' : `2px solid ${accent}`, paddingBottom: 6, marginBottom: 8 }}>
           <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>Your Company</div>

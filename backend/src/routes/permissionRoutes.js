@@ -8,18 +8,27 @@ const {
   getRolePermissions,
   updateRolePermissions,
   updateUserPermissions,
+  updateUserRole,
   resetToDefault,
   resetRoleToDefault,
   addCustomModule,
+  listCustomModules,
+  deleteCustomModule,
 } = require('../controllers/permissionController');
 
 router.get('/user/:userId', authenticate, getUserPermissions);
 router.get('/all', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getAllPermissions);
 router.get('/roles', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getRolePermissions);
-router.put('/role/:role', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateRolePermissions);
-router.put('/user/:userId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateUserPermissions);
+// Global role defaults are platform-level (super admin only).
+router.put('/role/:role', authenticate, requireRole('SUPER_ADMIN'), updateRolePermissions);
 router.post('/reset-role/:role', authenticate, requireRole('SUPER_ADMIN'), resetRoleToDefault);
-router.post('/reset/:userId', authenticate, requireRole('SUPER_ADMIN'), resetToDefault);
+// Per-user access management is tenant-scoped: a tenant ADMIN manages their org.
+router.put('/user/:userId/role', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateUserRole);
+router.put('/user/:userId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), updateUserPermissions);
+router.post('/reset/:userId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), resetToDefault);
+// Tenant-scoped custom access modules — a tenant ADMIN manages their own.
+router.get('/modules', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), listCustomModules);
 router.post('/modules', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), addCustomModule);
+router.delete('/modules/:key', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), deleteCustomModule);
 
 module.exports = router;

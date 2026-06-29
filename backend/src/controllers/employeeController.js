@@ -194,6 +194,25 @@ const createEmployee = async (req, res) => {
     const existing = await prisma.employee.findUnique({ where: { email } });
     if (existing) return res.status(400).json({ error: 'Email already exists' });
 
+    // Enforce the subscription plan's employee cap (usage-limit enforcement).
+    if (req.user?.companyId) {
+      const activeSub = await prisma.subscription.findFirst({
+        where: { companyId: req.user.companyId, status: 'ACTIVE' },
+        include: { plan: true },
+        orderBy: { endDate: 'desc' },
+      });
+      const limit = activeSub?.plan?.employeeLimit;
+      if (limit && limit > 0) {
+        const activeCount = await prisma.employee.count({ where: { isActive: true } });
+        if (activeCount >= limit) {
+          return res.status(403).json({
+            error: `Your plan allows ${limit} employees and you've reached that limit. Upgrade your plan to add more.`,
+            limitReached: true,
+          });
+        }
+      }
+    }
+
     // Link or create a corresponding User login record
     const existingUser = await prisma.user.findUnique({ where: { email } });
     let userId = existingUser ? existingUser.id : null;
@@ -276,7 +295,7 @@ const createEmployee = async (req, res) => {
     res.status(201).json(temporaryPassword ? { ...employee, temporaryPassword } : employee);
   } catch (error) {
     console.error('CREATE EMPLOYEE ERROR:', error);
-    res.status(500).json({ error: error.message || 'Server error' });
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
@@ -360,7 +379,7 @@ const updateEmployee = async (req, res) => {
     res.json(updated);
   } catch (error) {
     console.error('UPDATE EMPLOYEE ERROR:', error);
-    res.status(500).json({ error: error.message || 'Server error' });
+    res.status(500).json({ error: 'Server error' });
   }
 };
 

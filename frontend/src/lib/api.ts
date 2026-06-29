@@ -60,6 +60,19 @@ api.interceptors.request.use(
         const match = document.cookie.match(/(?:^|;\s*)csrfToken=([^;]+)/);
         if (match) config.headers['x-csrf-token'] = decodeURIComponent(match[1]);
       }
+      // Support staff "view as tenant": scope read-only requests to the selected
+      // customer. The backend only honours this header for SUPPORT-role accounts.
+      const viewCompany = localStorage.getItem('pid_support_company_id');
+      if (viewCompany) config.headers['x-support-company-id'] = viewCompany;
+      // Workspace binding: tell the API which tenant subdomain this browser is on
+      // ('__apex__' for the owner/apex host). Used to bind login to the workspace.
+      const host = window.location.hostname.toLowerCase();
+      const base = (process.env.NEXT_PUBLIC_BASE_DOMAIN || 'localhost').toLowerCase();
+      let sub = '__apex__';
+      if (host !== base && host.endsWith('.' + base)) {
+        sub = host.slice(0, host.length - (base.length + 1)).split('.')[0] || '__apex__';
+      }
+      config.headers['x-tenant-subdomain'] = sub;
     }
     return config;
   },
@@ -107,6 +120,54 @@ api.interceptors.response.use(
   }
 );
 
+// ─── Lightweight in-memory GET cache (stale-while-fresh) ──────────────────────
+// Identical GET requests within CACHE_TTL_MS are served from memory, so switching
+// tabs / navigating back feels instant instead of refetching. Browser-only (a
+// shared module cache on the server would leak data across users), short-lived,
+// and fully invalidated after any mutation so the user never sees stale writes.
+const GET_CACHE = new Map<string, { ts: number; response: any }>();
+const CACHE_TTL_MS = 12000;
+// Session/live endpoints that must always hit the network.
+const CACHE_SKIP = ['/auth/', '/notifications'];
+
+export function clearApiCache() { GET_CACHE.clear(); }
+
+function cacheKeyOf(config: any): string {
+  const h = config.headers || {};
+  return [
+    config.baseURL || '', config.url || '',
+    JSON.stringify(config.params || {}),
+    h['x-support-company-id'] || '', h['x-tenant-subdomain'] || '',
+  ].join('|');
+}
+
+const baseAdapter = axios.getAdapter(axios.defaults.adapter);
+
+api.defaults.adapter = async (config: any) => {
+  const method = (config.method || 'get').toLowerCase();
+  const browser = typeof window !== 'undefined';
+  const cacheable = browser && method === 'get' && !config.__noCache
+    && !CACHE_SKIP.some((p) => (config.url || '').includes(p));
+
+  if (cacheable) {
+    const key = cacheKeyOf(config);
+    const hit = GET_CACHE.get(key);
+    if (hit && Date.now() - hit.ts < CACHE_TTL_MS) {
+      // Clone so a caller mutating the result can't corrupt the cached copy.
+      const data = typeof structuredClone === 'function' ? structuredClone(hit.response.data) : hit.response.data;
+      return { ...hit.response, data, config, request: {}, cached: true };
+    }
+    const res = await baseAdapter(config);
+    GET_CACHE.set(key, { ts: Date.now(), response: { ...res, config: undefined, request: undefined } });
+    return res;
+  }
+
+  const res = await baseAdapter(config);
+  // A successful mutation may have changed server state — drop the read cache.
+  if (browser && method !== 'get') GET_CACHE.clear();
+  return res;
+};
+
 export const login = async (email: string, password: string) => {
   const { data } = await api.post('/auth/login', { email, password });
   return data;
@@ -142,13 +203,28 @@ export const resetRolePermissions = async (role: string) => {
   return data;
 };
 
-export const addCustomModule = async (module: string) => {
-  const { data } = await api.post('/permissions/modules', { module });
+export const addCustomModule = async (module: string, description?: string) => {
+  const { data } = await api.post('/permissions/modules', { module, description });
+  return data;
+};
+
+export const getCustomModules = async () => {
+  const { data } = await api.get('/permissions/modules');
+  return data;
+};
+
+export const deleteCustomModule = async (key: string) => {
+  const { data } = await api.delete(`/permissions/modules/${key}`);
   return data;
 };
 
 export const updateUserPermissions = async (userId: string, permissions: any[]) => {
   const { data } = await api.put(`/permissions/user/${userId}`, { permissions });
+  return data;
+};
+
+export const updateUserRole = async (userId: string, role: string) => {
+  const { data } = await api.put(`/permissions/user/${userId}/role`, { role });
   return data;
 };
 
@@ -1335,6 +1411,51 @@ export const getPlatformMetrics = async () => {
   return data;
 };
 
+// ──── Support / Maintenance Staff (SUPER_ADMIN) ─────────────────────────────
+export const getSupportStaff = async () => {
+  const { data } = await api.get('/platform-admin/support-staff');
+  return data;
+};
+
+export const createSupportStaff = async (payload: { name: string; email: string; password: string }) => {
+  const { data } = await api.post('/platform-admin/support-staff', payload);
+  return data;
+};
+
+export const setSupportStaffStatus = async (id: string, isActive: boolean) => {
+  const { data } = await api.put(`/platform-admin/support-staff/${id}/status`, { isActive });
+  return data;
+};
+
+export const assignSupportCompany = async (id: string, companyId: string) => {
+  const { data } = await api.post(`/platform-admin/support-staff/${id}/assignments`, { companyId });
+  return data;
+};
+
+export const revokeSupportCompany = async (id: string, companyId: string) => {
+  const { data } = await api.delete(`/platform-admin/support-staff/${id}/assignments/${companyId}`);
+  return data;
+};
+
+// ──── Support staff (own) ────────────────────────────────────────────────────
+export const getMySupportAssignments = async () => {
+  const { data } = await api.get('/support/my-assignments');
+  return data;
+};
+
+// ──── Tenant workspace subdomain ────────────────────────────────────────────
+/** Owner-side: change a tenant's workspace subdomain (SUPER_ADMIN or SUPPORT). */
+export const updateTenantSubdomain = async (companyId: string, subdomain: string) => {
+  const { data } = await api.put(`/platform-admin/companies/${companyId}/subdomain`, { subdomain });
+  return data;
+};
+
+/** Public branding for a workspace login screen (no auth). */
+export const getPublicTenant = async (subdomain: string) => {
+  const { data } = await api.get(`/public/tenant/${encodeURIComponent(subdomain)}`);
+  return data;
+};
+
 // ──── AI Agents APIs ────────────────────────────────────────────────────────
 export const auditTdsProof = async (formData: FormData) => {
   const { data } = await api.post('/ai/sherlock/audit-proof', formData, {
@@ -1363,8 +1484,33 @@ export const updateCompanyKYC = async (payload: any) => {
   return data;
 };
 
-export const verifyCompanyKYC = async (companyId: string, payload: { status: 'APPROVED' | 'REJECTED'; remarks?: string }) => {
+export const verifyCompanyKYC = async (companyId: string, payload: { status: 'APPROVED' | 'REJECTED' | 'NEEDS_INFO'; remarks?: string }) => {
   const { data } = await api.put(`/platform-admin/companies/${companyId}/kyc`, payload);
+  return data;
+};
+
+export const setupMfa = async () => {
+  const { data } = await api.post('/auth/mfa/setup');
+  return data;
+};
+
+export const enableMfa = async (code: string) => {
+  const { data } = await api.post('/auth/mfa/enable', { code });
+  return data;
+};
+
+export const recordTenantPayment = async (companyId: string, payload: { amount?: number; months?: number }) => {
+  const { data } = await api.post(`/platform-admin/companies/${companyId}/record-payment`, payload);
+  return data;
+};
+
+export const runDunningSweep = async () => {
+  const { data } = await api.post('/platform-admin/billing/run-dunning');
+  return data;
+};
+
+export const getPlatformAuditLogs = async (params?: { action?: string; actor?: string; days?: number; take?: number }) => {
+  const { data } = await api.get('/platform-admin/audit-logs', { params });
   return data;
 };
 

@@ -1,9 +1,14 @@
 const prisma = require('../config/database');
 
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ADMIN']);
-const HR_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR']);
-const PAYROLL_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR', 'FINANCE', 'ACCOUNTS', 'PAYROLL_REVIEWER', 'PAYROLL_APPROVER']);
-const MANAGER_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER']);
+// SUPPORT is a platform read-only role: it gets full company-wide READ scope (like
+// HR) so support staff can troubleshoot an assigned tenant, but every write is
+// rejected at the auth gate (middleware/auth.js) and its reads are still confined
+// to the viewed company by the tenant query extension. It is intentionally NOT in
+// ADMIN_ROLES (no admin-only/destructive paths).
+const HR_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR', 'SUPPORT']);
+const PAYROLL_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR', 'FINANCE', 'ACCOUNTS', 'PAYROLL_REVIEWER', 'PAYROLL_APPROVER', 'SUPPORT']);
+const MANAGER_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'SUPPORT']);
 
 const hasAnyRole = (user, roles) => Boolean(user?.role && roles.has(user.role));
 const isAdmin = (user) => hasAnyRole(user, ADMIN_ROLES);

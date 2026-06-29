@@ -1,26 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { login } from '@/lib/api';
+import { login, getPublicTenant } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
 import Link from 'next/link';
 import BrandLogo from '@/components/BrandLogo';
-import { ValidatedInput } from '@/components/ValidatedField';
+import ThemeToggle from '@/components/ThemeToggle';
+import { Button, Banner, TextField } from '@/components/ui';
 import { validateForm, email as vEmail, required } from '@/lib/validators';
+import { getTenantSubdomain, workspaceUrl, BASE_DOMAIN } from '@/lib/tenant';
+import { isOwnerRole } from '@/lib/platformRoles';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [wrongWorkspace, setWrongWorkspace] = useState<{ subdomain?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [subdomain, setSubdomain] = useState('');
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const router = useRouter();
   const { login: authLogin } = useAuth();
+
+  // Resolve the workspace from the host and fetch its public branding.
+  useEffect(() => {
+    const sub = getTenantSubdomain();
+    setSubdomain(sub);
+    if (sub) {
+      getPublicTenant(sub)
+        .then((t) => setWorkspaceName(t?.name || null))
+        .catch(() => setWorkspaceName(null));
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
+    setWrongWorkspace(null);
     const { isValid, firstError } = validateForm(
       { email, password },
       { email: vEmail, password: required('Password') }
@@ -34,81 +52,131 @@ export default function LoginPage() {
     try {
       const data = await login(email, password);
       authLogin(data.token, data.user, data.permissions);
-      router.push('/dashboard');
-    } catch (err) {
-      setError('Invalid credentials. Please try again.');
+      // Route each kind of account to its own home: app owner → Admin Portal,
+      // support → customer picker, tenant users → their dashboard.
+      const role = data.user?.role;
+      const dest = role === 'SUPPORT' ? '/support'
+        : isOwnerRole(role) ? '/platform-admin'
+        : '/dashboard';
+      router.push(dest);
+    } catch (err: any) {
+      const resp = err?.response?.data;
+      if (resp?.wrongWorkspace) {
+        setWrongWorkspace({ subdomain: resp.subdomain });
+        setError(resp.error || 'This account does not belong to this workspace.');
+      } else {
+        setError('Invalid credentials. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0e1a', position: 'relative', overflow: 'hidden', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Animated background elements */}
-      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,167,181,0.12), transparent 70%)', top: '-100px', right: '-100px' }} />
-      <div style={{ position: 'absolute', width: '300px', height: '300px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(24,43,109,0.1), transparent 70%)', bottom: '-50px', left: '-50px' }} />
-      <div style={{ position: 'absolute', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,167,181,0.08), transparent 70%)', top: '40%', left: '20%' }} />
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--surface-canvas)',
+        position: 'relative',
+        overflow: 'hidden',
+        padding: '2rem 1rem',
+      }}
+    >
+      {/* Soft brand glow accents (token-driven, subtle in both themes) */}
+      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, var(--accent-soft), transparent 70%)', top: '-100px', right: '-100px', pointerEvents: 'none', opacity: 0.6 }} />
+      <div style={{ position: 'absolute', width: '300px', height: '300px', borderRadius: '50%', background: 'radial-gradient(circle, var(--accent-soft), transparent 70%)', bottom: '-50px', left: '-50px', pointerEvents: 'none', opacity: 0.4 }} />
 
-      {/* Grid lines background */}
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)', backgroundSize: '60px 60px', opacity: 0.5 }} />
+      {/* Theme toggle */}
+      <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', zIndex: 2 }}>
+        <ThemeToggle />
+      </div>
 
-      <div style={{ width: '100%', maxWidth: '420px', padding: '0 1rem', position: 'relative', zIndex: 1 }}>
+      <div style={{ width: '100%', maxWidth: '420px', position: 'relative', zIndex: 1 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', justifyContent: 'center', marginBottom: '1rem' }}>
-            <BrandLogo variant="dark" height={72} />
+            <BrandLogo variant="primary" height={72} />
           </Link>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff', letterSpacing: '0' }}>PID hcms</h1>
-          <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Human Capital Management System</p>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: 0 }}>PID hcms</h1>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Human Capital Management System</p>
         </div>
 
         {/* Login Card */}
-        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '2.5rem', backdropFilter: 'blur(20px)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', textAlign: 'center', color: 'rgba(255,255,255,0.95)' }}>Welcome Back</h2>
-          <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: '2rem' }}>Sign in to access your dashboard</p>
+        <div
+          style={{
+            background: 'var(--surface-raised)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '2.5rem',
+            boxShadow: 'var(--shadow-3)',
+          }}
+        >
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', textAlign: 'center', color: 'var(--text-primary)' }}>
+            {subdomain ? `Sign in to ${workspaceName || subdomain}` : 'Welcome Back'}
+          </h2>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '2rem' }}>
+            {subdomain ? (
+              <>Workspace <strong style={{ color: 'var(--text-secondary)' }}>{subdomain}.{BASE_DOMAIN}</strong></>
+            ) : (
+              'Sign in to access your dashboard'
+            )}
+          </p>
 
           {error && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', marginBottom: '1.5rem' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-              <span style={{ fontSize: '0.85rem', color: '#f87171' }}>{error}</span>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <Banner tone="danger" title={wrongWorkspace ? 'Wrong workspace' : undefined}>
+                {error}
+                {wrongWorkspace?.subdomain && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <a href={workspaceUrl(wrongWorkspace.subdomain)} style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                      Go to {wrongWorkspace.subdomain}.{BASE_DOMAIN} →
+                    </a>
+                  </div>
+                )}
+              </Banner>
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Email Address</label>
-              <div style={{ position: 'relative' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
-                  <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-                </svg>
-                <ValidatedInput type="email" value={email} onChange={setEmail} validator={vEmail} forceError={submitted} required placeholder="admin@hrms.com" style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: 'rgba(255,255,255,0.95)', fontSize: '0.9rem', outline: 'none', transition: 'all 0.3s ease', fontFamily: 'inherit' }} />
-              </div>
-            </div>
+            <TextField
+              label="Email Address"
+              type="email"
+              value={email}
+              onChange={setEmail}
+              validator={vEmail}
+              forceError={submitted}
+              required
+              placeholder="admin@hrms.com"
+            />
 
-            <div style={{ marginBottom: '2rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: 'rgba(255,255,255,0.6)', marginBottom: '0.4rem' }}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                </svg>
-                <ValidatedInput type="password" value={password} onChange={setPassword} validator={required('Password')} forceError={submitted} required placeholder="••••••••" style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: 'rgba(255,255,255,0.95)', fontSize: '0.9rem', outline: 'none', transition: 'all 0.3s ease', fontFamily: 'inherit' }} />
-              </div>
-            </div>
+            <TextField
+              label="Password"
+              type="password"
+              value={password}
+              onChange={setPassword}
+              validator={required('Password')}
+              forceError={submitted}
+              required
+              placeholder="••••••••"
+            />
 
-            <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.85rem', background: 'linear-gradient(135deg, #00A7B5, #182B6D)', color: 'white', border: 'none', borderRadius: '10px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.95rem', transition: 'all 0.3s ease', opacity: loading ? 0.7 : 1, boxShadow: '0 4px 16px rgba(0,167,181,0.3)', fontFamily: 'inherit', letterSpacing: '0.5px' }}>
+            <Button type="submit" loading={loading} fullWidth style={{ marginTop: '0.75rem' }}>
               {loading ? 'Signing in...' : 'Sign In'}
-            </button>
+            </Button>
           </form>
 
           <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>New to PID hcms? </span>
-            <Link href="/signup" style={{ fontSize: '0.85rem', color: '#00A7B5', textDecoration: 'none', fontWeight: 600 }}>Get Started</Link>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>New to PID hcms? </span>
+            <Link href="/signup" style={{ fontSize: '0.85rem', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Get Started</Link>
           </div>
         </div>
 
         {process.env.NODE_ENV === 'development' && (
-          <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2rem' }}>
-            <strong>Admin:</strong> admin@hrms.com / admin123<br/>
+          <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2rem' }}>
+            <strong>Admin:</strong> admin@hrms.com / admin123<br />
             <strong>Employees:</strong> &lt;name&gt;@company.com / employee123
           </p>
         )}

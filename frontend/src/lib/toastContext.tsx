@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { apiEvents } from './api';
 import { normalizeManualMessage } from './userMessages';
 import BrandLogo from '@/components/BrandLogo';
@@ -31,6 +31,13 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [activeRequests, setActiveRequests] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_PHRASES[0]);
+  // The full-screen spinner only appears once a request has been pending for a
+  // beat (SPINNER_DELAY_MS). Fast/cached calls just flash the top progress bar,
+  // so the app feels instant; genuinely slow work shows the engaging loader.
+  const [showSpinner, setShowSpinner] = useState(false);
+  const busyRef = useRef(false);
+  const spinnerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SPINNER_DELAY_MS = 400;
 
   const showToast = (message: string, type: 'success' | 'error') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -80,6 +87,19 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
       unsubscribeError();
     };
   }, []);
+
+  // Gate the blocking spinner behind a short delay so only slow work shows it.
+  useEffect(() => {
+    const busy = activeRequests > 0;
+    if (busy && !busyRef.current) {
+      busyRef.current = true;
+      spinnerTimer.current = setTimeout(() => setShowSpinner(true), SPINNER_DELAY_MS);
+    } else if (!busy && busyRef.current) {
+      busyRef.current = false;
+      if (spinnerTimer.current) clearTimeout(spinnerTimer.current);
+      setShowSpinner(false);
+    }
+  }, [activeRequests]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -199,9 +219,32 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
         ))}
       </div>
 
-      {/* Styled Loading Backdrop Overlay */}
+      {/* Slim top progress bar — instant, non-blocking feedback on every request. */}
       {activeRequests > 0 && (
         <div
+          aria-hidden
+          data-pid-loader="bar"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, height: '3px',
+            zIndex: 100000, overflow: 'hidden', pointerEvents: 'none',
+            background: 'rgba(0, 167, 181, 0.12)',
+          }}
+        >
+          <div
+            style={{
+              height: '100%', width: '40%', borderRadius: '0 3px 3px 0',
+              background: 'linear-gradient(90deg, transparent, #00A7B5 40%, #73E0E7 70%, #182B6D)',
+              boxShadow: '0 0 12px rgba(0, 167, 181, 0.6)',
+              animation: 'pidTopBar 1s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Styled Loading Backdrop Overlay — only for genuinely slow work. */}
+      {showSpinner && (
+        <div
+          data-pid-loader="spinner"
           style={{
             position: 'fixed',
             inset: 0,
@@ -286,6 +329,11 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
             opacity: 1;
             transform: translateX(0) translateY(0) scale(1);
           }
+        }
+        @keyframes pidTopBar {
+          0%   { transform: translateX(-100%) scaleX(0.6); }
+          50%  { transform: translateX(60%) scaleX(1); }
+          100% { transform: translateX(260%) scaleX(0.6); }
         }
       `}</style>
     </ToastContext.Provider>

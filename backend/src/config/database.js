@@ -58,8 +58,42 @@ const tenantModels = [
   'Holiday',
   'BiometricDevice',
   'Asset',
-  'LearningCourse'
+  'LearningCourse',
+  // Carries a companyId so company-wide broadcasts (no employee) stay isolated.
+  'Notification',
+  // Tenant-defined access modules — isolated per organization.
+  'CustomModule'
 ];
+
+// Leaf models that DON'T carry companyId but belong to a tenant via a parent
+// relation. The extension AND-injects a relation filter so reads/counts can never
+// span tenants (e.g. attendance is scoped through its employee's companyId).
+// Value is the relation path from the model up to a record that has `companyId`.
+const relationScopedModels = {
+  Attendance: 'employee', AttendanceRegularization: 'employee', BankDetails: 'employee',
+  ChangeHistory: 'employee', Dependent: 'employee', Document: 'employee', Education: 'employee',
+  EmployeeAddress: 'employee', EmployeeChecklistTask: 'employee', EmployeeTaxDeclaration: 'employee',
+  ExitDetails: 'employee', ExpenseClaim: 'employee', Feedback360: 'employee', HelpdeskTicket: 'employee',
+  KRA: 'employee', LearningEnrollment: 'employee', Leave: 'employee', LeaveQuota: 'employee',
+  Overtime: 'employee', PFDetails: 'employee', PayrollRecord: 'employee', PerformanceAppraisal: 'employee',
+  PreviousEmployerIncome: 'employee', ProfessionalExperience: 'employee', ProjectResource: 'employee',
+  SalaryRevision: 'employee', SalaryStructure: 'employee', ShiftAssignment: 'employee', TDSLedger: 'employee',
+  Timesheet: 'employee', TravelAdvance: 'employee',
+  JobApplicant: 'jobOpening',
+  ProjectExpense: 'project',
+  ChecklistTemplateTask: 'template',
+  PayrollApproval: 'payrollRun',
+  Interview: ['applicant', 'jobOpening'],
+  JobOffer: ['applicant', 'jobOpening'],
+};
+
+// Build a nested relation `where` ending in { companyId }, e.g.
+//   'employee'                     -> { employee: { companyId } }
+//   ['applicant','jobOpening']     -> { applicant: { jobOpening: { companyId } } }
+const buildRelationWhere = (spec, companyId) => {
+  const path = Array.isArray(spec) ? spec : [spec];
+  return path.reduceRight((acc, rel) => ({ [rel]: acc }), { companyId });
+};
 
 // Multi-tenant query isolation + transparent field-level encryption extension
 const prisma = basePrisma.$extends({
@@ -115,6 +149,22 @@ const prisma = basePrisma.$extends({
                 }
               }
             }
+          }
+        }
+
+        // Relation-scoped leaf models: AND-inject the tenant relation filter so a
+        // read/count/aggregate can never cross tenants. Never overwrites caller
+        // filters (wrapped in AND).
+        if (companyId && relationScopedModels[model]) {
+          const relWhere = buildRelationWhere(relationScopedModels[model], companyId);
+          if (operation === 'findUnique') {
+            const prismaModelName = model.charAt(0).toLowerCase() + model.slice(1);
+            args.where = { AND: [args.where || {}, relWhere] };
+            result = await basePrisma[prismaModelName].findFirst(args);
+            return decryptReadResult(result);
+          }
+          if (['findMany', 'findFirst', 'count', 'aggregate', 'groupBy', 'updateMany', 'deleteMany'].includes(operation)) {
+            args.where = { AND: [args.where || {}, relWhere] };
           }
         }
 

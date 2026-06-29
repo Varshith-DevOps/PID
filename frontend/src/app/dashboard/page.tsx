@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/lib/authContext';
 import { getPersonalizedDashboard } from '@/lib/api';
+import {
+  PageHeader, Badge, Button, Card, KpiBar, KpiPie,
+  EmptyState, ErrorState, Skeleton,
+} from '@/components/ui';
+import { isOwnerRole } from '@/lib/platformRoles';
 
 const money = (value: number) => `INR ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
@@ -15,12 +18,13 @@ const shortDate = (value?: string) => {
   return new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 };
 
-const toneColor = (tone: string) => {
-  if (tone === 'success') return '#10b981';
-  if (tone === 'warning') return '#f59e0b';
-  if (tone === 'danger') return '#ef4444';
-  if (tone === 'violet') return '#182B6D';
-  return '#00A7B5';
+// Maps a semantic "tone" to token-driven foreground/background CSS variables.
+const toneToken = (tone: string): { fg: string; bg: string } => {
+  if (tone === 'success') return { fg: 'var(--success-fg)', bg: 'var(--success-bg)' };
+  if (tone === 'warning') return { fg: 'var(--warning-fg)', bg: 'var(--warning-bg)' };
+  if (tone === 'danger') return { fg: 'var(--danger-fg)', bg: 'var(--danger-bg)' };
+  if (tone === 'violet') return { fg: 'var(--leave-fg)', bg: 'var(--leave-bg)' };
+  return { fg: 'var(--info-fg)', bg: 'var(--info-bg)' };
 };
 
 const availabilityLabel: Record<string, string> = {
@@ -47,9 +51,13 @@ export default function DashboardPage() {
   const router = useRouter();
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) router.push('/');
+    if (authLoading) return;
+    if (!user) { router.push('/'); return; }
+    // App-owner accounts live in the Admin Portal, not the tenant dashboard.
+    if (isOwnerRole(user.role)) router.replace('/platform-admin');
   }, [authLoading, user, router]);
 
   useEffect(() => {
@@ -59,10 +67,12 @@ export default function DashboardPage() {
   const loadDashboard = async () => {
     try {
       setLoading(true);
+      setError(false);
       const data = await getPersonalizedDashboard();
       setDashboard(data);
     } catch (err) {
       console.error('Failed to load personalized dashboard:', err);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -80,121 +90,62 @@ export default function DashboardPage() {
     <div className="app-layout">
       <Sidebar />
       <main className="main-content dashboard-shell">
-        <style jsx>{`
+        <style jsx global>{`
           .dashboard-shell { padding: 1.5rem; }
-          .dash-wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
-          .dash-hero {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 1rem;
-            align-items: stretch;
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.82));
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            border-radius: 8px;
-            padding: 1.2rem;
+          .dashboard-shell .dash-wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.1rem; }
+          .dashboard-shell .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+          .dashboard-shell .two-col { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); gap: 1rem; align-items: start; }
+          .dashboard-shell .three-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+          .dashboard-shell .list { display: flex; flex-direction: column; gap: 0.55rem; }
+          .dashboard-shell .row-card {
+            display: flex; justify-content: space-between; gap: 0.75rem; align-items: center;
+            padding: 0.72rem 0.85rem;
+            border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+            background: var(--surface-sunken);
           }
-          .dash-title { margin: 0; color: white; font-size: 1.55rem; line-height: 1.2; font-weight: 850; letter-spacing: 0; }
-          .dash-subtitle { margin: 0.35rem 0 0; color: var(--text-secondary); font-size: 0.82rem; max-width: 760px; }
-          .dash-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
-          .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.8rem; }
-          .coach-card {
-            position: relative;
-            background: rgba(15, 23, 42, 0.78);
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 8px;
-            padding: 1rem;
-            min-height: 120px;
-            transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+          .dashboard-shell .row-card:hover { border-color: var(--accent); }
+          .dashboard-shell .row-main { min-width: 0; }
+          .dashboard-shell .row-title { color: var(--text-primary); font-weight: 700; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .dashboard-shell .row-sub { color: var(--text-muted); font-size: 0.74rem; margin-top: 0.12rem; }
+          .dashboard-shell .coach-card {
+            background: var(--surface-sunken);
+            border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+            padding: 0.95rem 1.05rem;
+            transition: border-color var(--motion-base) var(--ease-out);
           }
-          .coach-card:hover { transform: translateY(-2px); border-color: rgba(96, 165, 250, 0.55); background: rgba(15, 23, 42, 0.94); }
-          .coach-tip {
-            position: absolute;
-            left: 0.75rem;
-            right: 0.75rem;
-            bottom: calc(100% + 0.5rem);
-            opacity: 0;
-            pointer-events: none;
-            transform: translateY(6px);
-            transition: opacity 0.18s ease, transform 0.18s ease;
-            background: #0f172a;
-            border: 1px solid rgba(96, 165, 250, 0.38);
-            border-radius: 8px;
-            padding: 0.7rem;
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 0.74rem;
-            line-height: 1.45;
-            z-index: 20;
-            box-shadow: 0 14px 38px rgba(0, 0, 0, 0.36);
-          }
-          .coach-card:hover .coach-tip { opacity: 1; transform: translateY(0); }
-          .metric-label { color: var(--text-secondary); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0; font-weight: 750; }
-          .metric-value { margin-top: 0.35rem; font-size: 1.65rem; color: white; font-weight: 850; line-height: 1.1; word-break: break-word; }
-          .metric-note { margin-top: 0.35rem; color: var(--text-muted); font-size: 0.72rem; }
-          .panel {
-            background: rgba(15, 23, 42, 0.72);
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 8px;
-            padding: 1rem;
-            min-width: 0;
-          }
-          .panel-title { color: white; font-size: 0.98rem; font-weight: 800; margin: 0 0 0.75rem; }
-          .two-col { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); gap: 1rem; align-items: start; }
-          .three-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
-          .list { display: flex; flex-direction: column; gap: 0.55rem; }
-          .row-card {
-            position: relative;
-            display: flex;
-            justify-content: space-between;
-            gap: 0.75rem;
-            align-items: center;
-            padding: 0.72rem;
-            border: 1px solid rgba(148, 163, 184, 0.12);
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.025);
-          }
-          .row-card:hover { border-color: rgba(96, 165, 250, 0.42); }
-          .row-main { min-width: 0; }
-          .row-title { color: white; font-weight: 750; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .row-sub { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.12rem; }
-          .pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 0.22rem 0.5rem; font-size: 0.67rem; font-weight: 800; white-space: nowrap; }
-          .quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem; }
-          .quick-link {
-            color: white;
-            border: 1px solid rgba(148, 163, 184, 0.14);
-            background: rgba(255,255,255,0.03);
-            border-radius: 8px;
-            padding: 0.65rem;
-            font-size: 0.76rem;
-            font-weight: 750;
-            text-align: center;
-          }
-          .quick-link:hover { border-color: rgba(96, 165, 250, 0.5); background: rgba(37, 99, 235, 0.12); }
-          .empty { color: var(--text-muted); font-size: 0.76rem; padding: 1rem; text-align: center; border: 1px dashed rgba(148,163,184,0.2); border-radius: 8px; }
+          .dashboard-shell .coach-card:hover { border-color: var(--accent); }
+          .dashboard-shell .quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem; }
           @media (max-width: 980px) {
             .dashboard-shell { padding: 1rem; }
-            .dash-hero, .two-col { grid-template-columns: 1fr; }
-            .dash-actions { justify-content: flex-start; }
+            .dashboard-shell .two-col { grid-template-columns: 1fr; }
           }
         `}</style>
 
         <div className="dash-wrap">
-          <header className="dash-hero">
-            <div>
-              <h1 className="dash-title">{getTitle(dashboard, user)}</h1>
-              <p className="dash-subtitle">{getSubtitle(dashboard)}</p>
-            </div>
-            <div className="dash-actions">
-              <span className="pill" style={{ background: 'rgba(0,167,181,0.14)', color: '#BFEFF4' }}>
-                {dashboard?.dashboardType || user.role} view
-              </span>
-              <button className="btn btn-neutral btn-sm" onClick={loadDashboard}>Refresh</button>
-            </div>
-          </header>
+          <PageHeader
+            title={getTitle(dashboard, user)}
+            subtitle={getSubtitle(dashboard)}
+            actions={(
+              <>
+                <Badge tone="info" dot>{dashboard?.dashboardType || user.role} view</Badge>
+                <Button variant="ghost" size="sm" onClick={loadDashboard} loading={loading}>Refresh</Button>
+              </>
+            )}
+          />
 
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
-              <div className="loading-spinner" />
-            </div>
+            <>
+              <section className="metric-grid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Card key={i}><Skeleton height={18} width="60%" /><Skeleton height={32} width="40%" style={{ marginTop: '0.6rem' }} /></Card>
+                ))}
+              </section>
+              <Card><Skeleton height={250} /></Card>
+            </>
+          ) : error ? (
+            <Card>
+              <ErrorState message="We couldn't load your dashboard. Please try again." onRetry={loadDashboard} />
+            </Card>
           ) : dashboard?.dashboardType === 'EMPLOYEE' ? (
             <EmployeeDashboardView dashboard={dashboard} />
           ) : dashboard?.dashboardType === 'MANAGER' ? (
@@ -227,13 +178,12 @@ function getSubtitle(dashboard: any) {
   return 'Organization health, attendance, payroll, recruitment, projects, and governance signals for fast decisions.';
 }
 
-function SmartMetric({ label, value, note, tone = 'blue', coach }: { label: string; value: string | number; note?: string; tone?: string; coach: string }) {
+function SmartMetric({ label, value, note, tone = 'blue' }: { label: string; value: string | number; note?: string; tone?: string; coach?: string }) {
   return (
     <div className="coach-card">
-      <div className="coach-tip">{coach}</div>
-      <div className="metric-label">{label}</div>
-      <div className="metric-value" style={{ color: toneColor(tone) }}>{value}</div>
-      {note && <div className="metric-note">{note}</div>}
+      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>{label}</div>
+      <div style={{ marginTop: '0.4rem', fontSize: '1.7rem', fontWeight: 800, lineHeight: 1.1, wordBreak: 'break-word', color: toneToken(tone).fg }}>{value}</div>
+      {note && <div style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.74rem' }}>{note}</div>}
     </div>
   );
 }
@@ -259,23 +209,17 @@ function EmployeeDashboardView({ dashboard }: { dashboard: any }) {
       </section>
 
       <section className="two-col">
-        <div className="panel">
-          <h2 className="panel-title">Weekly attendance and effort</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-              <Bar dataKey="hours" fill="#00A7B5" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <Card title="Weekly attendance and effort">
+          {weeklyData.length ? (
+            <KpiBar data={weeklyData} xKey="date" bars={[{ key: 'hours', name: 'Hours', color: '#00A7B5' }]} height={250} />
+          ) : (
+            <EmptyState title="No attendance yet" message="Your weekly hours will appear here once logged." />
+          )}
+        </Card>
 
-        <div className="panel">
-          <h2 className="panel-title">Team availability</h2>
+        <Card title="Team availability">
           <AvailabilityList rows={cards.teamAvailability || []} />
-        </div>
+        </Card>
       </section>
 
       <section className="three-col">
@@ -320,31 +264,31 @@ function ManagerDashboardView({ dashboard }: { dashboard: any }) {
       </section>
 
       <section className="two-col">
-        <div className="panel">
-          <h2 className="panel-title">Individual team insight</h2>
+        <Card title="Individual team insight">
           <div className="list">
-            {workload.length ? workload.map((member: any) => (
-              <div key={member.id} className="coach-card" style={{ minHeight: '86px' }}>
-                <div className="coach-tip">{member.health === 'STRONG' ? `${member.name} is meeting expectations. Recognize the consistency and keep priorities clear.` : member.health === 'AT_RISK' ? `${member.name} may be overloaded. Review deadlines, split work, or remove blockers.` : member.health === 'UNDER_UTILIZED' ? `${member.name} has capacity. Assign meaningful work or verify timesheets are current.` : `${member.name} is steady. A quick check-in can keep momentum clean.`}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
-                  <div className="row-main">
-                    <div className="row-title">{member.name}</div>
-                    <div className="row-sub">{member.title} | {member.department}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ color: toneColor(member.health === 'STRONG' ? 'success' : member.health === 'AT_RISK' ? 'danger' : 'warning'), fontWeight: 850 }}>{member.hours}h</div>
-                    <div className="row-sub">{member.openTasks} tasks</div>
+            {workload.length ? workload.map((member: any) => {
+              const tone = member.health === 'STRONG' ? 'success' : member.health === 'AT_RISK' ? 'danger' : 'warning';
+              return (
+                <div key={member.id} className="coach-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                    <div className="row-main">
+                      <div className="row-title">{member.name}</div>
+                      <div className="row-sub">{member.title} | {member.department}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ color: toneToken(tone).fg, fontWeight: 850 }}>{member.hours}h</div>
+                      <div className="row-sub">{member.openTasks} tasks</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )) : <div className="empty">No direct reports found.</div>}
+              );
+            }) : <EmptyState title="No direct reports" message="Team members will appear here once assigned." />}
           </div>
-        </div>
+        </Card>
 
-        <div className="panel">
-          <h2 className="panel-title">Team availability today</h2>
+        <Card title="Team availability today">
           <AvailabilityList rows={cards.teamAvailability || []} />
-        </div>
+        </Card>
       </section>
 
       <section className="three-col">
@@ -388,22 +332,18 @@ function PayrollDashboardView({ dashboard, departmentData }: { dashboard: any; d
       </section>
 
       <section className="two-col">
-        <div className="panel">
-          <h2 className="panel-title">Payroll readiness map</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={[
+        <Card title="Payroll readiness map">
+          <KpiBar
+            data={[
               { name: 'Salary', value: payroll.salaryReadiness || 0 },
               { name: 'Bank', value: payroll.bankReadiness || 0 },
               { name: 'Overall', value: focus.payrollReadiness || 0 },
-            ]}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-              <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+            ]}
+            xKey="name"
+            bars={[{ key: 'value', name: 'Readiness %', color: '#10b981' }]}
+            height={260}
+          />
+        </Card>
 
         <PanelList title="Payroll action queue" rows={[
           { title: 'Validate salary structures', sub: `${payroll.salaryReadiness || 0}% complete`, pill: payroll.salaryReadiness >= 95 ? 'Ready' : 'Fix', tone: payroll.salaryReadiness >= 95 ? 'success' : 'danger', coach: 'Every missing salary structure can block accurate payroll calculation.' },
@@ -413,7 +353,7 @@ function PayrollDashboardView({ dashboard, departmentData }: { dashboard: any; d
       </section>
 
       <section className="three-col">
-        <ChartPanel title="Department headcount" data={departmentData} dataKey="employees" nameKey="name" />
+        <ChartPanel title="Department headcount" data={departmentData} dataKey="employees" nameKey="name" color="#182B6D" />
         <QuickLinks links={[['Payroll', '/payroll'], ['Payslips', '/payslips'], ['Reports', '/dashboard/admin/reports'], ['Employees', '/employees']]} />
         <PanelList title="Upcoming birthdays" rows={(dashboard.cards?.birthdays || []).map((person: any) => ({ title: person.name, sub: person.department, pill: person.dayLabel, tone: 'violet', coach: 'Payroll teams can help HR spot lifecycle events and communication moments.' }))} empty="No birthdays nearby." />
       </section>
@@ -435,30 +375,21 @@ function AdminHrDashboardView({ dashboard, departmentData, recruitmentData }: { 
       </section>
 
       <section className="two-col">
-        <div className="panel">
-          <h2 className="panel-title">Workforce by department</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={departmentData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-              <Bar dataKey="employees" fill="#00A7B5" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <Card title="Workforce by department">
+          {departmentData.length ? (
+            <KpiBar data={departmentData} xKey="name" bars={[{ key: 'employees', name: 'Employees', color: '#00A7B5' }]} height={260} />
+          ) : (
+            <EmptyState title="No department data" />
+          )}
+        </Card>
 
-        <div className="panel">
-          <h2 className="panel-title">Recruitment pipeline</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={recruitmentData} dataKey="count" nameKey="stage" innerRadius={58} outerRadius={88}>
-                {recruitmentData.map((_: any, index: number) => <Cell key={index} fill={['#00A7B5', '#10b981', '#f59e0b', '#182B6D', '#ef4444'][index % 5]} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        <Card title="Recruitment pipeline">
+          {recruitmentData.length ? (
+            <KpiPie data={recruitmentData} dataKey="count" nameKey="stage" height={260} />
+          ) : (
+            <EmptyState title="No active recruitment" message="Pipeline stages will appear here once candidates exist." />
+          )}
+        </Card>
       </section>
 
       <section className="three-col">
@@ -483,21 +414,26 @@ function AdminHrDashboardView({ dashboard, departmentData, recruitmentData }: { 
 }
 
 function AvailabilityList({ rows }: { rows: any[] }) {
-  if (!rows.length) return <div className="empty">No team members to show.</div>;
+  if (!rows.length) return <EmptyState title="No team members to show." />;
   return (
     <div className="list">
       {rows.map((row) => {
         const ok = row.status === 'AVAILABLE' || row.status === 'LATE_ONLINE';
         const tone = row.status === 'ON_LEAVE' ? 'warning' : ok ? 'success' : 'danger';
+        const c = toneToken(tone);
         return (
           <div key={row.id} className="row-card">
             <div className="row-main">
               <div className="row-title">{row.name}</div>
               <div className="row-sub">{row.role} | {row.department}</div>
             </div>
-            <span className="pill" style={{ background: `${toneColor(tone)}22`, color: toneColor(tone) }}>
+            <Badge
+              tone={tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : 'success'}
+              dot
+              style={{ background: c.bg, color: c.fg }}
+            >
               {availabilityLabel[row.status] || row.status}
-            </span>
+            </Badge>
           </div>
         );
       })}
@@ -507,52 +443,52 @@ function AvailabilityList({ rows }: { rows: any[] }) {
 
 function PanelList({ title, rows, empty }: { title: string; rows: any[]; empty: string }) {
   return (
-    <div className="panel">
-      <h2 className="panel-title">{title}</h2>
+    <Card title={title}>
       <div className="list">
-        {rows.length ? rows.map((row, index) => (
-          <div key={`${row.title}-${index}`} className="coach-card" style={{ minHeight: '86px' }}>
-            <div className="coach-tip">{row.coach}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
-              <div className="row-main">
-                <div className="row-title">{row.title}</div>
-                <div className="row-sub">{row.sub}</div>
+        {rows.length ? rows.map((row, index) => {
+          const c = toneToken(row.tone);
+          return (
+            <div key={`${row.title}-${index}`} className="coach-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
+                <div className="row-main">
+                  <div className="row-title">{row.title}</div>
+                  <div className="row-sub">{row.sub}</div>
+                </div>
+                <Badge
+                  tone={row.tone === 'success' ? 'success' : row.tone === 'warning' ? 'warning' : row.tone === 'danger' ? 'danger' : row.tone === 'violet' ? 'leave' : 'info'}
+                  style={{ background: c.bg, color: c.fg }}
+                >
+                  {row.pill}
+                </Badge>
               </div>
-              <span className="pill" style={{ background: `${toneColor(row.tone)}22`, color: toneColor(row.tone) }}>{row.pill}</span>
             </div>
-          </div>
-        )) : <div className="empty">{empty}</div>}
+          );
+        }) : <EmptyState title={empty} />}
       </div>
-    </div>
+    </Card>
   );
 }
 
-function ChartPanel({ title, data, dataKey, nameKey }: { title: string; data: any[]; dataKey: string; nameKey: string }) {
+function ChartPanel({ title, data, dataKey, nameKey, color }: { title: string; data: any[]; dataKey: string; nameKey: string; color?: string }) {
   return (
-    <div className="panel">
-      <h2 className="panel-title">{title}</h2>
-      <ResponsiveContainer width="100%" height={230}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" />
-          <XAxis dataKey={nameKey} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-          <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(148,163,184,0.25)' }} />
-          <Bar dataKey={dataKey} fill="#182B6D" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <Card title={title}>
+      {data.length ? (
+        <KpiBar data={data} xKey={nameKey} bars={[{ key: dataKey, color: color || '#182B6D' }]} height={230} />
+      ) : (
+        <EmptyState title="No data" />
+      )}
+    </Card>
   );
 }
 
 function QuickLinks({ links }: { links: string[][] }) {
   return (
-    <div className="panel">
-      <h2 className="panel-title">Quick actions</h2>
+    <Card title="Quick actions">
       <div className="quick-grid">
         {links.map(([label, href]) => (
-          <Link key={href} className="quick-link" href={href}>{label}</Link>
+          <Button key={href} href={href} variant="ghost" size="sm" fullWidth>{label}</Button>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

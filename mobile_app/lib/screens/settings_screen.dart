@@ -5,21 +5,14 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../main.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../services/update_service.dart';
+import '../theme/app_theme.dart';
 import 'login_screen.dart';
 import 'project_board_screen.dart';
 import 'update_dialog.dart';
-
-const _bg = Color(0xFF0B1020);
-const _panel = Color(0xFF111827);
-const _panelSoft = Color(0xFF172033);
-const _line = Color(0xFF263247);
-const _text = Color(0xFFE5E7EB);
-const _muted = Color(0xFF94A3B8);
-const _teal = Color(0xFF2DD4BF);
-const _rose = Color(0xFFFB7185);
 
 class SettingsScreen extends StatefulWidget {
   final AuthProvider authProvider;
@@ -49,8 +42,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _toast(String text, {bool error = false}) {
     if (!mounted) return;
+    final c = context.colors;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), backgroundColor: error ? _rose : _teal),
+      SnackBar(content: Text(text), backgroundColor: error ? c.danger : c.accent),
     );
   }
 
@@ -69,6 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _changePassword() async {
+    final c = context.colors;
     final current = TextEditingController();
     final next = TextEditingController();
     final confirm = TextEditingController();
@@ -78,7 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _panel,
+      backgroundColor: c.raised,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) => Padding(
@@ -88,24 +83,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Change password',
-                  style: TextStyle(color: _text, fontSize: 18, fontWeight: FontWeight.w800)),
+              Text('Change password',
+                  style: TextStyle(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 16),
               _field(current, 'Current password', obscure: true),
               const SizedBox(height: 12),
               _field(next, 'New password', obscure: true),
               const SizedBox(height: 6),
-              const Text('Min 12 chars with upper, lower, number, and symbol.',
-                  style: TextStyle(color: _muted, fontSize: 11)),
+              Text('Min 12 chars with upper, lower, number, and symbol.',
+                  style: TextStyle(color: c.textMuted, fontSize: 11)),
               const SizedBox(height: 12),
               _field(confirm, 'Confirm new password', obscure: true),
               if (error != null) ...[
                 const SizedBox(height: 10),
-                Text(error!, style: const TextStyle(color: _rose, fontSize: 13)),
+                Text(error!, style: TextStyle(color: c.danger, fontSize: 13)),
               ],
               const SizedBox(height: 18),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: _teal, minimumSize: const Size.fromHeight(48)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: c.accent,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
+                ),
                 onPressed: saving
                     ? null
                     : () async {
@@ -132,8 +131,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         }
                       },
                 child: saving
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Color(0xFF042F2E), strokeWidth: 2.5))
-                    : const Text('Update password', style: TextStyle(color: Color(0xFF042F2E), fontWeight: FontWeight.w700)),
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    : const Text('Update password', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -171,19 +170,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showPrivacyNotice() {
+    final c = context.colors;
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _panel,
+        backgroundColor: c.raised,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('Your data rights', style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
-        content: const Text(
+        title: Text('Your data rights', style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w800)),
+        content: Text(
           'Under the Digital Personal Data Protection (DPDP) Act, you can access a '
           'copy of the personal data PID hcms holds about you. Use "Download my data" '
           'to export your profile, attendance, leave, payroll, expense, and timesheet '
           'records. Statutory payroll and tax records are retained by law even after '
           'erasure requests. To correct or erase data, raise a request with HR.',
-          style: TextStyle(color: _muted, fontSize: 13),
+          style: TextStyle(color: c.textSecondary, fontSize: 13),
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Got it'))],
       ),
@@ -192,26 +192,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final user = widget.authProvider.user ?? const {};
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: c.canvas,
       appBar: AppBar(
-        backgroundColor: _bg,
+        backgroundColor: c.navInk,
         elevation: 0,
-        iconTheme: const IconThemeData(color: _muted),
-        title: const Text('Settings', style: TextStyle(color: _text, fontWeight: FontWeight.w800)),
+        iconTheme: const IconThemeData(color: Colors.white70),
+        title: const Text('Settings', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
-          _SectionLabel('Account'),
+          const _SectionLabel('Account'),
           _Card(children: [
             _Row(icon: Icons.person_outline, title: user['name']?.toString() ?? 'Employee', subtitle: user['email']?.toString() ?? ''),
-            const Divider(color: _line, height: 1),
+            Divider(color: c.border, height: 1),
             _Tile(icon: Icons.lock_outline, title: 'Change password', onTap: _changePassword),
           ]),
           const SizedBox(height: 18),
-          _SectionLabel('Workspace'),
+          const _SectionLabel('Appearance'),
+          _Card(children: [
+            // Theme selector wired to the global themeController.
+            ListenableBuilder(
+              listenable: themeController,
+              builder: (context, _) {
+                final mode = themeController.mode;
+                return Column(
+                  children: [
+                    _ThemeOption(
+                      icon: Icons.light_mode_outlined,
+                      title: 'Light',
+                      subtitle: 'Bright, default appearance',
+                      selected: mode == ThemeMode.light,
+                      onTap: () => themeController.setMode(ThemeMode.light),
+                    ),
+                    Divider(color: c.border, height: 1),
+                    _ThemeOption(
+                      icon: Icons.dark_mode_outlined,
+                      title: 'Dark',
+                      subtitle: 'Easier on the eyes in low light',
+                      selected: mode == ThemeMode.dark,
+                      onTap: () => themeController.setMode(ThemeMode.dark),
+                    ),
+                    Divider(color: c.border, height: 1),
+                    _ThemeOption(
+                      icon: Icons.brightness_auto_outlined,
+                      title: 'System',
+                      subtitle: 'Match your device setting',
+                      selected: mode == ThemeMode.system,
+                      onTap: () => themeController.setMode(ThemeMode.system),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ]),
+          const SizedBox(height: 18),
+          const _SectionLabel('Workspace'),
           _Card(children: [
             _Tile(
               icon: Icons.view_kanban_outlined,
@@ -221,7 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
           const SizedBox(height: 18),
-          _SectionLabel('Privacy & data (DPDP)'),
+          const _SectionLabel('Privacy & data (DPDP)'),
           _Card(children: [
             _Tile(
               icon: Icons.download_outlined,
@@ -230,14 +269,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               trailing: _exporting ? const _Spinner() : null,
               onTap: _exporting ? null : _exportMyData,
             ),
-            const Divider(color: _line, height: 1),
+            Divider(color: c.border, height: 1),
             _Tile(icon: Icons.privacy_tip_outlined, title: 'Your data rights', onTap: _showPrivacyNotice),
           ]),
           const SizedBox(height: 18),
-          _SectionLabel('App'),
+          const _SectionLabel('App'),
           _Card(children: [
             _Row(icon: Icons.info_outline, title: 'Version', subtitle: _version),
-            const Divider(color: _line, height: 1),
+            Divider(color: c.border, height: 1),
             _Tile(
               icon: Icons.system_update_alt_outlined,
               title: 'Check for updates',
@@ -251,7 +290,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Tile(
               icon: Icons.logout_rounded,
               title: 'Log out',
-              color: _rose,
+              color: c.danger,
               onTap: () async {
                 await widget.authProvider.logout();
                 if (!context.mounted) return;
@@ -269,18 +308,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _field(TextEditingController c, String hint, {bool obscure = false}) {
+    final col = context.colors;
     return TextField(
       controller: c,
       obscureText: obscure,
-      style: const TextStyle(color: _text),
+      style: TextStyle(color: col.textPrimary),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: _muted),
+        hintStyle: TextStyle(color: col.textMuted),
         filled: true,
-        fillColor: _panelSoft,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _line)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _line)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _teal)),
+        fillColor: col.sunken,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: col.border)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: col.border)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: col.accent)),
       ),
     );
   }
@@ -293,7 +333,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
         child: Text(text.toUpperCase(),
-            style: const TextStyle(color: _muted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+            style: TextStyle(color: context.colors.textMuted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
       );
 }
 
@@ -301,10 +341,13 @@ class _Card extends StatelessWidget {
   final List<Widget> children;
   const _Card({required this.children});
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: _line)),
-        child: Column(children: children),
-      );
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      decoration: BoxDecoration(color: c.raised, borderRadius: BorderRadius.circular(12), border: Border.all(color: c.border)),
+      child: Column(children: children),
+    );
+  }
 }
 
 class _Row extends StatelessWidget {
@@ -313,11 +356,14 @@ class _Row extends StatelessWidget {
   final String subtitle;
   const _Row({required this.icon, required this.title, required this.subtitle});
   @override
-  Widget build(BuildContext context) => ListTile(
-        leading: Icon(icon, color: _muted),
-        title: Text(title, style: const TextStyle(color: _text, fontWeight: FontWeight.w700)),
-        subtitle: subtitle.isEmpty ? null : Text(subtitle, style: const TextStyle(color: _muted, fontSize: 12)),
-      );
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return ListTile(
+      leading: Icon(icon, color: c.textMuted),
+      title: Text(title, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w700)),
+      subtitle: subtitle.isEmpty ? null : Text(subtitle, style: TextStyle(color: c.textMuted, fontSize: 12)),
+    );
+  }
 }
 
 class _Tile extends StatelessWidget {
@@ -325,22 +371,54 @@ class _Tile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Widget? trailing;
-  final Color color;
+  final Color? color;
   final VoidCallback? onTap;
-  const _Tile({required this.icon, required this.title, this.subtitle, this.trailing, this.color = _text, this.onTap});
+  const _Tile({required this.icon, required this.title, this.subtitle, this.trailing, this.color, this.onTap});
   @override
-  Widget build(BuildContext context) => ListTile(
-        leading: Icon(icon, color: color == _text ? _teal : color),
-        title: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
-        subtitle: subtitle == null ? null : Text(subtitle!, style: const TextStyle(color: _muted, fontSize: 12)),
-        trailing: trailing ?? (onTap != null ? const Icon(Icons.chevron_right, color: _muted) : null),
-        onTap: onTap,
-      );
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final titleColor = color ?? c.textPrimary;
+    return ListTile(
+      leading: Icon(icon, color: color ?? c.accent),
+      title: Text(title, style: TextStyle(color: titleColor, fontWeight: FontWeight.w700)),
+      subtitle: subtitle == null ? null : Text(subtitle!, style: TextStyle(color: c.textMuted, fontSize: 12)),
+      trailing: trailing ?? (onTap != null ? Icon(Icons.chevron_right, color: c.textMuted) : null),
+      onTap: onTap,
+    );
+  }
+}
+
+class _ThemeOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ThemeOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return ListTile(
+      leading: Icon(icon, color: selected ? c.accent : c.textMuted),
+      title: Text(title, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w700)),
+      subtitle: Text(subtitle, style: TextStyle(color: c.textMuted, fontSize: 12)),
+      trailing: selected
+          ? Icon(Icons.check_circle, color: c.accent)
+          : Icon(Icons.radio_button_unchecked, color: c.textMuted),
+      onTap: onTap,
+    );
+  }
 }
 
 class _Spinner extends StatelessWidget {
   const _Spinner();
   @override
   Widget build(BuildContext context) =>
-      const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: _teal, strokeWidth: 2));
+      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: context.colors.accent, strokeWidth: 2));
 }

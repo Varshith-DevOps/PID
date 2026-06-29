@@ -5,13 +5,10 @@
  */
 
 const prisma = require('../config/database');
-const path = require('path');
 const fs = require('fs');
+const fileStorage = require('../services/fileStorage');
 const { canAccessEmployee } = require('../services/accessControl');
 const { logPayrollEvent } = require('../services/auditService');
-const { ensureUploadDir } = require('../config/storage');
-
-const UPLOAD_DIR = ensureUploadDir();
 
 const getEmployeeDocuments = async (req, res) => {
   try {
@@ -43,13 +40,16 @@ const uploadDocument = async (req, res) => {
       return res.status(403).json({ error: 'Access denied. You cannot upload documents for this employee.' });
     }
 
+    // Disk in dev/test, S3 in prod — fileName/filePath are stored on the record.
+    const { fileName, filePath } = await fileStorage.persist(req.file, 'documents');
+
     const document = await prisma.document.create({
       data: {
         name: name || req.file.originalname,
         type: type || 'OTHER',
         description: description || null,
-        fileName: req.file.filename,
-        filePath: req.file.path,
+        fileName,
+        filePath,
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
         employeeId,
@@ -81,14 +81,8 @@ const deleteDocument = async (req, res) => {
       return res.status(403).json({ error: 'Access denied. You cannot delete this document.' });
     }
 
-    const filePath = path.resolve(document.filePath);
-    const uploadRoot = path.resolve(UPLOAD_DIR);
-    if (!filePath.startsWith(uploadRoot)) {
-      return res.status(400).json({ error: 'Invalid stored file path' });
-    }
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+    // Removes the S3 object or the on-disk file (path validated under the upload root).
+    await fileStorage.remove(document.filePath);
 
     await prisma.document.delete({ where: { id } });
     await logPayrollEvent({
@@ -114,12 +108,11 @@ const downloadDocument = async (req, res) => {
       return res.status(403).json({ error: 'Access denied. You cannot download this document.' });
     }
 
-    const filePath = path.resolve(document.filePath);
-    const uploadRoot = path.resolve(UPLOAD_DIR);
-    if (!filePath.startsWith(uploadRoot)) {
-      return res.status(400).json({ error: 'Invalid stored file path' });
+    const dl = await fileStorage.getDownload(document.filePath);
+    // Disk: validated path must exist. S3: short-lived presigned redirect.
+    if (!dl.redirectUrl && (!dl.localPath || !fs.existsSync(dl.localPath))) {
+      return res.status(404).json({ error: 'File not found' });
     }
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
     await logPayrollEvent({
       userEmail: req.user?.email || req.user?.id || 'system',
@@ -130,7 +123,8 @@ const downloadDocument = async (req, res) => {
       ipAddress: req.ip,
     });
 
-    res.download(filePath, document.name);
+    if (dl.redirectUrl) return res.redirect(dl.redirectUrl);
+    res.download(dl.localPath, document.name);
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }

@@ -53,8 +53,9 @@ const updateCompanyCustomizationAndKYC = async (req, res) => {
     if (contactPersonPhone !== undefined) updateData.contactPersonPhone = contactPersonPhone;
     if (demoCallDate !== undefined) updateData.demoCallScheduledAt = new Date(demoCallDate);
 
-    // If KYC details are submitted or updated and status is REJECTED or null, reset to PENDING
-    if (company.kycStatus === 'REJECTED') {
+    // Resubmitting KYC details after a rejection or an info request moves the
+    // company back into the review queue (PENDING) and clears the reviewer note.
+    if (company.kycStatus === 'REJECTED' || company.kycStatus === 'NEEDS_INFO') {
       updateData.kycStatus = 'PENDING';
       updateData.kycRemarks = null;
     }

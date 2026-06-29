@@ -1,0 +1,285 @@
+/* ============================================================================
+   PID HRMS — Design Tokens
+   Layer 1: primitive palette (theme-agnostic)
+   Layer 2: semantic tokens (light default in :root, dark in [data-theme=dark])
+   Layer 3: legacy aliases (keep existing globals.css class colors working)
+   Imported BEFORE globals.css.
+   ============================================================================ */
+
+:root {
+  /* ---------- Layer 1: PRIMITIVES (do not consume directly in components) ---------- */
+
+  /* Brand ink (deep navigation / command areas — used in both themes) */
+  --ink-900: #0a0e1a;
+  --ink-800: #0e1424;
+  --ink-700: #141c30;
+  --ink-600: #1b2540;
+
+  /* Teal ramp — primary action color (#00A7B5 brand) */
+  --teal-50:  #e6f7f9;
+  --teal-100: #c2ecf0;
+  --teal-200: #93dde4;
+  --teal-300: #54c9d3;
+  --teal-400: #1eb4c2;
+  --teal-500: #00a7b5;
+  --teal-600: #0b7890;
+  --teal-700: #0a6275;
+  --teal-800: #0c4f5e;
+  --teal-900: #0d3f4b;
+
+  /* Blue ramp — trust / enterprise (#182B6D brand) */
+  --blue-50:  #eef1fb;
+  --blue-100: #d7def4;
+  --blue-200: #aebfe8;
+  --blue-300: #7f96d6;
+  --blue-400: #4a63b3;
+  --blue-500: #2a44a0;
+  --blue-600: #182b6d;
+  --blue-700: #142357;
+  --blue-800: #101c45;
+  --blue-900: #0c1533;
+
+  /* Gold ramp — highlight / warning accent (#FFB23F brand) */
+  --gold-50:  #fff7e8;
+  --gold-100: #ffe9c2;
+  --gold-300: #ffce7a;
+  --gold-500: #ffb23f;
+  --gold-600: #e0931f;
+  --gold-700: #b5740f;
+
+  /* Neutral ramp — surfaces & text */
+  --gray-0:   #ffffff;
+  --gray-25:  #fbfcfd;
+  --gray-50:  #f6f8fa;
+  --gray-100: #eef1f5;
+  --gray-200: #e2e7ee;
+  --gray-300: #cdd5df;
+  --gray-400: #9aa6b6;
+  --gray-500: #6b7787;
+  --gray-600: #4b5563;
+  --gray-700: #344054;
+  --gray-800: #1d2433;
+  --gray-900: #0f1623;
+
+  /* Semantic hues (raw) */
+  --green-400: #34d399; --green-500: #10b981; --green-600: #059669; --green-700: #047857;
+  --amber-400: #fbbf24; --amber-500: #f59e0b; --amber-600: #d97706; --amber-700: #b45309;
+  --red-400:   #f87171; --red-500:   #ef4444; --red-600:   #dc2626; --red-700:   #b91c1c;
+  --cyan-400:  #38d6e0; --cyan-500:  #06b6d4; --cyan-600:  #0891b2; --cyan-700:  #0e7490;
+  --violet-400:#a78bfa; --violet-500:#8b5cf6; --violet-600:#7c3aed; --violet-700:#6d28d9;
+
+  /* ---------- Scales (theme-agnostic) ---------- */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --fs-display: 2rem;    --lh-display: 1.15; --fw-display: 800;
+  --fs-h1: 1.5rem;       --lh-h1: 1.2;      --fw-h1: 700;
+  --fs-h2: 1.25rem;      --lh-h2: 1.25;     --fw-h2: 700;
+  --fs-h3: 1.05rem;      --lh-h3: 1.3;      --fw-h3: 600;
+  --fs-body: 0.9rem;     --lh-body: 1.55;   --fw-body: 400;
+  --fs-body-sm: 0.8rem;  --lh-body-sm: 1.5;
+  --fs-label: 0.75rem;   --lh-label: 1.4;   --fw-label: 600;
+  --fs-badge: 0.7rem;
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition: all var(--motion-base) var(--ease-out);
+
+  --sidebar-width: 260px;
+
+  /* ============================================================================
+     Layer 2: SEMANTIC TOKENS — LIGHT (default)
+     ============================================================================ */
+  color-scheme: light;
+
+  /* Surfaces */
+  --surface-canvas: var(--gray-50);
+  --surface-raised: var(--gray-0);
+  --surface-raised-hover: var(--gray-50);
+  --surface-sunken: var(--gray-100);
+  --surface-overlay: var(--gray-0);
+  --hover-overlay: rgba(15, 22, 35, 0.04);
+
+  /* Navigation (deep ink in BOTH themes) */
+  --surface-nav: var(--ink-900);
+  --surface-nav-grad: linear-gradient(180deg, #0e1424, #0a0e1a);
+  --nav-hover: rgba(255, 255, 255, 0.07);
+  --text-on-nav: rgba(255, 255, 255, 0.92);
+  --text-on-nav-muted: rgba(255, 255, 255, 0.5);
+  --border-on-nav: rgba(255, 255, 255, 0.1);
+
+  /* Text */
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-muted: var(--gray-500);
+  --text-inverse: var(--gray-0);
+  --text-on-accent: #ffffff;
+
+  /* Borders & focus */
+  --border-subtle: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --border-focus: rgba(0, 167, 181, 0.55);
+  --ring-focus: 0 0 0 3px rgba(0, 167, 181, 0.18);
+
+  /* Inputs */
+  --input-bg: var(--gray-0);
+  --input-bg-focus: var(--gray-0);
+  --input-border: var(--gray-300);
+
+  /* Brand / action */
+  --accent: var(--teal-500);
+  --accent-hover: var(--teal-600);
+  --accent-soft: var(--teal-50);
+  --accent-on-soft: var(--teal-700);
+  --trust: var(--blue-600);
+  --gradient-primary: linear-gradient(135deg, #182b6d, #0b7890 62%, #00a7b5);
+  --gradient-success: linear-gradient(135deg, #0b7890, #00a7b5);
+  --gradient-danger: linear-gradient(135deg, #ef4444, #f59e0b);
+  --gradient-card: linear-gradient(135deg, rgba(24, 43, 109, 0.06), rgba(0, 167, 181, 0.05));
+
+  /* Status families (fg = text/icon, bg = chip/surface, border = outline) */
+  --success-fg: var(--green-700); --success-bg: #ecfdf5; --success-border: #a7f3d0; --success: var(--green-600);
+  --warning-fg: var(--amber-700); --warning-bg: #fffbeb; --warning-border: #fde68a; --warning: var(--amber-500);
+  --danger-fg:  var(--red-700);   --danger-bg:  #fef2f2; --danger-border:  #fecaca; --danger:  var(--red-600);
+  --info-fg:    var(--cyan-700);  --info-bg:    #ecfeff; --info-border:    #a5f3fc; --info:    var(--teal-600);
+  --neutral-fg: var(--gray-600);  --neutral-bg: var(--gray-100); --neutral-border: var(--gray-200);
+
+  /* Domain semantics (HR operating system) */
+  --leave-fg: var(--violet-700);       --leave-bg: #f5f3ff;
+  --payroll-fg: #0e7490;               --payroll-bg: #ecfeff;
+  --compliance-fg: var(--blue-600);    --compliance-bg: var(--blue-50);
+  --risk-fg: var(--red-700);           --risk-bg: #fef2f2;
+  --attendance-present-fg: var(--green-700); --attendance-present-bg: #ecfdf5;
+  --attendance-late-fg: var(--amber-700);    --attendance-late-bg: #fffbeb;
+  --attendance-half-fg: #b45309;             --attendance-half-bg: #fff7e8;
+  --attendance-wfh-fg: var(--cyan-700);      --attendance-wfh-bg: #ecfeff;
+  --attendance-absent-fg: var(--red-700);    --attendance-absent-bg: #fef2f2;
+
+  /* Elevation — real soft shadows (not glow) */
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
+  --shadow-2: 0 4px 8px -2px rgba(16, 24, 40, 0.10), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --shadow-3: 0 12px 16px -4px rgba(16, 24, 40, 0.10), 0 4px 6px -2px rgba(16, 24, 40, 0.05);
+  --shadow-card: var(--shadow-1);
+  --shadow-hover: var(--shadow-3);
+  --shadow-glow: var(--shadow-2);
+
+  /* Misc */
+  --scrollbar-thumb: var(--gray-300);
+  --scrollbar-thumb-hover: var(--gray-400);
+  --table-header-bg: var(--gray-50);
+  --row-hover-bg: var(--gray-50);
+  --backdrop: rgba(15, 22, 35, 0.45);
+}
+
+/* ============================================================================
+   Layer 2: SEMANTIC TOKENS — DARK (opt-in, matured from the original theme)
+   Status families are tuned for AA contrast on dark surfaces.
+   ============================================================================ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --surface-canvas: #0a0e1a;
+  --surface-raised: #111827;
+  --surface-raised-hover: #161f33;
+  --surface-sunken: #0b1120;
+  --surface-overlay: #131c2e;
+  --hover-overlay: rgba(255, 255, 255, 0.05);
+
+  --surface-nav: #0a0e1a;
+  --surface-nav-grad: linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(10, 14, 26, 0.98));
+  --nav-hover: rgba(255, 255, 255, 0.07);
+  --text-on-nav: rgba(255, 255, 255, 0.92);
+  --text-on-nav-muted: rgba(255, 255, 255, 0.5);
+  --border-on-nav: rgba(255, 255, 255, 0.1);
+
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.62);
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --text-inverse: var(--gray-900);
+  --text-on-accent: #ffffff;
+
+  --border-subtle: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-focus: rgba(0, 167, 181, 0.5);
+  --ring-focus: 0 0 0 3px rgba(0, 167, 181, 0.12);
+
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --input-bg-focus: rgba(255, 255, 255, 0.1);
+  --input-border: rgba(255, 255, 255, 0.12);
+
+  --accent: var(--teal-500);
+  --accent-hover: var(--teal-400);
+  --accent-soft: rgba(0, 167, 181, 0.14);
+  --accent-on-soft: var(--teal-300);
+  --trust: var(--teal-500);
+  --gradient-card: linear-gradient(135deg, rgba(24, 43, 109, 0.16), rgba(0, 167, 181, 0.08));
+
+  --success-fg: var(--green-400); --success-bg: rgba(16, 185, 129, 0.14); --success-border: rgba(16, 185, 129, 0.30); --success: var(--green-500);
+  --warning-fg: var(--amber-400); --warning-bg: rgba(245, 158, 11, 0.14); --warning-border: rgba(245, 158, 11, 0.30); --warning: var(--amber-500);
+  --danger-fg:  var(--red-400);   --danger-bg:  rgba(239, 68, 68, 0.14);  --danger-border:  rgba(239, 68, 68, 0.30);  --danger:  var(--red-500);
+  --info-fg:    #73e0e7;          --info-bg:    rgba(0, 167, 181, 0.14);  --info-border:    rgba(0, 167, 181, 0.30);  --info:    var(--teal-500);
+  --neutral-fg: rgba(255, 255, 255, 0.62); --neutral-bg: rgba(255, 255, 255, 0.08); --neutral-border: rgba(255, 255, 255, 0.12);
+
+  --leave-fg: var(--violet-400);       --leave-bg: rgba(139, 92, 246, 0.15);
+  --payroll-fg: #5ad7e2;               --payroll-bg: rgba(0, 167, 181, 0.14);
+  --compliance-fg: #8fa6e8;            --compliance-bg: rgba(42, 68, 160, 0.18);
+  --risk-fg: var(--red-400);           --risk-bg: rgba(239, 68, 68, 0.14);
+  --attendance-present-fg: var(--green-400); --attendance-present-bg: rgba(16, 185, 129, 0.14);
+  --attendance-late-fg: var(--amber-400);    --attendance-late-bg: rgba(245, 158, 11, 0.14);
+  --attendance-half-fg: #fcd34d;             --attendance-half-bg: rgba(245, 158, 11, 0.12);
+  --attendance-wfh-fg: #5ad7e2;              --attendance-wfh-bg: rgba(0, 167, 181, 0.14);
+  --attendance-absent-fg: var(--red-400);    --attendance-absent-bg: rgba(239, 68, 68, 0.14);
+
+  --shadow-1: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 8px 28px rgba(0, 0, 0, 0.38);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --shadow-card: var(--shadow-1);
+  --shadow-hover: var(--shadow-3);
+  --shadow-glow: 0 0 20px rgba(0, 167, 181, 0.15);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
+  --table-header-bg: rgba(255, 255, 255, 0.02);
+  --row-hover-bg: rgba(255, 255, 255, 0.03);
+  --backdrop: rgba(0, 0, 0, 0.7);
+}
+
+/* ============================================================================
+   Layer 3: LEGACY ALIASES
+   Map original globals.css variable names onto the new semantic tokens so every
+   existing page/class keeps rendering while screens migrate to the new components.
+   These resolve correctly in BOTH themes because they point at semantic tokens.
+   ============================================================================ */
+:root {
+  --bg-primary: var(--surface-canvas);
+  --bg-secondary: var(--surface-overlay);
+  --bg-card: var(--surface-raised);
+  --bg-card-hover: var(--surface-raised-hover);
+  --bg-input: var(--input-bg);
+  --bg-input-focus: var(--input-bg-focus);
+  --border-color: var(--border-subtle);
+  --accent-blue: var(--trust);
+  --accent-violet: var(--teal-600);
+  --accent-cyan: var(--teal-500);
+  --accent-gold: var(--gold-500);
+}

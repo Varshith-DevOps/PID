@@ -1,4 +1,120 @@
 const prisma = require('../config/database');
+const { isValidSubdomain, normalizeSubdomain } = require('../utils/subdomain');
+const { runDunningSweep } = require('../services/dunningService');
+const { logPlatformAction } = require('../services/platformAudit');
+
+/**
+ * Record a (manual/offline) payment for a tenant: extends the active subscription,
+ * logs the transaction, and clears any past-due / non-payment-suspended state.
+ * POST /api/platform-admin/companies/:id/record-payment
+ */
+const recordTenantPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const months = Math.max(1, Number.parseInt(req.body.months, 10) || 1);
+    const amount = req.body.amount != null ? Number.parseFloat(req.body.amount) : 0;
+
+    const company = await prisma.company.findUnique({
+      where: { id },
+      include: { subscriptions: { where: { status: 'ACTIVE' }, orderBy: { endDate: 'desc' }, take: 1 } },
+    });
+    if (!company) return res.status(404).json({ error: 'Company not found.' });
+    const activeSub = company.subscriptions[0];
+    if (!activeSub) return res.status(400).json({ error: 'No active subscription. Assign a plan before recording a payment.' });
+
+    const now = new Date();
+    const base = new Date(activeSub.endDate) > now ? new Date(activeSub.endDate) : now;
+    const newEnd = new Date(base);
+    newEnd.setMonth(newEnd.getMonth() + months);
+
+    await prisma.subscription.update({ where: { id: activeSub.id }, data: { endDate: newEnd, status: 'ACTIVE' } });
+    await prisma.paymentTransaction.create({
+      data: { companyId: id, subscriptionId: activeSub.id, amount, status: 'SUCCESS', paymentProvider: 'MANUAL' },
+    });
+    // Clear payment-driven suspension. Manual `status` is intentionally left as-is
+    // (a manual suspend is a separate decision from billing).
+    await prisma.company.update({ where: { id }, data: { billingStatus: 'CURRENT', graceEndsAt: null } });
+
+    await logPlatformAction(req.user, { action: 'RECORD_PAYMENT', entity: 'Company', entityId: id, newDetails: { amount, months, paidThrough: newEnd }, ipAddress: req.ip });
+    res.json({ message: `Payment recorded. ${company.name} is paid through ${newEnd.toDateString()}.`, paidThrough: newEnd });
+  } catch (error) {
+    console.error('[RECORD PAYMENT ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to record payment' });
+  }
+};
+
+/**
+ * Owner audit log — every platform-side action (who did what, when). Read-only.
+ * GET /api/platform-admin/audit-logs?action=&actor=&days=&take=
+ */
+const getAuditLogs = async (req, res) => {
+  try {
+    const take = Math.min(500, Math.max(1, Number.parseInt(req.query.take, 10) || 200));
+    const where = { category: 'PLATFORM' };
+    if (req.query.action) where.action = { contains: String(req.query.action).toUpperCase() };
+    if (req.query.actor) where.userEmail = { contains: String(req.query.actor).toLowerCase() };
+    if (req.query.days) {
+      const days = Number.parseInt(req.query.days, 10);
+      if (days > 0) where.createdAt = { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) };
+    }
+    const logs = await prisma.auditLog.findMany({ where, orderBy: { createdAt: 'desc' }, take });
+    res.json({ logs });
+  } catch (error) {
+    console.error('[AUDIT LOGS ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to load audit logs' });
+  }
+};
+
+/** Run the dunning sweep now (also runs on a daily schedule). POST /api/platform-admin/billing/run-dunning */
+const runDunning = async (req, res) => {
+  try {
+    const summary = await runDunningSweep(req.user);
+    res.json({ message: 'Dunning sweep complete.', ...summary });
+  } catch (error) {
+    console.error('[RUN DUNNING ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to run dunning sweep' });
+  }
+};
+
+/**
+ * Change a tenant's workspace subdomain. Owner-side only (SUPER_ADMIN or SUPPORT);
+ * tenants can never change their own. PUT /api/platform-admin/companies/:id/subdomain
+ */
+const updateCompanySubdomain = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requested = normalizeSubdomain(req.body.subdomain);
+
+    if (!isValidSubdomain(requested)) {
+      return res.status(400).json({ error: 'Invalid subdomain. Use 3–63 letters, digits, or hyphens, and avoid reserved names.' });
+    }
+
+    const company = await prisma.company.findUnique({ where: { id } });
+    if (!company) return res.status(404).json({ error: 'Company not found.' });
+
+    // Support staff may only change subdomains for customers assigned to them.
+    if (req.user?.role === 'SUPPORT') {
+      const assigned = await prisma.supportAssignment.findFirst({
+        where: { staffUserId: req.user.id, companyId: id, status: 'ACTIVE' },
+      });
+      if (!assigned) return res.status(403).json({ error: 'You are not assigned to this customer.' });
+    }
+
+    const clash = await prisma.company.findFirst({ where: { subdomain: requested, NOT: { id } } });
+    if (clash) return res.status(409).json({ error: 'That subdomain is already taken by another tenant.' });
+
+    const updated = await prisma.company.update({
+      where: { id },
+      data: { subdomain: requested },
+      select: { id: true, name: true, code: true, subdomain: true },
+    });
+    await logPlatformAction(req.user, { action: 'TENANT_SUBDOMAIN', entity: 'Company', entityId: id, oldDetails: company.subdomain, newDetails: requested, ipAddress: req.ip });
+    res.json({ message: `Subdomain updated to "${requested}".`, company: updated });
+  } catch (error) {
+    console.error('[ADMIN UPDATE SUBDOMAIN ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to update subdomain' });
+  }
+};
 
 /**
  * List all registered companies (tenants) on the SaaS platform.
@@ -40,6 +156,7 @@ const updateCompanyStatus = async (req, res) => {
       data: { status }
     });
 
+    await logPlatformAction(req.user, { action: 'TENANT_STATUS', entity: 'Company', entityId: id, newDetails: status, ipAddress: req.ip });
     res.json({ message: 'Company status updated successfully', company });
   } catch (error) {
     console.error('[ADMIN UPDATE COMPANY STATUS ERROR]:', error.message);
@@ -87,6 +204,7 @@ const updateSubscription = async (req, res) => {
       include: { plan: true }
     });
 
+    await logPlatformAction(req.user, { action: 'SUBSCRIPTION_UPDATE', entity: 'Subscription', entityId: id, newDetails: { planId, status, endDate }, ipAddress: req.ip });
     res.json({ message: 'Subscription updated successfully', subscription });
   } catch (error) {
     console.error('[ADMIN UPDATE SUBSCRIPTION ERROR]:', error.message);
@@ -241,6 +359,7 @@ const createCustomPlan = async (req, res) => {
       include: { plan: true }
     });
 
+    await logPlatformAction(req.user, { action: 'CUSTOM_PLAN', entity: 'Company', entityId: id, newDetails: { name, price }, ipAddress: req.ip });
     res.json({ message: 'Custom subscription created and activated successfully', subscription });
   } catch (error) {
     console.error('[ADMIN CREATE CUSTOM PLAN ERROR]:', error.message);
@@ -257,8 +376,11 @@ const verifyCompanyKYC = async (req, res) => {
     const { id } = req.params;
     const { status, remarks } = req.body;
 
-    if (!status || !['APPROVED', 'REJECTED'].includes(status)) {
-      return res.status(400).json({ error: 'Valid status (APPROVED or REJECTED) is required.' });
+    if (!status || !['APPROVED', 'REJECTED', 'NEEDS_INFO'].includes(status)) {
+      return res.status(400).json({ error: 'Valid status (APPROVED, REJECTED, or NEEDS_INFO) is required.' });
+    }
+    if (status === 'NEEDS_INFO' && !String(remarks || '').trim()) {
+      return res.status(400).json({ error: 'Remarks explaining what is needed are required for "Needs Info".' });
     }
 
     const company = await prisma.company.findUnique({
@@ -321,6 +443,7 @@ const verifyCompanyKYC = async (req, res) => {
       return updatedCompany;
     });
 
+    await logPlatformAction(req.user, { action: 'KYC_DECISION', entity: 'Company', entityId: id, oldDetails: company.kycStatus, newDetails: { status, remarks: remarks || null }, ipAddress: req.ip });
     res.json({ message: `Company KYC updated to ${status} successfully.`, company: result });
   } catch (error) {
     console.error('[ADMIN VERIFY KYC ERROR]:', error.message);
@@ -335,5 +458,9 @@ module.exports = {
   updateSubscription,
   getMetrics,
   createCustomPlan,
-  verifyCompanyKYC
+  verifyCompanyKYC,
+  updateCompanySubdomain,
+  recordTenantPayment,
+  runDunning,
+  getAuditLogs
 };

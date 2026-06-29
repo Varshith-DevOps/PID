@@ -22,6 +22,12 @@ import {
 import Sidebar from '@/components/Sidebar';
 import { ValidatedInput } from '@/components/ValidatedField';
 import { validateForm, required, email as vEmail, mobile as vMobile, personName, amount } from '@/lib/validators';
+import {
+  Button, IconButton, Badge, StatusChip, Tabs, Modal, Drawer, ConfirmDialog,
+  Field, Select, Avatar, Card, PageHeader, DataTable, EmptyState, ErrorState,
+  LoadingBlock, FilterBar, SearchInput, FilterSelect, Checkbox,
+} from '@/components/ui';
+import type { Column } from '@/components/ui';
 
 interface ChecklistTemplateTask {
   id?: string;
@@ -57,6 +63,7 @@ export default function OnOffboardingDashboard() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   // Per-form submit/validation flags
   const [customTaskSubmitted, setCustomTaskSubmitted] = useState(false);
@@ -73,7 +80,7 @@ export default function OnOffboardingDashboard() {
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
   const [employeeTasks, setEmployeeTasks] = useState<EmployeeChecklistTask[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  
+
   // Custom Ad-hoc Task Form State
   const [customTaskForm, setCustomTaskForm] = useState({
     title: '',
@@ -114,6 +121,12 @@ export default function OnOffboardingDashboard() {
   const [showTerminatedHistory, setShowTerminatedHistory] = useState(false);
   const [showOnboardingHistory, setShowOnboardingHistory] = useState(false);
 
+  // Confirm dialog states (replacing native confirm()/prompt())
+  const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
+  const [forceComplete, setForceComplete] = useState<
+    { kind: 'ONBOARDING' | 'OFFBOARDING'; employeeId: string; message: string } | null
+  >(null);
+
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
   }, [user, authLoading]);
@@ -126,6 +139,7 @@ export default function OnOffboardingDashboard() {
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [empData, templatesData, deptsData] = await Promise.all([
         getEmployees(),
@@ -137,6 +151,7 @@ export default function OnOffboardingDashboard() {
       setDepartmentsList(deptsData || []);
     } catch (err) {
       console.error(err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -269,7 +284,6 @@ export default function OnOffboardingDashboard() {
   };
 
   const handleDeleteTemplate = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this template?')) return;
     try {
       await deleteChecklistTemplate(id);
       loadData();
@@ -366,20 +380,11 @@ export default function OnOffboardingDashboard() {
     } catch (err: any) {
       const errorData = err.response?.data;
       if (errorData?.progress?.pending > 0) {
-        const proceed = confirm(
-          `${errorData.error}\n\nDo you want to force-complete the onboarding anyway?`
-        );
-        if (proceed) {
-          try {
-            const result = await apiCompleteOnboarding(employeeId, true);
-            setSelectedEmployee(null);
-            loadData();
-            alert(result.message || 'Onboarding force-completed!');
-          } catch (forceErr) {
-            console.error(forceErr);
-            alert('Failed to force-complete onboarding.');
-          }
-        }
+        setForceComplete({
+          kind: 'ONBOARDING',
+          employeeId,
+          message: `${errorData.error}\n\nDo you want to force-complete the onboarding anyway?`,
+        });
       } else {
         console.error(err);
         alert(errorData?.error || 'Failed to complete onboarding.');
@@ -396,20 +401,11 @@ export default function OnOffboardingDashboard() {
     } catch (err: any) {
       const errorData = err.response?.data;
       if (errorData?.progress?.pending > 0) {
-        const proceed = confirm(
-          `${errorData.error}\n\nDo you want to force-complete the offboarding anyway?`
-        );
-        if (proceed) {
-          try {
-            const result = await apiCompleteOffboarding(employeeId, true);
-            setSelectedEmployee(null);
-            loadData();
-            alert(result.message || 'Offboarding force-completed!');
-          } catch (forceErr) {
-            console.error(forceErr);
-            alert('Failed to force-complete offboarding.');
-          }
-        }
+        setForceComplete({
+          kind: 'OFFBOARDING',
+          employeeId,
+          message: `${errorData.error}\n\nDo you want to force-complete the offboarding anyway?`,
+        });
       } else {
         console.error(err);
         alert(errorData?.error || 'Failed to complete offboarding.');
@@ -417,14 +413,27 @@ export default function OnOffboardingDashboard() {
     }
   };
 
+  const handleForceComplete = async () => {
+    if (!forceComplete) return;
+    const { kind, employeeId } = forceComplete;
+    try {
+      const result = kind === 'ONBOARDING'
+        ? await apiCompleteOnboarding(employeeId, true)
+        : await apiCompleteOffboarding(employeeId, true);
+      setSelectedEmployee(null);
+      loadData();
+      alert(result.message || (kind === 'ONBOARDING' ? 'Onboarding force-completed!' : 'Offboarding force-completed!'));
+    } catch (forceErr) {
+      console.error(forceErr);
+      alert(kind === 'ONBOARDING' ? 'Failed to force-complete onboarding.' : 'Failed to force-complete offboarding.');
+    } finally {
+      setForceComplete(null);
+    }
+  };
+
   if (authLoading || !user) {
     return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
   }
-
-  // Calculate task completions helper
-  const getTaskProgress = (empId: string, type: 'ONBOARDING' | 'OFFBOARDING') => {
-    return { completed: 0, total: 0, percent: 0 };
-  };
 
   const filteredEmployees = employees.filter(emp => {
     if (activeTab === 'onboarding') {
@@ -457,763 +466,597 @@ export default function OnOffboardingDashboard() {
     return true;
   });
 
+  const stageBadge = (stage: string) => {
+    const map: Record<string, { tone: any; label: string }> = {
+      ONBOARDING: { tone: 'success', label: 'Onboarding In Progress' },
+      OFFBOARDING: { tone: 'danger', label: 'Clearance In Progress' },
+      EMPLOYEE: { tone: 'success', label: 'Onboarded' },
+      TERMINATED: { tone: 'neutral', label: 'Separated' },
+    };
+    const cfg = map[stage] || { tone: 'info', label: stage };
+    return <Badge tone={cfg.tone} dot>{cfg.label}</Badge>;
+  };
+
+  const departmentOptions = [
+    { value: '', label: 'All Departments' },
+    ...Array.from(new Set(employees.map(e => e.department?.name).filter(Boolean))).map((d: any) => ({ value: d, label: d })),
+  ];
+  const locationOptions = [
+    { value: '', label: 'All Locations' },
+    ...Array.from(new Set(employees.map(e => e.location).filter(Boolean))).map((l: any) => ({ value: l, label: l })),
+  ];
+
+  const employeeColumns: Column<any>[] = [
+    {
+      key: 'employee',
+      header: 'Employee',
+      render: (emp) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Avatar name={emp.firstName} size={32} />
+          <div>
+            <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{emp.firstName} {emp.lastName}</div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>ID: {emp.employeeId}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'job',
+      header: 'Job Profile',
+      render: (emp) => (
+        <div>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{emp.jobTitle}</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--accent)' }}>{emp.department?.name || 'Staff'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'location',
+      header: 'Location',
+      render: (emp) => <span style={{ color: 'var(--text-secondary)' }}>{emp.location || 'Pune Office'}</span>,
+    },
+    {
+      key: 'date',
+      header: activeTab === 'onboarding' ? 'Join Date' : 'Clearance Review',
+      render: (emp) => (
+        <span style={{ color: 'var(--text-secondary)' }}>
+          {activeTab === 'onboarding' ? new Date(emp.joinDate).toLocaleDateString('en-IN') : 'Clearance Process'}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status State',
+      render: (emp) => stageBadge(emp.accountStage),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (emp) => (
+        <Button size="sm" onClick={() => handleOpenEmployeeDetails(emp)}>Manage Checklist</Button>
+      ),
+    },
+  ];
+
+  const hasFilters = !!(searchTerm || filterDepartment || filterLocation);
+
   return (
     <div className="app-layout">
       <Sidebar activePath="/checklists" />
       <main className="main-content">
-        
-        {/* Header */}
-        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.3))' }}>
-                <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-              </svg>
-            </div>
-            <div>
-              <h1 className="page-title">Onboarding & Offboarding Board</h1>
-              <p className="page-subtitle">Track new hire integration pathways and exit clearance clearances seamlessly</p>
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            {activeTab === 'onboarding' && (
-              <button 
+        <PageHeader
+          title="Onboarding & Offboarding Board"
+          subtitle="Track new hire integration pathways and exit clearances seamlessly"
+          icon={
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          }
+          actions={
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              {activeTab === 'onboarding' && (
+                <Button
+                  variant="success"
+                  onClick={() => {
+                    if (departmentsList.length > 0) {
+                      setOnboardingForm(prev => ({ ...prev, departmentId: departmentsList[0].id }));
+                    }
+                    setShowOnboardingModal(true);
+                  }}
+                >
+                  Start Onboarding
+                </Button>
+              )}
+              {activeTab === 'offboarding' && (
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setSelectedOffboardEmployeeId('');
+                    setShowOffboardingModal(true);
+                  }}
+                >
+                  Initiate Offboarding
+                </Button>
+              )}
+              <Button
+                variant="ghost"
                 onClick={() => {
-                  if (departmentsList.length > 0) {
-                    setOnboardingForm(prev => ({ ...prev, departmentId: departmentsList[0].id }));
-                  }
-                  setShowOnboardingModal(true);
-                }} 
-                className="btn btn-primary" 
-                style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                  setEditingTemplateId(null);
+                  setTemplateForm({ name: '', type: 'ONBOARDING', description: '', tasks: [] });
+                  setShowTemplateModal(true);
+                }}
               >
-                🚀 Start Onboarding
-              </button>
-            )}
-            {activeTab === 'offboarding' && (
-              <button 
-                onClick={() => {
-                  setSelectedOffboardEmployeeId('');
-                  setShowOffboardingModal(true);
-                }} 
-                className="btn btn-primary" 
-                style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-              >
-                🚪 Initiate Offboarding
-              </button>
-            )}
-            <button onClick={() => { setEditingTemplateId(null); setTemplateForm({ name: '', type: 'ONBOARDING', description: '', tasks: [] }); setShowTemplateModal(true); }} className="btn btn-secondary" style={{ border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}>
-              Build Custom Template
-            </button>
-          </div>
-        </div>
+                Build Custom Template
+              </Button>
+            </div>
+          }
+        />
 
         {/* Tab Selectors */}
-        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1rem' }}>
-          <button 
-            onClick={() => setActiveTab('onboarding')} 
-            className="btn" 
-            style={{ 
-              background: activeTab === 'onboarding' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
-              color: 'white',
-              border: 'none',
-              padding: '0.6rem 1.25rem',
-              borderRadius: '8px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: activeTab === 'onboarding' ? '0 4px 15px rgba(168,85,247,0.3)' : 'none'
-            }}
-          >
-            🚀 Onboarding Path
-          </button>
-          
-          <button 
-            onClick={() => setActiveTab('offboarding')} 
-            className="btn" 
-            style={{ 
-              background: activeTab === 'offboarding' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
-              color: 'white',
-              border: 'none',
-              padding: '0.6rem 1.25rem',
-              borderRadius: '8px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: activeTab === 'offboarding' ? '0 4px 15px rgba(168,85,247,0.3)' : 'none'
-            }}
-          >
-            🚪 Offboarding Clearances
-          </button>
+        <Tabs
+          items={[
+            { key: 'onboarding', label: 'Onboarding Path' },
+            { key: 'offboarding', label: 'Offboarding Clearances' },
+            { key: 'templates', label: 'Reusable Templates' },
+          ]}
+          value={activeTab}
+          onChange={(k) => setActiveTab(k as typeof activeTab)}
+          style={{ marginBottom: '1.5rem' }}
+        />
 
-          <button 
-            onClick={() => setActiveTab('templates')} 
-            className="btn" 
-            style={{ 
-              background: activeTab === 'templates' ? 'linear-gradient(135deg, #a855f7, #FFB23F)' : 'rgba(255,255,255,0.04)',
-              color: 'white',
-              border: 'none',
-              padding: '0.6rem 1.25rem',
-              borderRadius: '8px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: activeTab === 'templates' ? '0 4px 15px rgba(168,85,247,0.3)' : 'none'
-            }}
-          >
-            📋 Reusable Templates
-          </button>
-        </div>
-
-        {/* LOADING STATE */}
         {loading ? (
-          <div className="loading-container"><div className="loading-spinner" />Loading boards...</div>
+          <LoadingBlock label="Loading boards…" />
+        ) : loadError ? (
+          <ErrorState onRetry={loadData} />
         ) : (
           <>
             {/* Search and Filters Bar */}
             {(activeTab === 'onboarding' || activeTab === 'offboarding') && (
-              <div className="glass-card" style={{ padding: '0.85rem 1.25rem', marginBottom: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ flex: 1, minWidth: '220px' }}>
-                  <input 
-                    type="text" 
-                    placeholder="🔍 Search employee by name, ID or job role..." 
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="input-field"
-                    style={{ fontSize: '0.78rem', padding: '0.45rem 0.85rem' }}
-                  />
-                </div>
-
-                <div style={{ minWidth: '160px' }}>
-                  <select 
-                    value={filterDepartment} 
-                    onChange={e => setFilterDepartment(e.target.value)} 
-                    className="select-field"
-                    style={{ fontSize: '0.78rem', padding: '0.45rem' }}
-                  >
-                    <option value="">All Departments</option>
-                    {Array.from(new Set(employees.map(e => e.department?.name).filter(Boolean))).map((d: any) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ minWidth: '160px' }}>
-                  <select 
-                    value={filterLocation} 
-                    onChange={e => setFilterLocation(e.target.value)} 
-                    className="select-field"
-                    style={{ fontSize: '0.78rem', padding: '0.45rem' }}
-                  >
-                    <option value="">All Locations</option>
-                    {Array.from(new Set(employees.map(e => e.location).filter(Boolean))).map((l: any) => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {(searchTerm || filterDepartment || filterLocation) && (
-                  <button 
-                    onClick={() => { setSearchTerm(''); setFilterDepartment(''); setFilterLocation(''); }}
-                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
-                  >
+              <FilterBar
+                right={
+                  activeTab === 'onboarding' ? (
+                    <Checkbox
+                      label="Show Onboarding History"
+                      checked={showOnboardingHistory}
+                      onChange={setShowOnboardingHistory}
+                    />
+                  ) : (
+                    <Checkbox
+                      label="Show Exit History (Left Employees)"
+                      checked={showTerminatedHistory}
+                      onChange={setShowTerminatedHistory}
+                    />
+                  )
+                }
+              >
+                <SearchInput
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                  placeholder="Search employee by name, ID or job role…"
+                  width={280}
+                />
+                <FilterSelect value={filterDepartment} onChange={setFilterDepartment} options={departmentOptions} ariaLabel="Filter by department" />
+                <FilterSelect value={filterLocation} onChange={setFilterLocation} options={locationOptions} ariaLabel="Filter by location" />
+                {hasFilters && (
+                  <Button variant="link" onClick={() => { setSearchTerm(''); setFilterDepartment(''); setFilterLocation(''); }}>
                     Clear Filters
-                  </button>
+                  </Button>
                 )}
-
-                {activeTab === 'onboarding' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', userSelect: 'none' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={showOnboardingHistory} 
-                        onChange={e => setShowOnboardingHistory(e.target.checked)} 
-                        style={{ width: '14px', height: '14px', accentColor: '#a855f7', cursor: 'pointer' }}
-                      />
-                      Show Onboarding History 📜
-                    </label>
-                  </div>
-                )}
-
-                {activeTab === 'offboarding' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', userSelect: 'none' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={showTerminatedHistory} 
-                        onChange={e => setShowTerminatedHistory(e.target.checked)} 
-                        style={{ width: '14px', height: '14px', accentColor: '#a855f7', cursor: 'pointer' }}
-                      />
-                      Show Exit History (Left Employees) 📜
-                    </label>
-                  </div>
-                )}
-              </div>
+              </FilterBar>
             )}
 
             {/* ──── TAB 1 & 2: ONBOARDING / OFFBOARDING TABLE LIST VIEW ──── */}
             {(activeTab === 'onboarding' || activeTab === 'offboarding') && (
-              <div className="glass-card" style={{ padding: '0.5rem', border: '1px solid rgba(255,255,255,0.05)', overflowX: 'auto', borderRadius: '12px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '750px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700 }}>Employee</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700 }}>Job Profile</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700 }}>Location</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700 }}>{activeTab === 'onboarding' ? 'Join Date' : 'Clearance Review'}</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700 }}>Status State</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 700, textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEmployees.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                          No employees matching the search filters.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredEmployees.map(emp => (
-                        <tr 
-                          key={emp.id} 
-                          style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', fontSize: '0.78rem', transition: 'background 0.2s' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.01)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                        >
-                          <td style={{ padding: '0.75rem 1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <div style={{ 
-                                width: '32px', 
-                                height: '32px', 
-                                borderRadius: '50%', 
-                                background: 'linear-gradient(135deg, #a855f7, #FFB23F)', 
-                                color: 'white', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                fontWeight: 'bold',
-                                fontSize: '0.78rem'
-                              }}>
-                                {emp.firstName?.charAt(0)?.toUpperCase()}
-                              </div>
-                              <div>
-                                <div style={{ fontWeight: 700, color: 'white' }}>{emp.firstName} {emp.lastName}</div>
-                                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>ID: {emp.employeeId}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td style={{ padding: '0.75rem 1rem' }}>
-                            <div style={{ fontWeight: 600, color: 'white' }}>{emp.jobTitle}</div>
-                            <div style={{ fontSize: '0.65rem', color: '#FFB23F' }}>{emp.department?.name || 'Staff'}</div>
-                          </td>
-                          <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
-                            {emp.location || 'Pune Office'}
-                          </td>
-                          <td style={{ padding: '0.75rem 1rem', color: 'var(--text-secondary)' }}>
-                            {activeTab === 'onboarding' ? new Date(emp.joinDate).toLocaleDateString('en-IN') : 'Clearance Process'}
-                          </td>
-                          <td style={{ padding: '0.75rem 1rem' }}>
-                            {(() => {
-                              const stage = emp.accountStage;
-                              const stageConfig: Record<string, { label: string; bg: string; color: string; border: string }> = {
-                                ONBOARDING: { label: '🚀 Onboarding In Progress', bg: 'rgba(16,185,129,0.06)', color: '#10b981', border: '1px solid rgba(16,185,129,0.15)' },
-                                OFFBOARDING: { label: '🚪 Clearance In Progress', bg: 'rgba(239,68,68,0.06)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)' },
-                                EMPLOYEE: { label: '✅ Onboarded', bg: 'rgba(16,185,129,0.06)', color: '#10b981', border: '1px solid rgba(16,185,129,0.15)' },
-                                TERMINATED: { label: '📜 Separated', bg: 'rgba(107,114,128,0.06)', color: '#9ca3af', border: '1px solid rgba(107,114,128,0.15)' },
-                              };
-                              const cfg = stageConfig[stage] || { label: stage, bg: 'rgba(168,85,247,0.06)', color: '#FFB23F', border: '1px solid rgba(168,85,247,0.12)' };
-                              return (
-                                <span className="badge" style={{ background: cfg.bg, color: cfg.color, border: cfg.border, fontSize: '0.62rem' }}>
-                                  {cfg.label}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                            <button 
-                              onClick={() => handleOpenEmployeeDetails(emp)}
-                              className="btn btn-primary"
-                              style={{ 
-                                padding: '0.35rem 0.65rem', 
-                                fontSize: '0.68rem', 
-                                background: 'linear-gradient(135deg, #a855f7, #FFB23F)', 
-                                border: 'none',
-                                cursor: 'pointer',
-                                borderRadius: '6px'
-                              }}
-                            >
-                              Manage Checklist
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={employeeColumns}
+                rows={filteredEmployees}
+                rowKey={(emp) => emp.id}
+                emptyTitle="No employees found"
+                emptyMessage="No employees matching the search filters."
+              />
             )}
 
             {/* ──── TAB 3: TEMPLATES MANAGEMENT ──── */}
             {activeTab === 'templates' && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-                {templates.length === 0 ? (
-                  <div className="empty-state" style={{ gridColumn: '1 / -1' }}>No templates created yet. Create one to begin task automations.</div>
-                ) : (
-                  templates.map(tpl => (
-                    <div key={tpl.id} className="glass-card" style={{ padding: '1.5rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="badge" style={{ 
-                          background: tpl.type === 'ONBOARDING' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', 
-                          color: tpl.type === 'ONBOARDING' ? '#10b981' : '#f87171',
-                          border: tpl.type === 'ONBOARDING' ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(239,68,68,0.2)',
-                          fontSize: '0.62rem'
-                        }}>
-                          {tpl.type}
-                        </span>
-
-                        <div style={{ display: 'flex', gap: '0.6rem' }}>
-                          <button 
-                            onClick={() => handleEditTemplate(tpl)}
-                            style={{ background: 'transparent', border: 'none', color: '#FFB23F', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
-                          >
-                            Edit ✏️
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteTemplate(tpl.id)}
-                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem' }}
-                          >
-                            Delete 🗑
-                          </button>
+              templates.length === 0 ? (
+                <EmptyState
+                  title="No templates yet"
+                  message="No templates created yet. Create one to begin task automations."
+                  action={
+                    <Button onClick={() => { setEditingTemplateId(null); setTemplateForm({ name: '', type: 'ONBOARDING', description: '', tasks: [] }); setShowTemplateModal(true); }}>
+                      Build Custom Template
+                    </Button>
+                  }
+                />
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+                  {templates.map(tpl => (
+                    <Card key={tpl.id} padded>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Badge tone={tpl.type === 'ONBOARDING' ? 'success' : 'danger'}>{tpl.type}</Badge>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <Button variant="link" size="sm" onClick={() => handleEditTemplate(tpl)}>Edit</Button>
+                            <Button variant="link" size="sm" style={{ color: 'var(--danger-fg)' }} onClick={() => setDeleteTemplateId(tpl.id)}>Delete</Button>
+                          </div>
                         </div>
-                      </div>
 
-                      <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'white' }}>{tpl.name}</h3>
-                      {tpl.description && <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: 0 }}>{tpl.description}</p>}
+                        <h3 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{tpl.name}</h3>
+                        {tpl.description && <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: 0 }}>{tpl.description}</p>}
 
-                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
-                        <h4 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'white', marginBottom: '0.5rem' }}>
-                          Preconfigured Tasks ({tpl.tasks.length})
-                        </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                          {tpl.tasks.map((t, idx) => (
-                            <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                              <span style={{ fontSize: '0.7rem', color: '#FFB23F', fontWeight: 'bold' }}>{idx + 1}.</span>
-                              <div>
-                                <div style={{ fontSize: '0.72rem', color: 'white', fontWeight: 600 }}>{t.title}</div>
-                                {t.description && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t.description}</div>}
+                        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
+                          <h4 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                            Preconfigured Tasks ({tpl.tasks.length})
+                          </h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            {tpl.tasks.map((t, idx) => (
+                              <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 'bold' }}>{idx + 1}.</span>
+                                <div>
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-primary)', fontWeight: 600 }}>{t.title}</div>
+                                  {t.description && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{t.description}</div>}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                    </Card>
+                  ))}
+                </div>
+              )
             )}
           </>
         )}
 
-        {/* ──── DETAIL POPUP MODAL: EMPLOYEE CHECKLIST WORKFLOW ──── */}
-        {selectedEmployee && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '780px', padding: '2rem', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '2rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              
-              {/* Left Column: Tasks Progress and Checklist list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', maxHeight: '520px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'white' }}>
-                      {selectedEmployee.firstName} {selectedEmployee.lastName}
-                    </h3>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      Manage {activeTab === 'onboarding' ? 'Onboarding tasks' : 'Offboarding clearance'} progress path
-                    </p>
-                  </div>
-                </div>
+        {/* ──── DETAIL DRAWER: EMPLOYEE CHECKLIST WORKFLOW ──── */}
+        <Drawer
+          open={!!selectedEmployee}
+          onClose={() => setSelectedEmployee(null)}
+          width={560}
+          title={selectedEmployee ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}` : ''}
+          footer={
+            selectedEmployee && (
+              <>
+                {selectedEmployee.accountStage === 'ONBOARDING' && (
+                  <Button variant="success" onClick={() => handleCompleteOnboarding(selectedEmployee.id)}>
+                    Complete Onboarding & Activate
+                  </Button>
+                )}
+                {selectedEmployee.accountStage === 'OFFBOARDING' && (
+                  <Button variant="danger" onClick={() => handleCompleteOffboarding(selectedEmployee.id)}>
+                    Complete Clearances & Separated
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => setSelectedEmployee(null)}>Done</Button>
+              </>
+            )
+          }
+        >
+          {selectedEmployee && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
+                Manage {activeTab === 'onboarding' ? 'Onboarding tasks' : 'Offboarding clearance'} progress path
+              </p>
 
-                {/* Templates Provision Dropdown (If no tasks assigned) */}
-                {employeeTasks.length === 0 ? (
-                  <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: 'white' }}>No Active Tasks Assigned</h4>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Instantiate a predefined reusable checklist template or add custom ad-hoc tasks.</p>
-                    
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <select 
-                        value={selectedTemplateId} 
-                        onChange={e => setSelectedTemplateId(e.target.value)} 
-                        className="select-field" 
-                        style={{ fontSize: '0.75rem', padding: '0.4rem' }}
-                      >
-                        <option value="">Choose Template...</option>
-                        {templates
-                          .filter(t => t.type === (activeTab === 'onboarding' ? 'ONBOARDING' : 'OFFBOARDING'))
-                          .map(t => <option key={t.id} value={t.id}>{t.name}</option>)
-                        }
-                      </select>
-                      <button 
-                        onClick={handleInstantiate} 
-                        disabled={!selectedTemplateId}
-                        className="btn btn-primary" 
-                        style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)', border: 'none', padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
-                      >
-                        Initialize
-                      </button>
+              {/* Summary Details */}
+              <Card padded>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 0, marginBottom: '0.5rem' }}>Summary Details</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                  <div><strong>Job Title:</strong> {selectedEmployee.jobTitle}</div>
+                  <div><strong>Department:</strong> {selectedEmployee.department?.name || 'Staff'}</div>
+                  <div><strong>Employment:</strong> {selectedEmployee.employmentType}</div>
+                  <div><strong>Join Date:</strong> {new Date(selectedEmployee.joinDate).toLocaleDateString('en-IN')}</div>
+                </div>
+              </Card>
+
+              {/* Tasks */}
+              {employeeTasks.length === 0 ? (
+                <Card padded>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>No Active Tasks Assigned</h4>
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', margin: 0 }}>Instantiate a predefined reusable checklist template or add custom ad-hoc tasks.</p>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                      <div style={{ flex: 1 }}>
+                        <Select
+                          value={selectedTemplateId}
+                          onChange={setSelectedTemplateId}
+                          placeholder="Choose Template…"
+                          options={templates
+                            .filter(t => t.type === (activeTab === 'onboarding' ? 'ONBOARDING' : 'OFFBOARDING'))
+                            .map(t => ({ value: t.id, label: t.name }))}
+                        />
+                      </div>
+                      <Button onClick={handleInstantiate} disabled={!selectedTemplateId}>Initialize</Button>
                     </div>
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {employeeTasks.map((task) => (
-                      <div 
-                        key={task.id} 
-                        className="glass-card" 
-                        style={{ 
-                          padding: '1rem', 
-                          background: task.status === 'COMPLETED' ? 'rgba(16,185,129,0.02)' : 'rgba(255,255,255,0.01)', 
-                          border: task.status === 'COMPLETED' ? '1px solid rgba(16,185,129,0.15)' : '1px solid rgba(255,255,255,0.05)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.5rem'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                </Card>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {employeeTasks.map((task) => (
+                    <Card key={task.id} padded>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
                           <div>
-                            <div style={{ 
-                              fontWeight: 700, 
-                              color: 'white', 
+                            <div style={{
+                              fontWeight: 700,
+                              color: 'var(--text-primary)',
                               fontSize: '0.82rem',
-                              textDecoration: task.status === 'COMPLETED' ? 'line-through' : 'none'
+                              textDecoration: task.status === 'COMPLETED' ? 'line-through' : 'none',
                             }}>
                               {task.title}
                             </div>
                             {task.description && <p style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', margin: 0 }}>{task.description}</p>}
                           </div>
-
-                          <select 
-                            value={task.status} 
+                          <select
+                            className="select-field"
+                            value={task.status}
                             onChange={e => handleUpdateTaskStatus(task.id, e.target.value)}
-                            style={{
-                              fontSize: '0.68rem',
-                              padding: '0.2rem',
-                              borderRadius: '4px',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              background: task.status === 'COMPLETED' ? '#10b981' : 'transparent',
-                              color: 'white',
-                              cursor: 'pointer'
-                            }}
+                            style={{ width: 'auto', minWidth: 130, fontSize: '0.7rem' }}
                           >
-                            <option value="PENDING" style={{ background: '#11131c' }}>Pending</option>
-                            <option value="IN_PROGRESS" style={{ background: '#11131c' }}>In Progress</option>
-                            <option value="COMPLETED" style={{ background: '#11131c' }}>Completed</option>
-                            <option value="SKIPPED" style={{ background: '#11131c' }}>Skipped</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="COMPLETED">Completed</option>
+                            <option value="SKIPPED">Skipped</option>
                           </select>
                         </div>
-
-                        {/* Remarks Form details */}
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                          <input 
-                            type="text" 
-                            placeholder="Add remarks or task update..." 
-                            value={task.remarks || ''}
-                            onChange={e => handleUpdateTaskRemarks(task.id, e.target.value)}
-                            style={{ 
-                              flex: 1, 
-                              fontSize: '0.65rem', 
-                              background: 'rgba(0,0,0,0.15)', 
-                              border: '1px solid rgba(255,255,255,0.05)', 
-                              borderRadius: '4px', 
-                              padding: '0.25rem 0.5rem',
-                              color: 'white'
-                            }} 
-                          />
-                        </div>
+                        <input
+                          type="text"
+                          className="input-field"
+                          placeholder="Add remarks or task update…"
+                          value={task.remarks || ''}
+                          onChange={e => handleUpdateTaskRemarks(task.id, e.target.value)}
+                          style={{ fontSize: '0.7rem' }}
+                        />
                       </div>
-                    ))}
-                  </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Ad-hoc Custom Task Creator */}
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 0, marginBottom: '0.75rem' }}>
+                  Add Custom Task
+                </h4>
+                <form onSubmit={handleAddCustomTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <Field label="Task Title" required>
+                    <ValidatedInput
+                      type="text"
+                      required
+                      placeholder="e.g. Provide locker keys"
+                      value={customTaskForm.title}
+                      onChange={v => setCustomTaskForm({ ...customTaskForm, title: v })}
+                      validator={required('Task title')}
+                      forceError={customTaskSubmitted}
+                      className="input-field"
+                    />
+                  </Field>
+                  <Field label="Description">
+                    <ValidatedInput
+                      type="text"
+                      placeholder="Additional details…"
+                      value={customTaskForm.description}
+                      onChange={v => setCustomTaskForm({ ...customTaskForm, description: v })}
+                      className="input-field"
+                    />
+                  </Field>
+                  <Button type="submit" variant="ghost">+ Add Task</Button>
+                </form>
+              </div>
+            </div>
+          )}
+        </Drawer>
+
+        {/* ──── TEMPLATE BUILDER MODAL ──── */}
+        <Modal
+          open={showTemplateModal}
+          onClose={() => setShowTemplateModal(false)}
+          width={520}
+          title={editingTemplateId ? 'Edit Checklist Template' : 'Create Checklist Template'}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowTemplateModal(false)}>Cancel</Button>
+              <Button
+                type="submit"
+                form="template-builder-form"
+                disabled={templateForm.tasks.length === 0 || !templateForm.name}
+              >
+                Save Template
+              </Button>
+            </>
+          }
+        >
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 0 }}>
+            {editingTemplateId ? 'Update template configurations and preconfigured task list' : 'Define reusable task sequences for onboarding or clearance processes'}
+          </p>
+
+          <form id="template-builder-form" onSubmit={handleCreateTemplateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <Field label="Template Name" required>
+              <ValidatedInput type="text" placeholder="e.g. Remote Dev Onboarding" required value={templateForm.name} onChange={v => setTemplateForm({ ...templateForm, name: v })} validator={required('Template name')} forceError={templateSubmitted} className="input-field" />
+            </Field>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <Select
+                label="Checklist Type"
+                value={templateForm.type}
+                onChange={v => setTemplateForm({ ...templateForm, type: v })}
+                options={[
+                  { value: 'ONBOARDING', label: 'Onboarding Path' },
+                  { value: 'OFFBOARDING', label: 'Offboarding Clearance' },
+                ]}
+              />
+              <Field label="Description">
+                <ValidatedInput type="text" placeholder="Brief outline…" value={templateForm.description} onChange={v => setTemplateForm({ ...templateForm, description: v })} className="input-field" />
+              </Field>
+            </div>
+
+            {/* Preconfigured checklist items input builder */}
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+              <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Preconfigured Task List</h4>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.75rem', maxHeight: '120px', overflowY: 'auto' }}>
+                {templateForm.tasks.length === 0 ? (
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No tasks added to list yet.</span>
+                ) : (
+                  templateForm.tasks.map((task, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-sunken)', padding: '0.3rem 0.5rem', borderRadius: 'var(--radius-sm)' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-primary)' }}>{idx + 1}. <strong>{task.title}</strong></span>
+                      <IconButton label="Remove task" tone="danger" size={24} onClick={() => handleRemoveTemplateTaskInput(idx)} style={{ border: 'none' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </IconButton>
+                    </div>
+                  ))
                 )}
               </div>
 
-              {/* Right Column: Custom task builder + employee summary details */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', borderLeft: '1px solid rgba(255,255,255,0.05)', paddingLeft: '2rem' }}>
-                <div>
-                  <h4 style={{ fontSize: '0.82rem', fontWeight: 700, color: 'white', marginBottom: '0.5rem' }}>Summary Details</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                    <div><strong>Job Title:</strong> {selectedEmployee.jobTitle}</div>
-                    <div><strong>Department:</strong> {selectedEmployee.department?.name || 'Staff'}</div>
-                    <div><strong>Employment:</strong> {selectedEmployee.employmentType}</div>
-                    <div><strong>Join Date:</strong> {new Date(selectedEmployee.joinDate).toLocaleDateString('en-IN')}</div>
-                  </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <ValidatedInput type="text" placeholder="Task title…" value={newTaskTitle} onChange={setNewTaskTitle} className="input-field" />
                 </div>
-
-                {/* Ad-hoc Custom Task Creator */}
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1.25rem' }}>
-                  <h4 style={{ fontSize: '0.82rem', fontWeight: 700, color: 'white', marginBottom: '0.75rem' }}>
-                    Add Custom Task
-                  </h4>
-                  <form onSubmit={handleAddCustomTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div>
-                      <label style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>Task Title</label>
-                      <ValidatedInput
-                        type="text"
-                        required
-                        placeholder="e.g. Provide locker keys"
-                        value={customTaskForm.title}
-                        onChange={v => setCustomTaskForm({ ...customTaskForm, title: v })}
-                        validator={required('Task title')}
-                        forceError={customTaskSubmitted}
-                        className="input-field"
-                        style={{ fontSize: '0.72rem', padding: '0.4rem' }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>Description</label>
-                      <ValidatedInput
-                        type="text"
-                        placeholder="Additional details..."
-                        value={customTaskForm.description}
-                        onChange={v => setCustomTaskForm({ ...customTaskForm, description: v })}
-                        className="input-field"
-                        style={{ fontSize: '0.72rem', padding: '0.4rem' }}
-                      />
-                    </div>
-
-                    <button 
-                      type="submit" 
-                      className="btn btn-secondary" 
-                      style={{ border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.72rem', padding: '0.4rem', cursor: 'pointer' }}
-                    >
-                      + Add Task
-                    </button>
-                  </form>
+                <div style={{ flex: 1.2 }}>
+                  <ValidatedInput type="text" placeholder="Short description…" value={newTaskDesc} onChange={setNewTaskDesc} className="input-field" />
                 </div>
-
-                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: 'auto', flexWrap: 'wrap' }}>
-                  {selectedEmployee.accountStage === 'ONBOARDING' && (
-                    <button 
-                      onClick={() => handleCompleteOnboarding(selectedEmployee.id)}
-                      className="btn btn-primary"
-                      style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none', padding: '0.5rem 0.85rem', fontSize: '0.74rem', fontWeight: 600 }}
-                    >
-                      Complete Onboarding & Activate Staff ✓
-                    </button>
-                  )}
-                  {selectedEmployee.accountStage === 'OFFBOARDING' && (
-                    <button 
-                      onClick={() => handleCompleteOffboarding(selectedEmployee.id)}
-                      className="btn btn-primary"
-                      style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', padding: '0.5rem 0.85rem', fontSize: '0.74rem', fontWeight: 600 }}
-                    >
-                      Complete Clearances & Separated 🚪
-                    </button>
-                  )}
-                  <button onClick={() => setSelectedEmployee(null)} className="btn btn-secondary" style={{ border: '1px solid rgba(255,255,255,0.1)', padding: '0.5rem 1rem', fontSize: '0.78rem' }}>
-                    Done
-                  </button>
-                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={handleAddTemplateTaskInput}>+ Add</Button>
               </div>
-
             </div>
-          </div>
-        )}
-
-        {/* ──── TEMPLATE BUILDER MODAL ──── */}
-        {showTemplateModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '520px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>{editingTemplateId ? 'Edit Checklist Template' : 'Create Checklist Template'}</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{editingTemplateId ? 'Update template configurations and preconfigured task list' : 'Define reusable task sequences for onboarding or clearance processes'}</p>
-              </div>
-
-              <form onSubmit={handleCreateTemplateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Template Name</label>
-                  <ValidatedInput type="text" placeholder="e.g. Remote Dev Onboarding" required value={templateForm.name} onChange={v => setTemplateForm({ ...templateForm, name: v })} validator={required('Template name')} forceError={templateSubmitted} className="input-field" />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Checklist Type</label>
-                    <select value={templateForm.type} onChange={e => setTemplateForm({ ...templateForm, type: e.target.value })} className="select-field">
-                      <option value="ONBOARDING">Onboarding Path</option>
-                      <option value="OFFBOARDING">Offboarding Clearance</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Description</label>
-                    <ValidatedInput type="text" placeholder="Brief outline..." value={templateForm.description} onChange={v => setTemplateForm({ ...templateForm, description: v })} className="input-field" />
-                  </div>
-                </div>
-
-                {/* Preconfigured checklist items input builder */}
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem' }}>
-                  <h4 style={{ fontSize: '0.78rem', fontWeight: 700, color: 'white', marginBottom: '0.5rem' }}>Preconfigured Task List</h4>
-                  
-                  {/* Array values */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.75rem', maxHeight: '120px', overflowY: 'auto' }}>
-                    {templateForm.tasks.length === 0 ? (
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No tasks added to list yet.</span>
-                    ) : (
-                      templateForm.tasks.map((task, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '0.3rem 0.5rem', borderRadius: '4px' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'white' }}>{idx + 1}. <strong>{task.title}</strong></span>
-                          <button type="button" onClick={() => handleRemoveTemplateTaskInput(idx)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.7rem' }}>✕</button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Micro inputs for task list addition */}
-                  <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ flex: 1 }}>
-                      <ValidatedInput type="text" placeholder="Task title..." value={newTaskTitle} onChange={setNewTaskTitle} className="input-field" style={{ fontSize: '0.7rem', padding: '0.35rem' }} />
-                    </div>
-                    <div style={{ flex: 1.2 }}>
-                      <ValidatedInput type="text" placeholder="Short description..." value={newTaskDesc} onChange={setNewTaskDesc} className="input-field" style={{ fontSize: '0.7rem', padding: '0.35rem' }} />
-                    </div>
-                    <button type="button" onClick={handleAddTemplateTaskInput} className="btn btn-secondary" style={{ padding: '0.35rem 0.6rem', fontSize: '0.7rem', border: '1px solid rgba(255,255,255,0.1)' }}>+ Add</button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowTemplateModal(false)} className="btn btn-secondary">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={templateForm.tasks.length === 0 || !templateForm.name} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #a855f7, #FFB23F)', border: 'none' }}>
-                    Save Template
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+          </form>
+        </Modal>
 
         {/* ──── START ONBOARDING MODAL ──── */}
-        {showOnboardingModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '580px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>🚀 Start Onboarding</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Enter details below. This will create their record and initialize onboarding stages.</p>
-              </div>
+        <Modal
+          open={showOnboardingModal}
+          onClose={() => setShowOnboardingModal(false)}
+          width={580}
+          title="Start Onboarding"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowOnboardingModal(false)}>Cancel</Button>
+              <Button type="submit" form="start-onboarding-form" variant="success">Add & Initiate Onboarding</Button>
+            </>
+          }
+        >
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 0 }}>Enter details below. This will create their record and initialize onboarding stages.</p>
 
-              <form onSubmit={handleStartOnboardingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>First Name</label>
-                    <ValidatedInput type="text" placeholder="John" required value={onboardingForm.firstName} onChange={v => setOnboardingForm({ ...onboardingForm, firstName: v })} validator={personName('First name')} restrict="alpha" forceError={onboardingSubmitted} className="input-field" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Last Name</label>
-                    <ValidatedInput type="text" placeholder="Doe" required value={onboardingForm.lastName} onChange={v => setOnboardingForm({ ...onboardingForm, lastName: v })} validator={personName('Last name')} restrict="alpha" forceError={onboardingSubmitted} className="input-field" />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Work Email</label>
-                    <ValidatedInput type="email" placeholder="john.doe@pid-hcms.com" required value={onboardingForm.email} onChange={v => setOnboardingForm({ ...onboardingForm, email: v })} validator={vEmail} forceError={onboardingSubmitted} className="input-field" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Mobile Number</label>
-                    <ValidatedInput type="text" inputMode="numeric" placeholder="9876543210" value={onboardingForm.phone} onChange={v => setOnboardingForm({ ...onboardingForm, phone: v })} validator={vMobile} restrict="digits" maxLength={10} forceError={onboardingSubmitted} className="input-field" />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Gender</label>
-                    <select value={onboardingForm.gender} onChange={e => setOnboardingForm({ ...onboardingForm, gender: e.target.value })} className="select-field">
-                      <option value="MALE">Male</option>
-                      <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Location</label>
-                    <select value={onboardingForm.location} onChange={e => setOnboardingForm({ ...onboardingForm, location: e.target.value })} className="select-field">
-                      <option value="Mumbai Office">Mumbai Office</option>
-                      <option value="Bangalore Office">Bangalore Office</option>
-                      <option value="Pune Office">Pune Office</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Join Date</label>
-                    <input type="date" required value={onboardingForm.joinDate} onChange={e => setOnboardingForm({ ...onboardingForm, joinDate: e.target.value })} className="input-field" />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Department</label>
-                    <select value={onboardingForm.departmentId} onChange={e => setOnboardingForm({ ...onboardingForm, departmentId: e.target.value })} className="select-field" required>
-                      <option value="">Select Department...</option>
-                      {departmentsList.map(dept => (
-                        <option key={dept.id} value={dept.id}>{dept.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Job Title</label>
-                    <ValidatedInput type="text" placeholder="Software Engineer" required value={onboardingForm.jobTitle} onChange={v => setOnboardingForm({ ...onboardingForm, jobTitle: v })} validator={required('Job title')} forceError={onboardingSubmitted} className="input-field" />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Salary (INR/m)</label>
-                    <ValidatedInput type="text" inputMode="decimal" required value={onboardingForm.salary} onChange={v => setOnboardingForm({ ...onboardingForm, salary: v })} validator={amount} restrict="decimal" forceError={onboardingSubmitted} className="input-field" />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
-                  <button type="button" onClick={() => setShowOnboardingModal(false)} className="btn btn-secondary">
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #10b981, #059669)', border: 'none' }}>
-                    Add & Initiate Onboarding
-                  </button>
-                </div>
-              </form>
+          <form id="start-onboarding-form" onSubmit={handleStartOnboardingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <Field label="First Name" required>
+                <ValidatedInput type="text" placeholder="John" required value={onboardingForm.firstName} onChange={v => setOnboardingForm({ ...onboardingForm, firstName: v })} validator={personName('First name')} restrict="alpha" forceError={onboardingSubmitted} className="input-field" />
+              </Field>
+              <Field label="Last Name" required>
+                <ValidatedInput type="text" placeholder="Doe" required value={onboardingForm.lastName} onChange={v => setOnboardingForm({ ...onboardingForm, lastName: v })} validator={personName('Last name')} restrict="alpha" forceError={onboardingSubmitted} className="input-field" />
+              </Field>
             </div>
-          </div>
-        )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <Field label="Work Email" required>
+                <ValidatedInput type="email" placeholder="john.doe@pid-hcms.com" required value={onboardingForm.email} onChange={v => setOnboardingForm({ ...onboardingForm, email: v })} validator={vEmail} forceError={onboardingSubmitted} className="input-field" />
+              </Field>
+              <Field label="Mobile Number">
+                <ValidatedInput type="text" inputMode="numeric" placeholder="9876543210" value={onboardingForm.phone} onChange={v => setOnboardingForm({ ...onboardingForm, phone: v })} validator={vMobile} restrict="digits" maxLength={10} forceError={onboardingSubmitted} className="input-field" />
+              </Field>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <Select
+                label="Gender"
+                value={onboardingForm.gender}
+                onChange={v => setOnboardingForm({ ...onboardingForm, gender: v })}
+                options={[
+                  { value: 'MALE', label: 'Male' },
+                  { value: 'FEMALE', label: 'Female' },
+                  { value: 'OTHER', label: 'Other' },
+                ]}
+              />
+              <Select
+                label="Location"
+                value={onboardingForm.location}
+                onChange={v => setOnboardingForm({ ...onboardingForm, location: v })}
+                options={[
+                  { value: 'Mumbai Office', label: 'Mumbai Office' },
+                  { value: 'Bangalore Office', label: 'Bangalore Office' },
+                  { value: 'Pune Office', label: 'Pune Office' },
+                ]}
+              />
+              <Field label="Join Date">
+                <input type="date" required value={onboardingForm.joinDate} onChange={e => setOnboardingForm({ ...onboardingForm, joinDate: e.target.value })} className="input-field" />
+              </Field>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.8fr', gap: '1rem' }}>
+              <Select
+                label="Department"
+                required
+                value={onboardingForm.departmentId}
+                onChange={v => setOnboardingForm({ ...onboardingForm, departmentId: v })}
+                placeholder="Select Department…"
+                options={departmentsList.map(dept => ({ value: dept.id, label: dept.name }))}
+              />
+              <Field label="Job Title" required>
+                <ValidatedInput type="text" placeholder="Software Engineer" required value={onboardingForm.jobTitle} onChange={v => setOnboardingForm({ ...onboardingForm, jobTitle: v })} validator={required('Job title')} forceError={onboardingSubmitted} className="input-field" />
+              </Field>
+              <Field label="Salary (INR/m)" required>
+                <ValidatedInput type="text" inputMode="decimal" required value={onboardingForm.salary} onChange={v => setOnboardingForm({ ...onboardingForm, salary: v })} validator={amount} restrict="decimal" forceError={onboardingSubmitted} className="input-field" />
+              </Field>
+            </div>
+          </form>
+        </Modal>
 
         {/* ──── INITIATE OFFBOARDING MODAL ──── */}
-        {showOffboardingModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '480px', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>🚪 Initiate Offboarding</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Select an active employee to initiate their separation exit clearances.</p>
-              </div>
+        <Modal
+          open={showOffboardingModal}
+          onClose={() => setShowOffboardingModal(false)}
+          width={480}
+          title="Initiate Offboarding"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowOffboardingModal(false)}>Cancel</Button>
+              <Button type="submit" form="initiate-offboarding-form" variant="danger" disabled={!selectedOffboardEmployeeId}>Start Clearance Flow</Button>
+            </>
+          }
+        >
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 0 }}>Select an active employee to initiate their separation exit clearances.</p>
 
-              <form onSubmit={handleInitiateOffboardingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Select Employee</label>
-                  <select 
-                    value={selectedOffboardEmployeeId} 
-                    onChange={e => setSelectedOffboardEmployeeId(e.target.value)} 
-                    className="select-field" 
-                    required
-                  >
-                    <option value="">Choose Employee...</option>
-                    {employees
-                      .filter(emp => emp.accountStage === 'EMPLOYEE' || emp.accountStage === 'MANAGER')
-                      .map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} ({emp.employeeId} - {emp.jobTitle})</option>
-                      ))
-                    }
-                  </select>
-                </div>
+          <form id="initiate-offboarding-form" onSubmit={handleInitiateOffboardingSubmit}>
+            <Select
+              label="Select Employee"
+              required
+              value={selectedOffboardEmployeeId}
+              onChange={setSelectedOffboardEmployeeId}
+              placeholder="Choose Employee…"
+              options={employees
+                .filter(emp => emp.accountStage === 'EMPLOYEE' || emp.accountStage === 'MANAGER')
+                .map(emp => ({ value: emp.id, label: `${emp.firstName} ${emp.lastName} (${emp.employeeId} - ${emp.jobTitle})` }))}
+            />
+          </form>
+        </Modal>
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowOffboardingModal(false)} className="btn btn-secondary">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={!selectedOffboardEmployeeId} className="btn btn-primary" style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none' }}>
-                    Start Clearance Flow
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        {/* ──── CONFIRM DIALOGS (replacing native confirm/prompt) ──── */}
+        <ConfirmDialog
+          open={!!deleteTemplateId}
+          title="Delete template?"
+          message="Are you sure you want to delete this template?"
+          tone="danger"
+          confirmLabel="Delete"
+          onCancel={() => setDeleteTemplateId(null)}
+          onConfirm={() => {
+            const id = deleteTemplateId;
+            setDeleteTemplateId(null);
+            if (id) handleDeleteTemplate(id);
+          }}
+        />
+
+        <ConfirmDialog
+          open={!!forceComplete}
+          title="Force-complete?"
+          message={forceComplete?.message}
+          tone="danger"
+          confirmLabel="Force Complete"
+          onCancel={() => setForceComplete(null)}
+          onConfirm={handleForceComplete}
+        />
 
       </main>
     </div>

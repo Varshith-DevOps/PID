@@ -23,14 +23,20 @@ interface User {
   role: string;
   employeeId?: string;
   mustChangePassword?: boolean;
+  mustSetupMfa?: boolean;
+  mfaEnabled?: boolean;
   permissions?: Permission[];
   subscriptionFeatures?: Record<string, boolean> | null;
   companyName?: string | null;
   companyLogo?: string | null;
   companyKycStatus?: string | null;
+  companyKycRemarks?: string | null;
   companyCin?: string | null;
+  companySubdomain?: string | null;
   hasUsedFreeTrial?: boolean;
   freeTrialExpiresAt?: string | null;
+  billingStatus?: string | null;
+  graceEndsAt?: string | null;
 }
 
 interface AuthContextType {

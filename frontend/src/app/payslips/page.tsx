@@ -3,8 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
-import { getPayslipHistory, downloadPayslipPDF, emailPayslip, getPayslip, downloadBulkPayslips, emailBulkPayslips, getEmployees } from '@/lib/api';
+import { getPayslipHistory, emailPayslip, getPayslip, emailBulkPayslips } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import {
+  PageHeader, Select, Button, DataTable,
+  EmptyState, ErrorState, ConfirmDialog, Card,
+} from '@/components/ui';
+import type { Column } from '@/components/ui';
 
 interface PayslipRecord {
   id: string;
@@ -26,12 +31,16 @@ export default function PayslipsPage() {
   const router = useRouter();
   const [payslips, setPayslips] = useState<PayslipRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedPayslip, setSelectedPayslip] = useState<PayslipRecord | null>(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>('ALL');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [confirmEmailAll, setConfirmEmailAll] = useState(false);
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
@@ -43,6 +52,7 @@ export default function PayslipsPage() {
 
   const loadPayslips = async () => {
     setLoading(true);
+    setError(false);
     try {
       let employeeId = undefined;
       if (user?.role === 'EMPLOYEE') {
@@ -54,7 +64,7 @@ export default function PayslipsPage() {
         month: selectedMonth === 'ALL' ? undefined : selectedMonth,
       });
       setPayslips(data);
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); setError(true); }
     finally { setLoading(false); }
   };
 
@@ -111,7 +121,7 @@ export default function PayslipsPage() {
   };
 
   const handleEmailAll = async () => {
-    if (!confirm('Send payslips to all employees via email?')) return;
+    setConfirmEmailAll(false);
     setSendingEmail(true);
     try {
       await emailBulkPayslips(new Date().getMonth() + 1, selectedYear);
@@ -129,81 +139,81 @@ export default function PayslipsPage() {
 
   if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
 
+  const monthOptions = [
+    { value: 'ALL', label: 'All Months' },
+    ...Array.from({ length: 12 }, (_, idx) => ({ value: String(idx + 1), label: new Date(0, idx).toLocaleString('en', { month: 'long' }) })),
+  ];
+  const yearOptions = [2024, 2025, 2026].map((y) => ({ value: String(y), label: String(y) }));
+
+  const columns: Column<PayslipRecord>[] = [
+    { key: 'month', header: 'Month', render: (p) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatMonth(p.payrollRun.month)} {p.payrollRun.year}</span> },
+    { key: 'employee', header: 'Employee', render: (p) => <>{p.employee?.firstName} {p.employee?.lastName}</> },
+    { key: 'gross', header: 'Gross', align: 'right', render: (p) => formatCurrency(p.grossEarnings) },
+    { key: 'deductions', header: 'Deductions', align: 'right', render: (p) => <span style={{ color: 'var(--danger-fg)' }}>{formatCurrency(p.totalDeductions)}</span> },
+    { key: 'net', header: 'Net', align: 'right', render: (p) => <span style={{ fontWeight: 700, color: 'var(--success-fg)' }}>{formatCurrency(p.netSalary)}</span> },
+    {
+      key: 'actions', header: 'Actions', render: (p) => (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <Button size="sm" variant="primary" onClick={() => handleView(p.id)}>View</Button>
+          <Button size="sm" variant="warning" onClick={() => handleDownload(p.id)}>PDF</Button>
+          {isAdmin && (
+            <Button size="sm" variant="success" disabled={sendingEmail} onClick={() => handleEmail(p.id)}>Email</Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        <div className="page-header">
-          <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #00A7B5, #00A7B5)' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <PageHeader
+          title="Payslips"
+          subtitle="View & download salary slips"
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>}
+          actions={
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ width: 140 }}>
+                <Select value={String(selectedMonth)} onChange={(v) => setSelectedMonth(v === 'ALL' ? 'ALL' : parseInt(v))} options={monthOptions} />
+              </div>
+              <div style={{ width: 110 }}>
+                <Select value={String(selectedYear)} onChange={(v) => setSelectedYear(parseInt(v))} options={yearOptions} />
+              </div>
+              {isAdmin && (
+                <>
+                  <Button variant="primary" size="sm" onClick={handleDownloadAll} leftIcon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>}>
+                    Download All
+                  </Button>
+                  <Button variant="success" size="sm" disabled={sendingEmail} loading={sendingEmail} onClick={() => setConfirmEmailAll(true)} leftIcon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>}>
+                    {sendingEmail ? 'Sending...' : 'Email All'}
+                  </Button>
+                </>
+              )}
             </div>
-            <div><h1 className="page-title">Payslips</h1><p className="page-subtitle">View & download salary slips</p></div>
-          </div>
-          <div className="page-header-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value))} className="select-field" style={{ width: '130px' }}>
-              <option value="ALL">All Months</option>
-              {Array.from({ length: 12 }, (_, idx) => (
-                <option key={idx + 1} value={idx + 1}>
-                  {new Date(0, idx).toLocaleString('en', { month: 'long' })}
-                </option>
-              ))}
-            </select>
-            <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="select-field" style={{ width: '100px' }}>
-              {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-            {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (
-              <>
-                <button onClick={handleDownloadAll} className="btn btn-primary btn-sm">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Download All
-                </button>
-                <button onClick={handleEmailAll} disabled={sendingEmail} className="btn btn-success btn-sm">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                  {sendingEmail ? 'Sending...' : 'Email All'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+          }
+        />
 
         {view === 'list' && (
-          <div className="glass-card" style={{ overflow: 'hidden' }}>
-            <table className="data-table">
-              <thead><tr><th>Month</th><th>Employee</th><th style={{ textAlign: 'right' }}>Gross</th><th style={{ textAlign: 'right' }}>Deductions</th><th style={{ textAlign: 'right' }}>Net</th><th>Actions</th></tr></thead>
-              <tbody>
-                {loading ? <tr><td colSpan={6} className="loading-container"><div className="loading-spinner" />Loading...</td></tr> :
-                  payslips.map((p) => (
-                    <tr key={p.id}>
-                      <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatMonth(p.payrollRun.month)} {p.payrollRun.year}</td>
-                      <td>{p.employee?.firstName} {p.employee?.lastName}</td>
-                      <td style={{ textAlign: 'right' }}>{formatCurrency(p.grossEarnings)}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--danger)' }}>{formatCurrency(p.totalDeductions)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(p.netSalary)}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => handleView(p.id)} className="btn btn-primary btn-sm">View</button>
-                          <button onClick={() => handleDownload(p.id)} className="btn btn-warning btn-sm">PDF</button>
-                          {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (
-                            <button onClick={() => handleEmail(p.id)} disabled={sendingEmail} className="btn btn-success btn-sm">Email</button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                {payslips.length === 0 && !loading && <tr><td colSpan={6} className="empty-state">No payslips found</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          error ? (
+            <Card><ErrorState onRetry={loadPayslips} /></Card>
+          ) : (
+            <DataTable
+              columns={columns}
+              rows={payslips}
+              loading={loading}
+              rowKey={(p) => p.id}
+              empty={<EmptyState title="No payslips found" message="No payslips match the selected month and year." />}
+            />
+          )
         )}
 
         {view === 'detail' && selectedPayslip && (
           <div className="glass-card" style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <button onClick={() => setView('list')} className="btn btn-ghost btn-sm">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+              <Button variant="ghost" size="sm" onClick={() => setView('list')} leftIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>}>
                 Back
-              </button>
+              </Button>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{formatMonth(selectedPayslip.payrollRun.month)} {selectedPayslip.payrollRun.year}</h2>
             </div>
 
@@ -218,37 +228,46 @@ export default function PayslipsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>Basic Salary</span><span>{formatCurrency(selectedPayslip.basicSalary)}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>HRA</span><span>{formatCurrency(selectedPayslip.hra)}</span></div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
               <span>Gross Earnings</span><span>{formatCurrency(selectedPayslip.grossEarnings)}</span>
             </div>
 
             <h4 style={{ marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Deductions</h4>
             <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>PF</span><span style={{ color: 'var(--danger)' }}>{formatCurrency(selectedPayslip.pf)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>TDS</span><span style={{ color: 'var(--danger)' }}>{formatCurrency(selectedPayslip.tax)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>PF</span><span style={{ color: 'var(--danger-fg)' }}>{formatCurrency(selectedPayslip.pf)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-secondary)' }}>TDS</span><span style={{ color: 'var(--danger-fg)' }}>{formatCurrency(selectedPayslip.tax)}</span></div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
-              <span>Total Deductions</span><span style={{ color: 'var(--danger)' }}>{formatCurrency(selectedPayslip.totalDeductions)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
+              <span>Total Deductions</span><span style={{ color: 'var(--danger-fg)' }}>{formatCurrency(selectedPayslip.totalDeductions)}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 'var(--radius-md)' }}>
-              <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--success)' }}>NET SALARY</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success)' }}>{formatCurrency(selectedPayslip.netSalary)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem', background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 'var(--radius-md)' }}>
+              <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--success-fg)' }}>NET SALARY</span>
+              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-fg)' }}>{formatCurrency(selectedPayslip.netSalary)}</span>
             </div>
 
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-              <button onClick={() => handleDownload(selectedPayslip.id)} className="btn btn-primary" style={{ flex: 1 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <Button variant="primary" fullWidth onClick={() => handleDownload(selectedPayslip.id)} leftIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>}>
                 Download PDF
-              </button>
-              {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (
-                <button onClick={() => handleEmail(selectedPayslip.id)} disabled={sendingEmail} className="btn btn-success" style={{ flex: 1 }}>
+              </Button>
+              {isAdmin && (
+                <Button variant="success" fullWidth disabled={sendingEmail} loading={sendingEmail} onClick={() => handleEmail(selectedPayslip.id)}>
                   {sendingEmail ? 'Sending...' : 'Email Payslip'}
-                </button>
+                </Button>
               )}
             </div>
           </div>
         )}
+
+        <ConfirmDialog
+          open={confirmEmailAll}
+          title="Email all payslips"
+          message="Send payslips to all employees via email?"
+          confirmLabel="Send to all"
+          loading={sendingEmail}
+          onConfirm={handleEmailAll}
+          onCancel={() => setConfirmEmailAll(false)}
+        />
       </main>
     </div>
   );

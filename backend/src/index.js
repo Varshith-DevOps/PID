@@ -7,6 +7,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 
@@ -42,6 +43,8 @@ const platformRoutes = require('./routes/platformRoutes');
 const billingRoutes = require('./routes/billingRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const platformAdminRoutes = require('./routes/platformAdminRoutes');
+const supportRoutes = require('./routes/supportRoutes');
+const publicRoutes = require('./routes/publicRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const appUpdateRoutes = require('./routes/appUpdateRoutes');
 const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
@@ -60,13 +63,36 @@ if (process.env.NODE_ENV === 'production' || require.main === module) {
 
 const app = express();
 app.disable('x-powered-by');
+// Behind an AWS ALB / CloudFront, trust the proxy so req.ip is the real client IP
+// (correct per-IP rate limiting) and req.secure reflects the X-Forwarded-Proto from
+// TLS termination (so Secure cookies are set). TRUST_PROXY_HOPS = number of proxies.
+app.set('trust proxy', Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10));
 
 // ──── Global Middleware ────────────────────────────────────────────────────
+// Allow the configured origins plus any subdomain of APP_BASE_DOMAIN, so tenant
+// workspaces (<tenant>.example.com) can call the API with credentials.
+const allowedOriginList = (process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : ['http://localhost:3000']);
+const APP_BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'localhost';
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // same-origin / non-browser clients
+  if (allowedOriginList.includes(origin)) return true;
+  try {
+    const host = new URL(origin).hostname;
+    if (host === APP_BASE_DOMAIN || host.endsWith('.' + APP_BASE_DOMAIN)) return true;
+  } catch { /* malformed origin */ }
+  return false;
+};
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
-    : 'http://localhost:3000',
+  origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
   credentials: true
+}));
+// Gzip JSON/text responses (>1KB) to cut transfer size and speed up page loads.
+// Clients opt out per-request with the `x-no-compression` header.
+app.use(compression({
+  threshold: 1024,
+  filter: (req, res) => (req.headers['x-no-compression'] ? false : compression.filter(req, res)),
 }));
 app.use(cookieParser());
 app.use(securityHeaders);
@@ -117,6 +143,8 @@ app.use('/api/platform', platformRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/platform-admin', platformAdminRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/public', publicRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/app', appUpdateRoutes);
 
@@ -175,6 +203,23 @@ if (require.main === module) {
     console.log(`✅ HRMS Backend running on http://localhost:${PORT}`);
     console.log(`📋 Health check: http://localhost:${PORT}/health`);
   });
+
+  // ──── Billing dunning sweep ───────────────────────────────────────────────
+  // Auto-flag past-due tenants and suspend those past the grace window. Runs on
+  // boot and then daily; owners can also trigger it from the Admin Portal.
+  // In-process timer, so it must run on exactly ONE instance when horizontally
+  // scaled — set RUN_SCHEDULER=false on every instance except one (or a dedicated
+  // worker). Defaults on for single-instance deployments.
+  if (process.env.RUN_SCHEDULER !== 'false') {
+    const { runDunningSweep } = require('./services/dunningService');
+    const runSweepSafely = () => runDunningSweep(null)
+      .then((s) => logger.info('Dunning sweep', s))
+      .catch((e) => logger.error('Dunning sweep failed', { error: e.message }));
+    setTimeout(runSweepSafely, 10_000);
+    setInterval(runSweepSafely, 24 * 60 * 60 * 1000).unref();
+  } else {
+    logger.info('Scheduler disabled on this instance (RUN_SCHEDULER=false)');
+  }
 
   // ──── Crash safety ────────────────────────────────────────────────────────
   // A rejected promise or thrown error outside the request lifecycle must not

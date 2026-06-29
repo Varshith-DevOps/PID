@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_theme.dart';
 import 'dashboard_shell.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -66,6 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Shows the MFA challenge sheet after a password login flagged `mfaRequired`.
   Future<void> _promptMfa() async {
+    final c = context.colors;
     final codeController = TextEditingController();
     bool useRecovery = false;
     String? sheetError;
@@ -74,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF111827),
+      backgroundColor: c.raised,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) => Padding(
@@ -90,15 +92,15 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.shield_outlined, color: Color(0xFF00A7B5)),
+                  Icon(Icons.shield_outlined, color: c.accent),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text('Two-factor verification',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                        style: TextStyle(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w800)),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(sheetContext, false),
-                    icon: const Icon(Icons.close, color: Color(0xFF94A3B8)),
+                    icon: Icon(Icons.close, color: c.textMuted),
                   ),
                 ],
               ),
@@ -107,30 +109,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 useRecovery
                     ? 'Enter one of your saved recovery codes.'
                     : 'Enter the 6-digit code from your authenticator app.',
-                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                style: TextStyle(color: c.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: codeController,
                 autofocus: true,
                 keyboardType: useRecovery ? TextInputType.text : TextInputType.number,
-                style: const TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2),
+                style: TextStyle(color: c.textPrimary, fontSize: 18, letterSpacing: 2),
                 decoration: InputDecoration(
                   hintText: useRecovery ? 'Recovery code' : '123456',
-                  hintStyle: const TextStyle(color: Color(0xFF475569)),
+                  hintStyle: TextStyle(color: c.textMuted),
                   filled: true,
-                  fillColor: const Color(0xFF172033),
+                  fillColor: c.sunken,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
               if (sheetError != null) ...[
                 const SizedBox(height: 10),
-                Text(sheetError!, style: const TextStyle(color: Color(0xFFF87171), fontSize: 13)),
+                Text(sheetError!, style: TextStyle(color: c.danger, fontSize: 13)),
               ],
               const SizedBox(height: 16),
               FilledButton(
                 style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF00A7B5), minimumSize: const Size.fromHeight(48)),
+                    backgroundColor: c.accent, minimumSize: const Size.fromHeight(48)),
                 onPressed: verifying
                     ? null
                     : () async {
@@ -164,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 }),
                 child: Text(
                   useRecovery ? 'Use authenticator code instead' : 'Use a recovery code instead',
-                  style: const TextStyle(color: Color(0xFF94A3B8)),
+                  style: TextStyle(color: c.textSecondary),
                 ),
               ),
             ],
@@ -183,8 +185,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    // The login is a deliberate branded splash: a deep-ink hero with the brand
+    // gradient. It stays dark in both themes for brand consistency, but routes
+    // its accents through tokens.
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: c.navInk,
       body: Stack(
         children: [
           // Background Gradient Circles for Glow Effect
@@ -196,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF00A7B5).withOpacity(0.12),
+                color: c.accent.withOpacity(0.12),
               ),
             ),
           ),
@@ -254,18 +260,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(14.0),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withOpacity(0.1),
-                        border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.3)),
+                        color: c.danger.withOpacity(0.12),
+                        border: Border.all(color: c.danger.withOpacity(0.3)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: Color(0xFFF87171), size: 20),
+                          Icon(Icons.error_outline_rounded, color: c.danger, size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: Color(0xFFF87171), fontSize: 13.5),
+                              style: TextStyle(color: c.danger, fontSize: 13.5),
                             ),
                           ),
                         ],
@@ -339,7 +345,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 36),
 
-                        // Submit Button
+                        // Submit Button — keeps the brand gradient.
                         Container(
                           height: 52,
                           decoration: BoxDecoration(
@@ -349,7 +355,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF00A7B5).withOpacity(0.2),
+                                color: c.accent.withOpacity(0.2),
                                 blurRadius: 16,
                                 offset: const Offset(0, 4),
                               ),
@@ -405,9 +411,11 @@ class _LoginScreenState extends State<LoginScreen> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Label sits on the dark hero, so it stays light in both themes.
         Text(
           label,
           style: const TextStyle(
@@ -422,7 +430,7 @@ class _LoginScreenState extends State<LoginScreen> {
           obscureText: obscureText,
           keyboardType: keyboardType,
           style: const TextStyle(color: Colors.white, fontSize: 15),
-          cursorColor: const Color(0xFF00A7B5),
+          cursorColor: c.accent,
           validator: validator,
           decoration: InputDecoration(
             hintText: hint,
@@ -432,7 +440,7 @@ class _LoginScreenState extends State<LoginScreen> {
             filled: true,
             fillColor: const Color(0xFF1E293B).withOpacity(0.4),
             contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            errorStyle: const TextStyle(color: Color(0xFFF87171)),
+            errorStyle: TextStyle(color: c.danger),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: const Color(0xFF334155).withOpacity(0.5)),
@@ -443,15 +451,15 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF00A7B5), width: 1.5),
+              borderSide: BorderSide(color: c.accent, width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1),
+              borderSide: BorderSide(color: c.danger, width: 1),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+              borderSide: BorderSide(color: c.danger, width: 1.5),
             ),
           ),
         ),

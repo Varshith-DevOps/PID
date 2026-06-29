@@ -23,3 +23,14 @@ backend/app-release/*.apk
 # storage, never in source control.
 backend/uploads/
 
+
+# Documentation & office/spreadsheet artifacts — kept out of source control per
+# project preference (regenerate/share separately, not via git).
+docs/
+*.docx
+*.doc
+*.xlsx
+*.xls
+/test_cases.csv
+/user_stories.csv
+_check.js

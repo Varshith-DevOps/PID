@@ -12,6 +12,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { changePassword } from '@/lib/api';
+import { Modal, Button, Banner } from '@/components/ui';
 
 const meetsPolicy = (pw: string): boolean =>
   pw.length >= 12 &&
@@ -57,102 +58,29 @@ export default function ForcePasswordChange() {
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15, 23, 42, 0.75)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        padding: 16,
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          background: '#fff',
-          borderRadius: 12,
-          padding: 28,
-          width: '100%',
-          maxWidth: 420,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-        }}
-      >
-        <h2 style={{ margin: '0 0 6px', fontSize: 20, color: '#182B6D' }}>Set a new password</h2>
-        <p style={{ margin: '0 0 18px', fontSize: 14, color: '#475569' }}>
+    <Modal open title="Set a new password" width={440}>
+      <form onSubmit={handleSubmit}>
+        <p style={{ margin: '0 0 1.25rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           For security, you must replace your temporary password before continuing.
         </p>
 
-        <label style={{ display: 'block', fontSize: 13, color: '#334155', marginBottom: 12 }}>
-          Current (temporary) password
-          <input
-            type="password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            autoComplete="current-password"
-            required
-            style={inputStyle}
-          />
-        </label>
-        <label style={{ display: 'block', fontSize: 13, color: '#334155', marginBottom: 12 }}>
-          New password
-          <input
-            type="password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            autoComplete="new-password"
-            required
-            style={inputStyle}
-          />
-        </label>
-        <label style={{ display: 'block', fontSize: 13, color: '#334155', marginBottom: 12 }}>
-          Confirm new password
-          <input
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            autoComplete="new-password"
-            required
-            style={inputStyle}
-          />
-        </label>
+        <div className="form-group">
+          <label className="form-label">Current (temporary) password</label>
+          <input className="input-field" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+        </div>
+        <div className="form-group">
+          <label className="form-label">New password</label>
+          <input className="input-field" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" required />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Confirm new password</label>
+          <input className="input-field" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
+        </div>
 
-        {error && (
-          <p style={{ color: '#b91c1c', fontSize: 13, margin: '0 0 12px' }}>{error}</p>
-        )}
+        {error && <div style={{ marginBottom: '1rem' }}><Banner tone="danger">{error}</Banner></div>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            width: '100%',
-            padding: '11px 16px',
-            background: submitting ? '#94a3b8' : '#182B6D',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: 15,
-            cursor: submitting ? 'default' : 'pointer',
-          }}
-        >
-          {submitting ? 'Updating…' : 'Update password'}
-        </button>
+        <Button type="submit" fullWidth loading={submitting}>Update password</Button>
       </form>
-    </div>
+    </Modal>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  marginTop: 6,
-  padding: '9px 11px',
-  border: '1px solid #cbd5e1',
-  borderRadius: 8,
-  fontSize: 14,
-  boxSizing: 'border-box',
-};

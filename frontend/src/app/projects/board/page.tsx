@@ -10,9 +10,9 @@ import {
 import Sidebar from '@/components/Sidebar';
 import KanbanBoard, { BoardColumn } from '@/components/KanbanBoard';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-  LineChart, Line, CartesianGrid, Legend,
-} from 'recharts';
+  Button, Card, EmptyState, KpiBar, KpiLine, LoadingBlock,
+  Modal, PageHeader, StatCard,
+} from '@/components/ui';
 
 interface Costing {
   currency: string; budget: number; laborCost: number; expenses: number; totalCost: number;
@@ -22,6 +22,10 @@ interface Costing {
 interface Resource { id: string; employeeId: string; costRate: number; billRate: number; employee: { firstName: string; lastName: string }; }
 interface Sprint { id: string; name: string; status: string; startDate: string; endDate: string; _count?: { tasks: number }; }
 interface BurndownDay { date: string; ideal: number; remaining: number | null; }
+
+const BOARD_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="11" rx="1"/></svg>
+);
 
 export default function ProjectBoardPage() {
   const { user, loading: authLoading } = useAuth();
@@ -105,71 +109,66 @@ export default function ProjectBoardPage() {
 
   const cur = (n: number) => `${costing?.currency === 'INR' ? '₹' : ''}${(n || 0).toLocaleString()}`;
   const chartData = costing ? [
-    { name: 'Budget', value: costing.budget, fill: '#182B6D' },
-    { name: 'Cost', value: costing.totalCost, fill: '#ef4444' },
-    { name: 'Revenue', value: costing.revenue, fill: '#10b981' },
+    { name: 'Budget', value: costing.budget },
+    { name: 'Cost', value: costing.totalCost },
+    { name: 'Revenue', value: costing.revenue },
   ] : [];
 
   return (
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        <div className="page-header">
-          <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #182B6D, #00A7B5)' }}>📋</div>
-            <div>
-              <h1 className="page-title">Project Board</h1>
-              <p className="page-subtitle">Kanban tracking, sprints, time &amp; project costing</p>
-            </div>
-          </div>
-          <div className="page-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <select className="select-field" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ minWidth: 200 }}>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <button className="btn btn-ghost btn-sm" onClick={openRates} disabled={!resources.length}>💰 Rates</button>
-          </div>
-        </div>
+        <PageHeader
+          title="Project Board"
+          subtitle="Kanban tracking, sprints, time & project costing"
+          icon={BOARD_ICON}
+          actions={
+            <>
+              <select className="select-field" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ minWidth: 200 }}>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <Button variant="ghost" size="sm" onClick={openRates} disabled={!resources.length}>Rates</Button>
+            </>
+          }
+        />
 
-        {loading ? <div className="loading-container"><div className="loading-spinner" />Loading...</div> : (
+        {loading ? <LoadingBlock /> : (
           <>
             {costing && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, marginBottom: 18 }}>
-                <div className="stat-card"><div className="stat-card-label">Labor Cost</div><div className="stat-card-value">{cur(costing.laborCost)}</div></div>
-                <div className="stat-card"><div className="stat-card-label">Expenses</div><div className="stat-card-value">{cur(costing.expenses)}</div></div>
-                <div className="stat-card"><div className="stat-card-label">Total Cost</div><div className="stat-card-value">{cur(costing.totalCost)}</div></div>
-                <div className="stat-card"><div className="stat-card-label">Revenue</div><div className="stat-card-value">{cur(costing.revenue)}</div></div>
-                <div className="stat-card">
-                  <div className="stat-card-label">Margin ({costing.marginPct}%)</div>
-                  <div className="stat-card-value" style={{ color: costing.margin >= 0 ? '#10b981' : '#ef4444' }}>{cur(costing.margin)}</div>
-                </div>
-                <div className="stat-card"><div className="stat-card-label">Budget Used</div><div className="stat-card-value">{costing.budgetUsage}%</div></div>
+              <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 18 }}>
+                <StatCard label="Labor Cost" value={cur(costing.laborCost)} />
+                <StatCard label="Expenses" value={cur(costing.expenses)} />
+                <StatCard label="Total Cost" value={cur(costing.totalCost)} />
+                <StatCard label="Revenue" value={cur(costing.revenue)} />
+                <StatCard
+                  label={`Margin (${costing.marginPct}%)`}
+                  value={<span style={{ color: costing.margin >= 0 ? 'var(--success-fg)' : 'var(--danger-fg)' }}>{cur(costing.margin)}</span>}
+                />
+                <StatCard label="Budget Used" value={`${costing.budgetUsage}%`} />
               </div>
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
               {costing && (costing.budget > 0 || costing.totalCost > 0) && (
-                <div className="glass-card" style={{ padding: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#9aa6c0', marginBottom: 8 }}>Budget vs Cost vs Revenue</div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={chartData}>
-                      <XAxis dataKey="name" stroke="#9aa6c0" fontSize={12} />
-                      <YAxis stroke="#9aa6c0" fontSize={12} />
-                      <Tooltip formatter={(v: any) => cur(Number(v))} contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)' }} />
-                      <Bar dataKey="value" radius={[6, 6, 0, 0]}>{chartData.map((d, i) => <Cell key={i} fill={d.fill} />)}</Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <Card title="Budget vs Cost vs Revenue">
+                  <KpiBar
+                    data={chartData}
+                    xKey="name"
+                    bars={[{ key: 'value', name: 'Amount' }]}
+                    height={200}
+                  />
+                </Card>
               )}
 
-              <div className="glass-card" style={{ padding: 16 }}>
+              <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#9aa6c0' }}>Sprint Burndown</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>Sprint Burndown</div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <select className="select-field" value={sprintId} onChange={(e) => setSprintId(e.target.value)} style={{ minWidth: 130, padding: '4px 8px' }}>
                       {sprints.length === 0 && <option value="">No sprints</option>}
                       {sprints.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setShowNewSprint((v) => !v)}>+ Sprint</button>
+                    <Button variant="ghost" size="sm" onClick={() => setShowNewSprint((v) => !v)}>+ Sprint</Button>
                   </div>
                 </div>
                 {showNewSprint && (
@@ -177,55 +176,56 @@ export default function ProjectBoardPage() {
                     <input className="input-field" placeholder="Sprint name" value={newSprint.name} onChange={(e) => setNewSprint({ ...newSprint, name: e.target.value })} style={{ flex: 1, minWidth: 120 }} />
                     <input className="input-field" type="date" value={newSprint.startDate} onChange={(e) => setNewSprint({ ...newSprint, startDate: e.target.value })} />
                     <input className="input-field" type="date" value={newSprint.endDate} onChange={(e) => setNewSprint({ ...newSprint, endDate: e.target.value })} />
-                    <button className="btn btn-primary btn-sm" onClick={submitSprint}>Create</button>
+                    <Button variant="primary" size="sm" onClick={submitSprint}>Create</Button>
                   </div>
                 )}
                 {burndown && burndown.days?.length ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={burndown.days}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                      <XAxis dataKey="date" stroke="#9aa6c0" fontSize={10} />
-                      <YAxis stroke="#9aa6c0" fontSize={11} />
-                      <Tooltip contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)' }} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Line type="monotone" dataKey="ideal" name="Ideal" stroke="#6b7280" strokeDasharray="5 5" dot={false} />
-                      <Line type="monotone" dataKey="remaining" name={`Remaining (${burndown.unit})`} stroke="#00A7B5" strokeWidth={2} connectNulls dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : <div style={{ color: '#6b7490', fontSize: 12, padding: '20px 0' }}>No sprint data to chart yet.</div>}
-              </div>
+                  <KpiLine
+                    data={burndown.days}
+                    xKey="date"
+                    lines={[
+                      { key: 'ideal', name: 'Ideal', color: 'var(--text-muted)' },
+                      { key: 'remaining', name: `Remaining (${burndown.unit})`, color: '#00A7B5' },
+                    ]}
+                    height={200}
+                  />
+                ) : <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '20px 0' }}>No sprint data to chart yet.</div>}
+              </Card>
             </div>
 
-            <div className="glass-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#9aa6c0', marginBottom: 12 }}>Board — drag cards between columns to update status</div>
-              {columns.length ? <KanbanBoard columns={columns} onMove={handleMove} /> : <div style={{ color: '#6b7490' }}>No tasks on this project yet.</div>}
-            </div>
+            <Card title="Board — drag cards between columns to update status">
+              {columns.length
+                ? <KanbanBoard columns={columns} onMove={handleMove} />
+                : <EmptyState title="No tasks yet" message="This project has no tasks on the board." />}
+            </Card>
           </>
         )}
 
         {/* Resource rate editor */}
-        {showRates && (
-          <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(10,14,26,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: 520, padding: 22 }}>
-              <h2 style={{ margin: '0 0 4px', color: '#e7ecf6', fontSize: 18 }}>Resource Rates</h2>
-              <p style={{ margin: '0 0 16px', color: '#9aa6c0', fontSize: 13 }}>Cost = what the resource costs you / hour. Bill = what you charge the client / hour.</p>
-              {resources.length === 0 && <div style={{ color: '#9aa6c0' }}>No resources on this project.</div>}
-              {resources.map((r) => (
-                <div key={r.employeeId} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-                  <div style={{ flex: 1, color: '#e7ecf6', fontSize: 13 }}>{r.employee.firstName} {r.employee.lastName}</div>
-                  <input className="input-field" type="number" min={0} placeholder="Cost/hr" value={rateDraft[r.employeeId]?.costRate ?? 0}
-                    onChange={(e) => setRateDraft({ ...rateDraft, [r.employeeId]: { ...rateDraft[r.employeeId], costRate: Number(e.target.value) } })} style={{ width: 110 }} />
-                  <input className="input-field" type="number" min={0} placeholder="Bill/hr" value={rateDraft[r.employeeId]?.billRate ?? 0}
-                    onChange={(e) => setRateDraft({ ...rateDraft, [r.employeeId]: { ...rateDraft[r.employeeId], billRate: Number(e.target.value) } })} style={{ width: 110 }} />
-                </div>
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-                <button className="btn btn-ghost" onClick={() => setShowRates(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={saveRates} disabled={!resources.length}>Save rates</button>
-              </div>
+        <Modal
+          open={showRates}
+          onClose={() => setShowRates(false)}
+          title="Resource Rates"
+          width={520}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowRates(false)}>Cancel</Button>
+              <Button variant="primary" onClick={saveRates} disabled={!resources.length}>Save rates</Button>
+            </>
+          }
+        >
+          <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 13 }}>Cost = what the resource costs you / hour. Bill = what you charge the client / hour.</p>
+          {resources.length === 0 && <div style={{ color: 'var(--text-muted)' }}>No resources on this project.</div>}
+          {resources.map((r) => (
+            <div key={r.employeeId} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ flex: 1, color: 'var(--text-primary)', fontSize: 13 }}>{r.employee.firstName} {r.employee.lastName}</div>
+              <input className="input-field" type="number" min={0} placeholder="Cost/hr" value={rateDraft[r.employeeId]?.costRate ?? 0}
+                onChange={(e) => setRateDraft({ ...rateDraft, [r.employeeId]: { ...rateDraft[r.employeeId], costRate: Number(e.target.value) } })} style={{ width: 110 }} />
+              <input className="input-field" type="number" min={0} placeholder="Bill/hr" value={rateDraft[r.employeeId]?.billRate ?? 0}
+                onChange={(e) => setRateDraft({ ...rateDraft, [r.employeeId]: { ...rateDraft[r.employeeId], billRate: Number(e.target.value) } })} style={{ width: 110 }} />
             </div>
-          </div>
-        )}
+          ))}
+        </Modal>
       </main>
     </div>
   );

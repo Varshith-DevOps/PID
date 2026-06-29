@@ -1,10 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/authContext';
+import { isOwnerRole, ownerTabsFor, PLATFORM_STAFF_ROLE_OPTIONS } from '@/lib/platformRoles';
+import {
+  PageHeader, Card, StatCard, Button, Badge, StatusChip, Tabs, Banner,
+  Field, TextField, NumberField, Textarea, Select, Checkbox,
+  DataTable, EmptyState, PermissionDenied, ConfirmDialog, SkeletonTable,
+} from '@/components/ui';
+import type { Column, TabItem } from '@/components/ui';
 import {
   getPlatformCompanies,
   updatePlatformCompanyStatus,
@@ -13,13 +20,25 @@ import {
   getPlatformMetrics,
   getContactRequests,
   createCustomPlan,
-  verifyCompanyKYC
+  verifyCompanyKYC,
+  getSupportStaff,
+  createSupportStaff,
+  setSupportStaffStatus,
+  assignSupportCompany,
+  revokeSupportCompany,
+  updateTenantSubdomain,
+  recordTenantPayment,
+  runDunningSweep,
+  getPlatformAuditLogs,
 } from '@/lib/api';
+import { Modal } from '@/components/ui';
+import { BASE_DOMAIN } from '@/lib/tenant';
 
 interface Company {
   id: string;
   name: string;
   code: string;
+  subdomain?: string | null;
   status: string;
   createdAt: string;
   cin?: string | null;
@@ -36,6 +55,8 @@ interface Company {
   kycStatus?: string | null;
   kycRemarks?: string | null;
   demoCallScheduledAt?: string | null;
+  billingStatus?: string | null;
+  graceEndsAt?: string | null;
   subscriptions: {
     plan: {
       name: string;
@@ -69,17 +90,77 @@ interface ContactRequest {
   createdAt: string;
 }
 
-export default function PlatformAdminPanel() {
+interface BehaviorRow {
+  companyId: string;
+  name: string;
+  code: string;
+  employeeCount: number;
+  activeUserCount: number;
+  attendanceCount: number;
+  leaveCount: number;
+  payrollCount: number;
+  ticketsCount: number;
+}
+
+interface SupportStaff {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  assignments: { companyId: string; companyName: string | null; companyCode: string | null; companyStatus: string | null }[];
+}
+
+type TabKey = 'overview' | 'tenants' | 'kyc' | 'subscriptions' | 'leads' | 'custom-plan' | 'support' | 'audit';
+
+const VALID_TABS = ['overview', 'tenants', 'kyc', 'subscriptions', 'leads', 'custom-plan', 'support', 'audit'];
+
+function PlatformAdminPanel() {
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [contacts, setContacts] = useState<ContactRequest[]>([]);
   const [metrics, setMetrics] = useState<any>(null);
-  const [behaviorMetrics, setBehaviorMetrics] = useState<any[]>([]);
+  const [behaviorMetrics, setBehaviorMetrics] = useState<BehaviorRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'kyc' | 'subscriptions' | 'leads' | 'custom-plan'>('overview');
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
+
+  // The URL ?tab= drives the active tab so the Admin Portal sidebar links work.
+  const tabParam = searchParams.get('tab');
+  useEffect(() => {
+    if (tabParam && VALID_TABS.includes(tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam as TabKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabParam]);
+
+  const goTab = (key: TabKey) => {
+    setActiveTab(key);
+    router.replace(`/platform-admin?tab=${key}`, { scroll: false });
+  };
   const [kycRemarks, setKycRemarks] = useState<Record<string, string>>({});
+  const [extendTarget, setExtendTarget] = useState<string | null>(null);
+  const [extending, setExtending] = useState(false);
+  const [supportStaff, setSupportStaff] = useState<SupportStaff[]>([]);
+  const [staffForm, setStaffForm] = useState({ name: '', email: '', password: '', role: 'SUPPORT' });
+  const [creatingStaff, setCreatingStaff] = useState(false);
+  const [assignSelection, setAssignSelection] = useState<Record<string, string>>({});
+  const [subdomainTarget, setSubdomainTarget] = useState<Company | null>(null);
+  const [subdomainValue, setSubdomainValue] = useState('');
+  const [savingSubdomain, setSavingSubdomain] = useState(false);
+  const [subdomainError, setSubdomainError] = useState('');
+  const [payTarget, setPayTarget] = useState<Company | null>(null);
+  const [payForm, setPayForm] = useState({ amount: '', months: '1' });
+  const [paying, setPaying] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditAction, setAuditAction] = useState('');
+  const [auditDays, setAuditDays] = useState('30');
+  const [loadingAudit, setLoadingAudit] = useState(false);
   const [customPlanForm, setCustomPlanForm] = useState({
     name: '',
     description: '',
@@ -123,6 +204,87 @@ export default function PlatformAdminPanel() {
     loadPlatformAdminDetails();
   }, []);
 
+  const loadSupportStaff = async () => {
+    try {
+      setSupportStaff(await getSupportStaff());
+    } catch (err) {
+      console.error('Failed to load support staff:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user && ownerTabsFor(user.role).includes('support')) loadSupportStaff();
+  }, [user?.role]);
+
+  const handleCreateStaff = async () => {
+    if (!staffForm.name.trim() || !staffForm.email.trim() || staffForm.password.length < 8) {
+      alert('Name, email, and a password of at least 8 characters are required.');
+      return;
+    }
+    setCreatingStaff(true);
+    try {
+      await createSupportStaff(staffForm);
+      setStaffForm({ name: '', email: '', password: '', role: 'SUPPORT' });
+      await loadSupportStaff();
+    } catch (err) {
+      console.error('Failed to create support staff:', err);
+    } finally {
+      setCreatingStaff(false);
+    }
+  };
+
+  const handleAssign = async (staffId: string) => {
+    const companyId = assignSelection[staffId];
+    if (!companyId) { alert('Select a customer to assign.'); return; }
+    try {
+      await assignSupportCompany(staffId, companyId);
+      setAssignSelection((prev) => ({ ...prev, [staffId]: '' }));
+      await loadSupportStaff();
+    } catch (err) {
+      console.error('Failed to assign tenant:', err);
+    }
+  };
+
+  const handleRevoke = async (staffId: string, companyId: string) => {
+    try {
+      await revokeSupportCompany(staffId, companyId);
+      await loadSupportStaff();
+    } catch (err) {
+      console.error('Failed to revoke assignment:', err);
+    }
+  };
+
+  const handleToggleStaff = async (staffId: string, isActive: boolean) => {
+    try {
+      await setSupportStaffStatus(staffId, isActive);
+      await loadSupportStaff();
+    } catch (err) {
+      console.error('Failed to update staff status:', err);
+    }
+  };
+
+  const openSubdomainEditor = (company: Company) => {
+    setSubdomainTarget(company);
+    setSubdomainValue(company.subdomain || company.code);
+    setSubdomainError('');
+  };
+
+  const handleSaveSubdomain = async () => {
+    if (!subdomainTarget) return;
+    setSavingSubdomain(true);
+    setSubdomainError('');
+    try {
+      await updateTenantSubdomain(subdomainTarget.id, subdomainValue.trim().toLowerCase());
+      setSubdomainTarget(null);
+      // refresh tenant list to show the new subdomain
+      setCompanies(await getPlatformCompanies());
+    } catch (err: any) {
+      setSubdomainError(err?.response?.data?.error || 'Failed to update subdomain.');
+    } finally {
+      setSavingSubdomain(false);
+    }
+  };
+
   const handleCreateCustomPlan = async () => {
     if (!selectedCompanyId) {
       alert('Please select a target company');
@@ -144,7 +306,7 @@ export default function PlatformAdminPanel() {
 
       await createCustomPlan(selectedCompanyId, payload);
       alert('Custom subscription assigned successfully!');
-      
+
       const [cRes, sRes, metricRes] = await Promise.all([
         getPlatformCompanies(),
         getPlatformSubscriptions(),
@@ -154,7 +316,7 @@ export default function PlatformAdminPanel() {
       setSubscriptions(sRes);
       setMetrics(metricRes.metrics);
       setBehaviorMetrics(metricRes.tenantBehavior || []);
-      
+
       setSelectedCompanyId('');
       setCustomPlanForm({
         name: '',
@@ -191,12 +353,60 @@ export default function PlatformAdminPanel() {
     }
   };
 
-  const handleVerifyKYC = async (companyId: string, status: 'APPROVED' | 'REJECTED') => {
+  const refreshPlatform = async () => {
+    try {
+      const [cRes, sRes] = await Promise.all([getPlatformCompanies(), getPlatformSubscriptions()]);
+      setCompanies(cRes); setSubscriptions(sRes);
+    } catch { /* toast */ }
+  };
+
+  const handleRecordPayment = async () => {
+    if (!payTarget) return;
+    setPaying(true);
+    try {
+      await recordTenantPayment(payTarget.id, {
+        amount: payForm.amount ? parseFloat(payForm.amount) : undefined,
+        months: parseInt(payForm.months, 10) || 1,
+      });
+      setPayTarget(null); setPayForm({ amount: '', months: '1' });
+      await refreshPlatform();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to record payment');
+    } finally { setPaying(false); }
+  };
+
+  const loadAudit = async () => {
+    setLoadingAudit(true);
+    try {
+      const r = await getPlatformAuditLogs({ action: auditAction || undefined, days: parseInt(auditDays, 10) || undefined, take: 300 });
+      setAuditLogs(r.logs || []);
+    } catch { /* toast */ } finally { setLoadingAudit(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'audit') loadAudit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, auditDays]);
+
+  const handleRunDunning = async () => {
+    setSweeping(true);
+    try {
+      const r = await runDunningSweep();
+      alert(`Dunning sweep: ${r.scanned} scanned · ${r.pastDue} past-due · ${r.suspended} suspended (grace ${r.graceDays}d).`);
+      await refreshPlatform();
+    } catch { alert('Failed to run dunning sweep'); } finally { setSweeping(false); }
+  };
+
+  const handleVerifyKYC = async (companyId: string, status: 'APPROVED' | 'REJECTED' | 'NEEDS_INFO') => {
     try {
       const remarks = kycRemarks[companyId] || '';
+      if (status === 'NEEDS_INFO' && !remarks.trim()) {
+        alert('Please add a note describing what the tenant needs to provide.');
+        return;
+      }
       await verifyCompanyKYC(companyId, { status, remarks });
       alert(`Company KYC status updated to ${status} successfully.`);
-      
+
       const [cRes, sRes, metricRes] = await Promise.all([
         getPlatformCompanies(),
         getPlatformSubscriptions(),
@@ -212,6 +422,7 @@ export default function PlatformAdminPanel() {
   };
 
   const handleExtendSubscription = async (subId: string, days: number) => {
+    setExtending(true);
     try {
       const sub = subscriptions.find(s => s.id === subId);
       if (!sub) return;
@@ -224,465 +435,558 @@ export default function PlatformAdminPanel() {
       alert('Subscription extended successfully');
     } catch (err) {
       alert('Failed to extend subscription');
+    } finally {
+      setExtending(false);
+      setExtendTarget(null);
     }
   };
 
-  if (user?.role !== 'SUPER_ADMIN' && user?.role !== 'SALES') {
+  if (!isOwnerRole(user?.role)) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0a0e17', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontWeight: 600 }}>
-        Access Denied. Global Platform Administrators or Sales Representatives Only.
-      </div>
+      <PermissionDenied message="Access Denied. This is the platform Admin Portal — owner accounts only." />
     );
+  }
+
+  const allowedTabs = new Set(ownerTabsFor(user?.role));
+  const tabs: TabItem[] = ([
+    { key: 'overview', label: 'Overview' },
+    { key: 'tenants', label: 'Tenants' },
+    { key: 'kyc', label: `KYC Approvals (${metrics?.pendingKycCount || 0})` },
+    { key: 'subscriptions', label: 'Subscriptions' },
+    { key: 'leads', label: 'Leads' },
+    { key: 'custom-plan', label: 'Custom Plan Builder' },
+    { key: 'support', label: 'Platform Staff' },
+    { key: 'audit', label: 'Audit Log' },
+  ] as TabItem[]).filter((t) => allowedTabs.has(t.key as any));
+
+  const behaviorColumns: Column<BehaviorRow>[] = [
+    {
+      key: 'name',
+      header: 'Tenant Company',
+      render: (row) => (
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+          {row.name} <code style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({row.code})</code>
+        </span>
+      ),
+    },
+    { key: 'employeeCount', header: 'Employees', render: (row) => <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{row.employeeCount}</span> },
+    { key: 'activeUserCount', header: 'Active Users' },
+    { key: 'attendanceCount', header: 'Attendance logs' },
+    { key: 'leaveCount', header: 'Leave logs' },
+    { key: 'payrollCount', header: 'Payroll records', render: (row) => <span style={{ color: 'var(--success-fg)', fontWeight: 600 }}>{row.payrollCount}</span> },
+    { key: 'ticketsCount', header: 'Helpdesk tickets' },
+  ];
+
+  const tenantColumns: Column<Company>[] = [
+    { key: 'name', header: 'Company Name', render: (c) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span> },
+    { key: 'code', header: 'Tenant Code', render: (c) => <code>{c.code}</code> },
+    {
+      key: 'subdomain',
+      header: 'Workspace',
+      render: (c) => (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+          <code style={{ color: 'var(--accent)' }}>{c.subdomain || c.code}.{BASE_DOMAIN}</code>
+          <button onClick={() => openSubdomainEditor(c)} title="Edit subdomain" aria-label="Edit subdomain"
+            style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2, display: 'inline-flex' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+          </button>
+        </span>
+      ),
+    },
+    { key: 'createdAt', header: 'Created Date', render: (c) => new Date(c.createdAt).toLocaleDateString() },
+    { key: 'plan', header: 'Current Plan', render: (c) => <span style={{ color: 'var(--accent)' }}>{c.subscriptions[0]?.plan?.name || 'No Active Plan'}</span> },
+    {
+      key: 'billing', header: 'Billing',
+      render: (c) => {
+        const bs = c.billingStatus || 'CURRENT';
+        const tone = bs === 'SUSPENDED_NONPAYMENT' ? 'danger' : bs === 'PAST_DUE' ? 'warning' : 'success';
+        const label = bs === 'SUSPENDED_NONPAYMENT' ? 'Past due — suspended' : bs === 'PAST_DUE' ? 'Past due (grace)' : 'Current';
+        const paidThrough = c.subscriptions[0]?.endDate ? new Date(c.subscriptions[0].endDate).toLocaleDateString() : '—';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'flex-start' }}>
+            <Badge tone={tone} dot>{label}</Badge>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Paid thru {paidThrough}</span>
+            <Button size="sm" variant="ghost" onClick={() => { setPayTarget(c); setPayForm({ amount: '', months: '1' }); }}>Record payment</Button>
+          </div>
+        );
+      },
+    },
+    { key: 'status', header: 'Account Status', render: (c) => <StatusChip status={c.status} /> },
+    {
+      key: 'action',
+      header: 'Action',
+      render: (c) => (
+        <select
+          className="select-field"
+          value={c.status}
+          onChange={(e) => handleStatusChange(c.id, e.target.value)}
+          style={{ maxWidth: 160 }}
+        >
+          <option value="ACTIVE">ACTIVE</option>
+          <option value="SUSPENDED">SUSPENDED</option>
+          <option value="INACTIVE">INACTIVE</option>
+        </select>
+      ),
+    },
+  ];
+
+  const subscriptionColumns: Column<Subscription>[] = [
+    { key: 'tenant', header: 'Tenant', render: (s) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.company.name}</span> },
+    { key: 'plan', header: 'Plan', render: (s) => <span style={{ color: 'var(--accent)' }}>{s.plan.name}</span> },
+    { key: 'status', header: 'Billing status', render: (s) => <StatusChip status={s.status} /> },
+    { key: 'endDate', header: 'Expiry date', render: (s) => new Date(s.endDate).toLocaleDateString() },
+    {
+      key: 'overrides',
+      header: 'Overrides',
+      render: (s) => (
+        <Button variant="ghost" size="sm" onClick={() => setExtendTarget(s.id)}>Extend 30 Days</Button>
+      ),
+    },
+  ];
+
+  const leadColumns: Column<ContactRequest>[] = [
+    { key: 'name', header: 'Name', render: (c) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span> },
+    {
+      key: 'contact',
+      header: 'Email / Phone',
+      render: (c) => (
+        <div>
+          <div>{c.email}</div>
+          <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}>{c.phone || 'N/A'}</div>
+        </div>
+      ),
+    },
+    { key: 'companyName', header: 'Company', render: (c) => c.companyName || 'N/A' },
+    { key: 'message', header: 'Message', render: (c) => <span style={{ color: 'var(--text-secondary)', maxWidth: 250, display: 'inline-block', whiteSpace: 'normal', wordBreak: 'break-word' }}>{c.message}</span> },
+    { key: 'createdAt', header: 'Date', render: (c) => new Date(c.createdAt).toLocaleDateString() },
+  ];
+
+  function kycTone(status?: string | null): 'success' | 'danger' | 'warning' {
+    if (status === 'APPROVED') return 'success';
+    if (status === 'REJECTED') return 'danger';
+    return 'warning';
   }
 
   return (
     <ProtectedRoute>
-      <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0e17' }}>
+      <div className="app-layout">
         <Sidebar activePath="/platform-admin" />
 
-        <main style={{ flex: 1, padding: '2.5rem', overflowY: 'auto', color: '#f3f4f6' }}>
-          
-          {/* Header */}
-          <div style={{ marginBottom: '2rem' }}>
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff' }}>Platform Control Center</h1>
-            <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem' }}>Global administrative overview of SaaS operations, billing renewals, and client onboarding.</p>
-          </div>
+        <main className="main-content">
+          <PageHeader
+            title="Platform Control Center"
+            subtitle="Global administrative overview of SaaS operations, billing renewals, and client onboarding."
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z" /></svg>
+            }
+          />
 
-          {/* Navigation Tabs */}
-          <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '1rem', marginBottom: '2rem' }}>
-            {['overview', 'tenants', 'kyc', 'subscriptions', 'leads', 'custom-plan'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                style={{
-                  background: activeTab === tab ? 'rgba(0,167,181,0.1)' : 'none',
-                  border: 'none',
-                  color: activeTab === tab ? '#73E0E7' : 'rgba(255,255,255,0.6)',
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  textTransform: 'capitalize'
-                }}
-              >
-                {tab === 'custom-plan' ? 'Custom Plan Builder' : tab === 'kyc' ? `KYC Approvals (${metrics?.pendingKycCount || 0})` : tab}
-              </button>
-            ))}
-          </div>
+          <Card padded={false} style={{ padding: '0.4rem 0.75rem', marginBottom: '1.5rem' }}>
+            <Tabs items={tabs} value={activeTab} onChange={(key) => goTab(key as TabKey)} style={{ borderBottom: 'none' }} />
+          </Card>
 
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
-              <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#00A7B5', animation: 'spin 1s linear infinite' }} />
-            </div>
+            <Card><SkeletonTable rows={6} cols={5} /></Card>
           ) : (
             <div>
               {/* Tab 1: Overview */}
               {activeTab === 'overview' && metrics && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1.25rem' }}>
-                    <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 600 }}>Total Companies</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>{metrics.totalTenants}</div>
-                    </div>
-                    <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 600 }}>Active Subscriptions</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>{metrics.activeSubscriptions}</div>
-                    </div>
-                    <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 600 }}>Pending KYC</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f59e0b', marginTop: '4px' }}>{metrics.pendingKycCount || 0}</div>
-                    </div>
-                    <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 600 }}>Pending Leads</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#00A7B5', marginTop: '4px' }}>{metrics.pendingContactRequests}</div>
-                    </div>
-                    <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 600 }}>Total Revenue</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#73E0E7', marginTop: '4px' }}>₹{metrics.totalRevenue.toLocaleString()}</div>
-                    </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                  <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                    <StatCard label="Total Companies" value={metrics.totalTenants} />
+                    <StatCard label="Active Subscriptions" value={metrics.activeSubscriptions} />
+                    <StatCard label="Pending KYC" value={metrics.pendingKycCount || 0} />
+                    <StatCard label="Pending Leads" value={metrics.pendingContactRequests} />
+                    <StatCard label="Total Revenue" value={`₹${metrics.totalRevenue.toLocaleString()}`} />
                   </div>
-                  
+
                   {/* Tenant Behavior metrics section */}
-                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.75rem' }}>
-                    <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', marginBottom: '1.25rem' }}>Tenant Behavior & Module Utilization Metrics</h2>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                          <th style={{ padding: '12px' }}>Tenant Company</th>
-                          <th style={{ padding: '12px' }}>Employees</th>
-                          <th style={{ padding: '12px' }}>Active Users</th>
-                          <th style={{ padding: '12px' }}>Attendance logs</th>
-                          <th style={{ padding: '12px' }}>Leave logs</th>
-                          <th style={{ padding: '12px' }}>Payroll records</th>
-                          <th style={{ padding: '12px' }}>Helpdesk tickets</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {behaviorMetrics.map((row) => (
-                          <tr key={row.companyId} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.875rem' }}>
-                            <td style={{ padding: '14px 12px', fontWeight: 600, color: '#fff' }}>
-                              {row.name} <code style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>({row.code})</code>
-                            </td>
-                            <td style={{ padding: '14px 12px', color: '#73E0E7', fontWeight: 700 }}>{row.employeeCount}</td>
-                            <td style={{ padding: '14px 12px' }}>{row.activeUserCount}</td>
-                            <td style={{ padding: '14px 12px' }}>{row.attendanceCount}</td>
-                            <td style={{ padding: '14px 12px' }}>{row.leaveCount}</td>
-                            <td style={{ padding: '14px 12px', color: '#10b981', fontWeight: 600 }}>{row.payrollCount}</td>
-                            <td style={{ padding: '14px 12px' }}>{row.ticketsCount}</td>
-                          </tr>
-                        ))}
-                        {behaviorMetrics.length === 0 && (
-                          <tr>
-                            <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>No tenant utilization statistics loaded.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Card title="Tenant Behavior & Module Utilization Metrics">
+                    <DataTable<BehaviorRow>
+                      columns={behaviorColumns}
+                      rows={behaviorMetrics}
+                      rowKey={(row) => row.companyId}
+                      emptyTitle="No tenant utilization statistics loaded."
+                    />
+                  </Card>
                 </div>
               )}
 
               {/* Tab 2: Tenants */}
               {activeTab === 'tenants' && (
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
-                        <th style={{ padding: '12px' }}>Company Name</th>
-                        <th style={{ padding: '12px' }}>Tenant Code</th>
-                        <th style={{ padding: '12px' }}>Created Date</th>
-                        <th style={{ padding: '12px' }}>Current Plan</th>
-                        <th style={{ padding: '12px' }}>Account Status</th>
-                        <th style={{ padding: '12px' }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {companies.map((c) => {
-                        const sub = c.subscriptions[0];
-                        return (
-                          <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.9rem' }}>
-                            <td style={{ padding: '16px 12px', fontWeight: 600, color: '#fff' }}>{c.name}</td>
-                            <td style={{ padding: '16px 12px' }}><code>{c.code}</code></td>
-                            <td style={{ padding: '16px 12px' }}>{new Date(c.createdAt).toLocaleDateString()}</td>
-                            <td style={{ padding: '16px 12px', color: '#73E0E7' }}>{sub?.plan?.name || 'No Active Plan'}</td>
-                            <td style={{ padding: '16px 12px' }}>
-                              <span style={{
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                background: c.status === 'ACTIVE' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                                color: c.status === 'ACTIVE' ? '#34d399' : '#f87171'
-                              }}>
-                                {c.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '16px 12px' }}>
-                              <select
-                                value={c.status}
-                                onChange={(e) => handleStatusChange(c.id, e.target.value)}
-                                style={{ background: '#0a0e17', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '4px 8px', borderRadius: '4px' }}
-                              >
-                                <option value="ACTIVE">ACTIVE</option>
-                                <option value="SUSPENDED">SUSPENDED</option>
-                                <option value="INACTIVE">INACTIVE</option>
-                              </select>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+                  <Button variant="ghost" size="sm" loading={sweeping} onClick={handleRunDunning}>Run dunning sweep</Button>
                 </div>
+                <DataTable<Company>
+                  columns={tenantColumns}
+                  rows={companies}
+                  rowKey={(c) => c.id}
+                  emptyTitle="No tenant companies registered."
+                />
+                </>
               )}
 
               {/* Tab 3: KYC Approvals */}
               {activeTab === 'kyc' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   {companies.map((c) => (
-                    <div key={c.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.75rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+                    <Card key={c.id}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
                         <div>
-                          <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', margin: 0 }}>{c.name}</h3>
-                          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px', display: 'block' }}>Tenant Code: <code>{c.code}</code> | Registered: {new Date(c.createdAt).toLocaleDateString()}</span>
+                          <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{c.name}</h3>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>Tenant Code: <code>{c.code}</code> | Registered: {new Date(c.createdAt).toLocaleDateString()}</span>
                         </div>
-                        <span style={{
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '0.8rem',
-                          fontWeight: 700,
-                          background: c.kycStatus === 'APPROVED' ? 'rgba(16,185,129,0.1)' : c.kycStatus === 'REJECTED' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)',
-                          color: c.kycStatus === 'APPROVED' ? '#34d399' : c.kycStatus === 'REJECTED' ? '#f87171' : '#fbbf24'
-                        }}>
-                          {c.kycStatus || 'NOT SUBMITTED'}
-                        </span>
+                        <Badge tone={kycTone(c.kycStatus)}>{c.kycStatus || 'NOT SUBMITTED'}</Badge>
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                         <div>
-                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Identification</span>
-                          <div style={{ fontSize: '0.9rem', color: '#fff' }}>CIN: <code style={{ color: '#73E0E7' }}>{c.cin || 'N/A'}</code></div>
-                          <div style={{ fontSize: '0.9rem', color: '#fff', marginTop: '2px' }}>GST: <code>{c.gstin || 'N/A'}</code></div>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Identification</span>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>CIN: <code style={{ color: 'var(--accent)' }}>{c.cin || 'N/A'}</code></div>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginTop: '2px' }}>GST: <code>{c.gstin || 'N/A'}</code></div>
                         </div>
 
                         <div>
-                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Director Details</span>
-                          <div style={{ fontSize: '0.9rem', color: '#fff' }}>Name: {c.directorName || 'N/A'}</div>
-                          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem' }}>PAN: {c.directorPan || 'N/A'} | DIN: {c.directorDin || 'N/A'}</div>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Director Details</span>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>Name: {c.directorName || 'N/A'}</div>
+                          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>PAN: {c.directorPan || 'N/A'} | DIN: {c.directorDin || 'N/A'}</div>
                         </div>
 
                         <div>
-                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Contact & Signatory</span>
-                          <div style={{ fontSize: '0.9rem', color: '#fff' }}>Signatory: {c.signingAuthorityName || 'N/A'}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>Contact: {c.contactPersonName || 'N/A'} ({c.contactPersonPhone || 'N/A'})</div>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Contact & Signatory</span>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>Signatory: {c.signingAuthorityName || 'N/A'}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Contact: {c.contactPersonName || 'N/A'} ({c.contactPersonPhone || 'N/A'})</div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', background: 'rgba(255,255,255,0.01)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)', alignItems: 'center' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', background: 'var(--surface-sunken)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', alignItems: 'center' }}>
                         <div>
-                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '4px' }}>Scheduled Onboarding Demo Call</span>
-                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#f59e0b' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Scheduled Onboarding Demo Call</span>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--warning-fg)' }}>
                             {c.demoCallScheduledAt ? new Date(c.demoCallScheduledAt).toLocaleString() : 'Not Scheduled'}
                           </div>
                         </div>
 
                         {c.kycStatus !== 'APPROVED' && (
-                          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                             <input
                               type="text"
+                              className="input-field"
                               placeholder="Review remarks/reasons..."
                               value={kycRemarks[c.id] || ''}
                               onChange={(e) => setKycRemarks(prev => ({ ...prev, [c.id]: e.target.value }))}
-                              style={{ background: '#0a0e17', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '0.5rem', borderRadius: '6px', fontSize: '0.85rem', width: '220px', outline: 'none' }}
+                              style={{ width: '220px' }}
                             />
-                            <button
-                              onClick={() => handleVerifyKYC(c.id, 'APPROVED')}
-                              style={{ background: '#10b981', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', transition: 'opacity 0.2s' }}
-                              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-                              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleVerifyKYC(c.id, 'REJECTED')}
-                              style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', transition: 'opacity 0.2s' }}
-                              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-                              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                            >
-                              Reject
-                            </button>
+                            <Button variant="success" size="sm" onClick={() => handleVerifyKYC(c.id, 'APPROVED')}>Approve</Button>
+                            <Button variant="warning" size="sm" onClick={() => handleVerifyKYC(c.id, 'NEEDS_INFO')}>Request Info</Button>
+                            <Button variant="danger" size="sm" onClick={() => handleVerifyKYC(c.id, 'REJECTED')}>Reject</Button>
                           </div>
                         )}
                       </div>
-                    </div>
+                    </Card>
                   ))}
                   {companies.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '3rem', color: 'rgba(255,255,255,0.4)' }}>No company compliance records registered on this server.</div>
+                    <EmptyState title="No company compliance records registered on this server." />
                   )}
                 </div>
               )}
 
               {/* Tab 4: Subscriptions */}
               {activeTab === 'subscriptions' && (
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
-                        <th style={{ padding: '12px' }}>Tenant</th>
-                        <th style={{ padding: '12px' }}>Plan</th>
-                        <th style={{ padding: '12px' }}>Billing status</th>
-                        <th style={{ padding: '12px' }}>Expiry date</th>
-                        <th style={{ padding: '12px' }}>Overrides</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {subscriptions.map((s) => (
-                        <tr key={s.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.9rem' }}>
-                          <td style={{ padding: '16px 12px', fontWeight: 600, color: '#fff' }}>{s.company.name}</td>
-                          <td style={{ padding: '16px 12px', color: '#73E0E7' }}>{s.plan.name}</td>
-                          <td style={{ padding: '16px 12px' }}>{s.status}</td>
-                          <td style={{ padding: '16px 12px' }}>{new Date(s.endDate).toLocaleDateString()}</td>
-                          <td style={{ padding: '16px 12px' }}>
-                            <button
-                              onClick={() => handleExtendSubscription(s.id, 30)}
-                              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
-                            >
-                              Extend 30 Days
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable<Subscription>
+                  columns={subscriptionColumns}
+                  rows={subscriptions}
+                  rowKey={(s) => s.id}
+                  emptyTitle="No subscriptions found."
+                />
               )}
 
               {/* Tab 5: Leads */}
               {activeTab === 'leads' && (
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
-                        <th style={{ padding: '12px' }}>Name</th>
-                        <th style={{ padding: '12px' }}>Email / Phone</th>
-                        <th style={{ padding: '12px' }}>Company</th>
-                        <th style={{ padding: '12px' }}>Message</th>
-                        <th style={{ padding: '12px' }}>Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {contacts.map((c) => (
-                        <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem', verticalAlign: 'top' }}>
-                          <td style={{ padding: '16px 12px', fontWeight: 600, color: '#fff' }}>{c.name}</td>
-                          <td style={{ padding: '16px 12px' }}>
-                            <div>{c.email}</div>
-                            <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>{c.phone || 'N/A'}</div>
-                          </td>
-                          <td style={{ padding: '16px 12px' }}>{c.companyName || 'N/A'}</td>
-                          <td style={{ padding: '16px 12px', color: 'rgba(255,255,255,0.7)', maxWidth: '250px', whiteSpace: 'normal', wordBreak: 'break-word' }}>{c.message}</td>
-                          <td style={{ padding: '16px 12px' }}>{new Date(c.createdAt).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable<ContactRequest>
+                  columns={leadColumns}
+                  rows={contacts}
+                  rowKey={(c) => c.id}
+                  emptyTitle="No leads captured yet."
+                />
               )}
 
               {/* Tab 6: Custom Plan Builder */}
               {activeTab === 'custom-plan' && (
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '2rem', maxWidth: '650px' }}>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem', color: '#fff' }}>Assign Custom Pricing & Feature Set</h2>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    
-                    {/* Select Company */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Target Tenant Company</label>
-                      <select 
-                        value={selectedCompanyId} 
-                        onChange={(e) => setSelectedCompanyId(e.target.value)}
-                        style={{ width: '100%', background: '#0a0e17', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '0.6rem', borderRadius: '6px', outline: 'none' }}
-                      >
-                        <option value="">-- Select Company --</option>
-                        {companies.map(c => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                        ))}
-                      </select>
-                    </div>
+                <Card style={{ maxWidth: '650px' }}>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Assign Custom Pricing & Feature Set</h2>
 
-                    {/* Plan Name */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Plan Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Enterprise Custom Growth" 
-                        value={customPlanForm.name} 
-                        onChange={(e) => setCustomPlanForm({...customPlanForm, name: e.target.value})}
-                        style={{ width: '100%', background: '#0a0e17', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '0.6rem', borderRadius: '6px', outline: 'none' }}
-                      />
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <Select
+                      label="Target Tenant Company"
+                      value={selectedCompanyId}
+                      onChange={setSelectedCompanyId}
+                      placeholder="-- Select Company --"
+                      options={companies.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                    />
 
-                    {/* Description */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Description</label>
-                      <textarea 
-                        placeholder="Details of custom arrangement..." 
-                        value={customPlanForm.description} 
-                        onChange={(e) => setCustomPlanForm({...customPlanForm, description: e.target.value})}
-                        style={{ width: '100%', background: '#0a0e17', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '0.6rem', borderRadius: '6px', outline: 'none', minHeight: '60px', resize: 'vertical' }}
-                      />
-                    </div>
+                    <TextField
+                      label="Plan Name"
+                      placeholder="e.g. Enterprise Custom Growth"
+                      value={customPlanForm.name}
+                      onChange={(v) => setCustomPlanForm({ ...customPlanForm, name: v })}
+                    />
+
+                    <Textarea
+                      label="Description"
+                      placeholder="Details of custom arrangement..."
+                      value={customPlanForm.description}
+                      onChange={(v) => setCustomPlanForm({ ...customPlanForm, description: v })}
+                    />
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                      {/* Price */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Price (INR / month)</label>
-                        <input 
-                          type="number" 
-                          placeholder="e.g. 5000" 
-                          value={customPlanForm.price} 
-                          onChange={(e) => setCustomPlanForm({...customPlanForm, price: e.target.value})}
-                          style={{ width: '100%', background: '#0a0e17', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '0.6rem', borderRadius: '6px', outline: 'none' }}
-                        />
-                      </div>
-
-                      {/* Employee Limit */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Employee Limit</label>
-                        <input 
-                          type="number" 
-                          placeholder="e.g. 100" 
-                          value={customPlanForm.employeeLimit} 
-                          onChange={(e) => setCustomPlanForm({...customPlanForm, employeeLimit: e.target.value})}
-                          style={{ width: '100%', background: '#0a0e17', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '0.6rem', borderRadius: '6px', outline: 'none' }}
-                        />
-                      </div>
-
-                      {/* Duration (Days) */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.5rem' }}>Duration (Days)</label>
-                        <input 
-                          type="number" 
-                          placeholder="e.g. 30" 
-                          value={customPlanForm.durationDays} 
-                          onChange={(e) => setCustomPlanForm({...customPlanForm, durationDays: e.target.value})}
-                          style={{ width: '100%', background: '#0a0e17', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', padding: '0.6rem', borderRadius: '6px', outline: 'none' }}
-                        />
-                      </div>
+                      <NumberField
+                        label="Price (INR / month)"
+                        decimal
+                        placeholder="e.g. 5000"
+                        value={customPlanForm.price}
+                        onChange={(v) => setCustomPlanForm({ ...customPlanForm, price: v })}
+                      />
+                      <NumberField
+                        label="Employee Limit"
+                        placeholder="e.g. 100"
+                        value={customPlanForm.employeeLimit}
+                        onChange={(v) => setCustomPlanForm({ ...customPlanForm, employeeLimit: v })}
+                      />
+                      <NumberField
+                        label="Duration (Days)"
+                        placeholder="e.g. 30"
+                        value={customPlanForm.durationDays}
+                        onChange={(v) => setCustomPlanForm({ ...customPlanForm, durationDays: v })}
+                      />
                     </div>
 
-                    {/* Features Select Checkboxes */}
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '0.75rem' }}>Granted Feature Modules</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', background: '#070a10', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <Field label="Granted Feature Modules">
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', background: 'var(--surface-sunken)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
                         {Object.keys(customPlanForm.features).map((featureKey) => (
-                          <label key={featureKey} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={(customPlanForm.features as any)[featureKey]} 
-                              onChange={(e) => {
-                                const newFeatures = { ...customPlanForm.features, [featureKey]: e.target.checked };
-                                setCustomPlanForm({ ...customPlanForm, features: newFeatures });
-                              }}
-                              style={{ accentColor: '#00A7B5' }}
-                            />
-                            <span style={{ textTransform: 'capitalize' }}>
-                              {featureKey.replace(/([A-Z])/g, ' $1').trim()}
-                            </span>
-                          </label>
+                          <Checkbox
+                            key={featureKey}
+                            label={<span style={{ textTransform: 'capitalize' }}>{featureKey.replace(/([A-Z])/g, ' $1').trim()}</span>}
+                            checked={(customPlanForm.features as any)[featureKey]}
+                            onChange={(checked) => {
+                              const newFeatures = { ...customPlanForm.features, [featureKey]: checked };
+                              setCustomPlanForm({ ...customPlanForm, features: newFeatures });
+                            }}
+                          />
                         ))}
                       </div>
-                    </div>
+                    </Field>
 
-                    {/* Submit Button */}
-                    <button 
-                      onClick={handleCreateCustomPlan}
-                      style={{ 
-                        marginTop: '0.5rem', 
-                        padding: '0.75rem', 
-                        background: 'linear-gradient(135deg, #00A7B5, #1d4ed8)', 
-                        border: 'none', 
-                        borderRadius: '6px', 
-                        color: '#fff', 
-                        fontWeight: 600, 
-                        cursor: 'pointer', 
-                        transition: 'opacity 0.3s' 
-                        }}
-                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                      onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                    >
+                    <Button variant="primary" fullWidth style={{ marginTop: '0.5rem' }} onClick={handleCreateCustomPlan}>
                       Create & Assign Custom Subscription
-                    </button>
-
+                    </Button>
                   </div>
+                </Card>
+              )}
+
+              {/* Tab 7: Platform Staff (owner-side roles, separation of duties) */}
+              {activeTab === 'support' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <Banner tone="info" title="Platform staff & separation of duties">
+                    Create owner-side accounts with a specific role. <strong>Compliance</strong> handles KYC,
+                    <strong> Billing</strong> handles subscriptions/payments, <strong>Support</strong> gets read-only
+                    customer access (assign customers below), and an <strong>Auditor</strong> gets read-only oversight.
+                  </Banner>
+
+                  <Card title="Create platform staff">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.2fr auto', gap: '1rem', alignItems: 'end' }}>
+                      <TextField label="Name" value={staffForm.name} onChange={(v) => setStaffForm({ ...staffForm, name: v })} placeholder="e.g. Ravi Kumar" />
+                      <TextField label="Work Email" value={staffForm.email} onChange={(v) => setStaffForm({ ...staffForm, email: v })} placeholder="ravi@yourco.com" />
+                      <TextField label="Temp Password" type="password" value={staffForm.password} onChange={(v) => setStaffForm({ ...staffForm, password: v })} placeholder="min 8 characters" />
+                      <Select label="Role" value={staffForm.role} onChange={(v) => setStaffForm({ ...staffForm, role: v })} options={PLATFORM_STAFF_ROLE_OPTIONS} />
+                      <Button onClick={handleCreateStaff} loading={creatingStaff}>Create</Button>
+                    </div>
+                  </Card>
+
+                  <Card title="Platform staff" padded={false}>
+                    <DataTable<SupportStaff>
+                      columns={[
+                        { key: 'name', header: 'Name', render: (s) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.name}</span> },
+                        { key: 'email', header: 'Email', render: (s) => <span style={{ color: 'var(--text-secondary)' }}>{s.email}</span> },
+                        { key: 'role', header: 'Role', render: (s) => <Badge tone={s.role === 'SUPPORT' ? 'info' : s.role === 'AUDITOR' ? 'neutral' : 'success'}>{s.role?.replace(/_/g, ' ')}</Badge> },
+                        { key: 'status', header: 'Status', render: (s) => <StatusChip status={s.isActive ? 'ACTIVE' : 'INACTIVE'} /> },
+                        {
+                          key: 'assign',
+                          header: 'Assigned Customers (Support)',
+                          render: (s) => {
+                            if (s.role !== 'SUPPORT') return <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Platform-wide</span>;
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                  {s.assignments.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None</span>}
+                                  {s.assignments.map((a) => (
+                                    <span key={a.companyId} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                      <Badge tone="neutral">{a.companyName || a.companyCode}</Badge>
+                                      <button onClick={() => handleRevoke(s.id, a.companyId)} aria-label={`Revoke ${a.companyName}`} title="Revoke access"
+                                        style={{ border: 'none', background: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontWeight: 700, lineHeight: 1 }}>×</button>
+                                    </span>
+                                  ))}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                  <select className="select-field" style={{ maxWidth: 200 }} value={assignSelection[s.id] || ''} onChange={(e) => setAssignSelection((prev) => ({ ...prev, [s.id]: e.target.value }))}>
+                                    <option value="">-- Assign customer --</option>
+                                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                  </select>
+                                  <Button size="sm" variant="ghost" onClick={() => handleAssign(s.id)}>Assign</Button>
+                                </div>
+                              </div>
+                            );
+                          },
+                        },
+                        {
+                          key: 'action',
+                          header: '',
+                          render: (s) => (
+                            <Button size="sm" variant={s.isActive ? 'danger' : 'success'} onClick={() => handleToggleStaff(s.id, !s.isActive)}>
+                              {s.isActive ? 'Deactivate' : 'Activate'}
+                            </Button>
+                          ),
+                        },
+                      ]}
+                      rows={supportStaff}
+                      rowKey={(s) => s.id}
+                      emptyTitle="No support staff yet"
+                      emptyMessage="Create a support account above to grant read-only access to customer tenants."
+                    />
+                  </Card>
+                </div>
+              )}
+
+              {/* Tab 8: Audit Log */}
+              {activeTab === 'audit' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <Banner tone="neutral" title="Platform audit log">
+                    A read-only record of every owner-side action — KYC decisions, tenant suspends, billing,
+                    subscriptions, and staff changes — for oversight and accountability.
+                  </Banner>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input className="input-field" style={{ maxWidth: 220 }} placeholder="Filter by action (e.g. KYC)" value={auditAction} onChange={(e) => setAuditAction(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && loadAudit()} />
+                    <select className="select-field" style={{ maxWidth: 160 }} value={auditDays} onChange={(e) => setAuditDays(e.target.value)}>
+                      <option value="1">Last 24 hours</option>
+                      <option value="7">Last 7 days</option>
+                      <option value="30">Last 30 days</option>
+                      <option value="90">Last 90 days</option>
+                      <option value="3650">All time</option>
+                    </select>
+                    <Button size="sm" variant="ghost" onClick={loadAudit} loading={loadingAudit}>Search</Button>
+                  </div>
+                  <Card padded={false}>
+                    <DataTable<any>
+                      loading={loadingAudit}
+                      columns={[
+                        { key: 'time', header: 'Time', render: (l) => <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{new Date(l.createdAt).toLocaleString()}</span> },
+                        { key: 'actor', header: 'Actor', render: (l) => (
+                          <div><div style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>{l.userEmail || 'system'}</div>{l.actorRole && <Badge tone="neutral">{String(l.actorRole).replace(/_/g, ' ')}</Badge>}</div>
+                        ) },
+                        { key: 'action', header: 'Action', render: (l) => <Badge tone="info">{l.action}</Badge> },
+                        { key: 'entity', header: 'Target', render: (l) => <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{l.entity}{l.entityId ? ` · ${String(l.entityId).slice(0, 8)}` : ''}</span> },
+                        { key: 'details', header: 'Details', render: (l) => <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{[l.oldDetails && `was: ${l.oldDetails}`, l.newDetails && `now: ${l.newDetails}`].filter(Boolean).join('  ').slice(0, 80) || '—'}</span> },
+                      ]}
+                      rows={auditLogs}
+                      rowKey={(l) => l.id}
+                      emptyTitle="No audit entries"
+                      emptyMessage="Owner-side actions will appear here as they happen."
+                    />
+                  </Card>
                 </div>
               )}
 
             </div>
           )}
+
+          <ConfirmDialog
+            open={!!extendTarget}
+            title="Extend subscription"
+            message="Extend this subscription by 30 days?"
+            confirmLabel="Extend 30 Days"
+            tone="primary"
+            loading={extending}
+            onConfirm={() => extendTarget && handleExtendSubscription(extendTarget, 30)}
+            onCancel={() => setExtendTarget(null)}
+          />
+
+          <Modal
+            open={!!payTarget}
+            onClose={() => setPayTarget(null)}
+            title="Record payment"
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setPayTarget(null)}>Cancel</Button>
+                <Button loading={paying} onClick={handleRecordPayment}>Record payment</Button>
+              </>
+            }
+          >
+            {payTarget && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Record an offline/manual payment for <strong>{payTarget.name}</strong>. This extends their
+                  subscription and clears any past-due / non-payment suspension.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="form-label">Amount (INR)</label>
+                    <input className="input-field" type="number" min="0" placeholder="0" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="form-label">Extend by (months)</label>
+                    <input className="input-field" type="number" min="1" value={payForm.months} onChange={(e) => setPayForm({ ...payForm, months: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </Modal>
+
+          <Modal
+            open={!!subdomainTarget}
+            onClose={() => setSubdomainTarget(null)}
+            title={`Change workspace subdomain`}
+            footer={
+              <>
+                <Button variant="ghost" onClick={() => setSubdomainTarget(null)}>Cancel</Button>
+                <Button onClick={handleSaveSubdomain} loading={savingSubdomain}>Save subdomain</Button>
+              </>
+            }
+          >
+            {subdomainTarget && (
+              <div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                  Set the workspace URL for <strong>{subdomainTarget.name}</strong>. Only the owner team can change this; the tenant cannot.
+                </p>
+                <label className="form-label">Subdomain</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <input
+                    className="input-field"
+                    value={subdomainValue}
+                    onChange={(e) => setSubdomainValue(e.target.value.toLowerCase())}
+                    placeholder="acme"
+                    style={{ maxWidth: 220 }}
+                    autoFocus
+                  />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>.{BASE_DOMAIN}</span>
+                </div>
+                {subdomainError && <div style={{ marginTop: '0.75rem' }}><Banner tone="danger">{subdomainError}</Banner></div>}
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+                  3–63 chars; lowercase letters, digits, hyphens. Changing this updates where the tenant signs in.
+                </p>
+              </div>
+            )}
+          </Modal>
         </main>
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function PlatformAdminPage() {
+  return (
+    <Suspense fallback={null}>
+      <PlatformAdminPanel />
+    </Suspense>
   );
 }

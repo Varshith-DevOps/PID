@@ -1,10 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { getBillingSubscription, getBillingTransactions } from '@/lib/api';
+import {
+  PageHeader, Card, Button, Badge, StatusChip, Banner, ProgressBar,
+  DataTable, EmptyState, ErrorState, SkeletonTable,
+} from '@/components/ui';
+import type { Column } from '@/components/ui';
 
 interface SubscriptionData {
   company: {
@@ -50,56 +54,104 @@ export default function TenantBillingPage() {
   const [subData, setSubData] = useState<SubscriptionData | null>(null);
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const loadBillingDetails = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const [subResult, txnResult] = await Promise.all([
+        getBillingSubscription(),
+        getBillingTransactions()
+      ]);
+      setSubData(subResult);
+      setTxns(txnResult);
+    } catch (err) {
+      console.error('Failed to load billing details:', err);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function loadBillingDetails() {
-      try {
-        const [subResult, txnResult] = await Promise.all([
-          getBillingSubscription(),
-          getBillingTransactions()
-        ]);
-        setSubData(subResult);
-        setTxns(txnResult);
-      } catch (err) {
-        console.error('Failed to load billing details:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadBillingDetails();
   }, []);
 
+  const txnColumns: Column<Transaction>[] = [
+    {
+      key: 'plan',
+      header: 'Plan',
+      render: (t) => (
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+          {t.subscription?.plan?.name || 'SaaS Renewal'}
+        </span>
+      ),
+    },
+    {
+      key: 'reference',
+      header: 'Reference',
+      render: (t) => (
+        <span className="font-mono" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t.providerPaymentId}</span>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      render: (t) => new Date(t.createdAt).toLocaleDateString(),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      align: 'right',
+      render: (t) => <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>₹{t.amount.toLocaleString()}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      align: 'center',
+      render: (t) => <StatusChip status={t.status} />,
+    },
+  ];
+
+  const usagePct = subData
+    ? Math.min((subData.usage.employeeCount / subData.usage.employeeLimit) * 100, 100)
+    : 0;
+  const usageTone = subData?.usage.isExceeded ? 'danger' : subData?.usage.isNearLimit ? 'warning' : 'success';
+
   return (
     <ProtectedRoute>
-      <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0e17' }}>
+      <div className="app-layout">
         <Sidebar activePath="/dashboard/billing" />
-        
-        <main style={{ flex: 1, padding: '2.5rem', overflowY: 'auto', color: '#f3f4f6' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-            <div>
-              <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#fff' }}>SaaS Subscription & Billing</h1>
-              <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.25rem' }}>Monitor active plans, employee thresholds, and transaction history.</p>
-            </div>
-            <Link href="/pricing" style={{ textDecoration: 'none', background: 'linear-gradient(135deg, #00A7B5, #182B6D)', color: '#fff', fontSize: '0.85rem', fontWeight: 700, padding: '0.65rem 1.25rem', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,167,181,0.3)' }}>
-              Upgrade Plan
-            </Link>
-          </div>
+
+        <main className="main-content">
+          <PageHeader
+            title="SaaS Subscription & Billing"
+            subtitle="Monitor active plans, employee thresholds, and transaction history."
+            icon={
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
+            }
+            actions={<Button href="/pricing" variant="primary">Upgrade Plan</Button>}
+          />
 
           {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
-              <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#00A7B5', animation: 'spin 1s linear infinite' }} />
-            </div>
+            <Card><SkeletonTable rows={5} cols={3} /></Card>
+          ) : error ? (
+            <ErrorState
+              title="Failed to load billing details"
+              message="We could not retrieve your subscription and payment data."
+              onRetry={loadBillingDetails}
+            />
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
-              
+
               {/* Left Column: Active Subscription & Limits */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                
+
                 {/* Plan Card */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '2rem' }}>
-                  <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                <Card>
+                  <h2 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: subData?.subscription ? 'var(--success-fg)' : 'var(--text-muted)', display: 'inline-block' }} />
                     Active Plan Status
                   </h2>
 
@@ -107,114 +159,83 @@ export default function TenantBillingPage() {
                     <div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                         <div>
-                          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Plan Name</span>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#73E0E7', marginTop: '2px' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Plan Name</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent)', marginTop: '2px' }}>
                             {subData.subscription.plan.name}
                           </div>
                         </div>
                         <div>
-                          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Renewal Rate</span>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
-                            ₹{subData.subscription.plan.price.toLocaleString()} <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>/ mo</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Renewal Rate</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+                            ₹{subData.subscription.plan.price.toLocaleString()} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>/ mo</span>
                           </div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1.5rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.5rem' }}>
                         <div>
-                          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Start Date</span>
-                          <div style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.8)', marginTop: '2px' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Start Date</span>
+                          <div style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                             {new Date(subData.subscription.startDate).toLocaleDateString(undefined, { dateStyle: 'medium' })}
                           </div>
                         </div>
                         <div>
-                          <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Renewal/Expiry Date</span>
-                          <div style={{ fontSize: '0.95rem', color: '#f43f5e', fontWeight: 600, marginTop: '2px' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Renewal/Expiry Date</span>
+                          <div style={{ fontSize: '0.95rem', color: 'var(--danger-fg)', fontWeight: 600, marginTop: '2px' }}>
                             {new Date(subData.subscription.endDate).toLocaleDateString(undefined, { dateStyle: 'medium' })}
                           </div>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.95rem' }}>
-                      No active subscription found. Upgrade your plan to activate down-stream processes.
-                    </div>
+                    <EmptyState
+                      title="No active subscription"
+                      message="Upgrade your plan to activate down-stream processes."
+                      action={<Button href="/pricing" variant="primary" size="sm">Upgrade Plan</Button>}
+                    />
                   )}
-                </div>
+                </Card>
 
                 {/* Usage Limits Card */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '2rem' }}>
-                  <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem', color: '#fff' }}>Workspace Usage Quotas</h2>
-
+                <Card title="Workspace Usage Quotas">
                   {subData ? (
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>Active Employees Scoped</span>
-                        <span style={{ fontWeight: 700, color: '#fff' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Active Employees Scoped</span>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                           {subData.usage.employeeCount} / {subData.usage.employeeLimit}
                         </span>
                       </div>
 
-                      {/* Progress bar */}
-                      <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden', marginBottom: '1rem' }}>
-                        <div
-                          style={{
-                            width: `${Math.min((subData.usage.employeeCount / subData.usage.employeeLimit) * 100, 100)}%`,
-                            height: '100%',
-                            background: subData.usage.isExceeded ? '#ef4444' : subData.usage.isNearLimit ? '#f59e0b' : '#10b981',
-                            borderRadius: '4px',
-                            transition: 'width 0.4s ease'
-                          }}
-                        />
+                      <div style={{ marginBottom: '1rem' }}>
+                        <ProgressBar value={usagePct} tone={usageTone} />
                       </div>
 
                       {subData.usage.isExceeded && (
-                        <div style={{ padding: '0.75rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', borderRadius: '8px', fontSize: '0.8rem' }}>
-                          <strong>Quota Exceeded:</strong> You have reached your plan limit. New employee onboardings are locked until you upgrade.
-                        </div>
+                        <Banner tone="danger" title="Quota Exceeded">
+                          You have reached your plan limit. New employee onboardings are locked until you upgrade.
+                        </Banner>
                       )}
                       {!subData.usage.isExceeded && subData.usage.isNearLimit && (
-                        <div style={{ padding: '0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', color: '#fbbf24', borderRadius: '8px', fontSize: '0.8rem' }}>
-                          <strong>Approaching Threshold:</strong> You are close to your employee limit. Consider upgrading soon to prevent disruption.
-                        </div>
+                        <Banner tone="warning" title="Approaching Threshold">
+                          You are close to your employee limit. Consider upgrading soon to prevent disruption.
+                        </Banner>
                       )}
                     </div>
                   ) : null}
-                </div>
+                </Card>
 
               </div>
 
               {/* Right Column: Transactions History */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '2rem', display: 'flex', flexDirection: 'column' }}>
-                <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem', color: '#fff' }}>Payment History</h2>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
-                  {txns.length === 0 ? (
-                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem', textAlign: 'center', marginTop: '2rem' }}>
-                      No transaction records log.
-                    </div>
-                  ) : (
-                    txns.map((t) => (
-                      <div key={t.id} style={{ padding: '1rem', border: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.01)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>
-                            {t.subscription?.plan?.name || 'SaaS Renewal'}
-                          </div>
-                          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                            {new Date(t.createdAt).toLocaleDateString()} • {t.providerPaymentId}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 700, color: '#fff' }}>₹{t.amount.toLocaleString()}</div>
-                          <span style={{ fontSize: '0.75rem', color: t.status === 'SUCCESS' ? '#34d399' : '#f87171', fontWeight: 600 }}>
-                            {t.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+              <Card title="Payment History">
+                <DataTable<Transaction>
+                  columns={txnColumns}
+                  rows={txns}
+                  rowKey={(t) => t.id}
+                  empty={<EmptyState title="No payment records" message="Transactions will appear here once billed." />}
+                />
+              </Card>
 
             </div>
           )}

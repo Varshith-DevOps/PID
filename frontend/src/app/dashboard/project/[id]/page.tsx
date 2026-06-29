@@ -2,7 +2,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { getProjectDashboard } from '@/lib/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import {
+  Badge, Card, ErrorState, KpiBar, KpiPie, LoadingBlock, PageHeader, StatCard,
+} from '@/components/ui';
+import type { Tone } from '@/components/ui';
 
 interface ProjectDashboard {
   project: { name: string; status: string; budget: number; deadline: string };
@@ -20,115 +23,83 @@ interface ProjectDashboard {
   taskStatus: { TODO: number; IN_PROGRESS: number; COMPLETED: number };
 }
 
-const COLORS = ['#6b7280', '#00A7B5', '#10b981'];
+const STATUS_TONE: Record<string, Tone> = {
+  ACTIVE: 'success',
+  PLANNING: 'neutral',
+  ON_HOLD: 'warning',
+  COMPLETED: 'info',
+  CANCELLED: 'danger',
+};
+
+const TASK_COLORS = ['var(--text-muted)', '#00A7B5', '#10b981'];
 
 export default function ProjectDashboardPage() {
   const params = useParams();
   const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (params.id) loadData();
   }, [params.id]);
 
   const loadData = async () => {
+    setLoading(true);
+    setError(false);
     try {
       const data = await getProjectDashboard(params.id as string);
       setDashboard(data);
     } catch (err) {
       console.error(err);
+      setError(true);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div className="p-8 text-center">Loading...</div>;
+  if (loading) return <div style={{ padding: '2rem' }}><LoadingBlock /></div>;
+  if (error || !dashboard) return <div style={{ padding: '2rem' }}><ErrorState message="We couldn’t load this project dashboard." onRetry={loadData} /></div>;
 
-  const taskData = dashboard
-    ? [
-        { name: 'To Do', value: dashboard.taskStatus.TODO },
-        { name: 'In Progress', value: dashboard.taskStatus.IN_PROGRESS },
-        { name: 'Completed', value: dashboard.taskStatus.COMPLETED },
-      ]
-    : [];
+  const taskData = [
+    { name: 'To Do', value: dashboard.taskStatus.TODO },
+    { name: 'In Progress', value: dashboard.taskStatus.IN_PROGRESS },
+    { name: 'Completed', value: dashboard.taskStatus.COMPLETED },
+  ];
+
+  const costData = [
+    { name: 'Labor Cost', value: dashboard.metrics.laborCost || 0 },
+    { name: 'Expenses', value: dashboard.metrics.totalExpense || 0 },
+    { name: 'Total Cost', value: dashboard.metrics.totalCost || 0 },
+  ];
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{dashboard?.project.name}</h1>
-          <span className={`px-2 py-1 rounded text-sm ${
-            dashboard?.project.status === 'ACTIVE' ? 'bg-green-100' : 'bg-gray-200'
-          }`}>
-            {dashboard?.project.status}
-          </span>
-        </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-500">Days Until Deadline</div>
-          <div className="text-2xl font-bold">{dashboard?.metrics.daysUntilDeadline}</div>
-        </div>
+    <div style={{ padding: '1.5rem' }}>
+      <PageHeader
+        title={dashboard.project.name}
+        subtitle={<Badge tone={STATUS_TONE[dashboard.project.status] || 'neutral'} dot>{dashboard.project.status}</Badge>}
+        actions={
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Days Until Deadline</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>{dashboard.metrics.daysUntilDeadline}</div>
+          </div>
+        }
+      />
+
+      <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', marginBottom: '1.5rem' }}>
+        <StatCard label="Completion" value={`${dashboard.metrics.completionPercent}%`} />
+        <StatCard label="Tasks" value={`${dashboard.metrics.completedTasks}/${dashboard.metrics.totalTasks}`} />
+        <StatCard label="Budget Used" value={`${dashboard.metrics.budgetUsage}%`} />
+        <StatCard label="Resources" value={dashboard.metrics.resources} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white p-4 rounded shadow">
-          <div className="text-sm text-gray-500">Completion</div>
-          <div className="text-2xl font-bold">{dashboard?.metrics.completionPercent}%</div>
-        </div>
-        <div className="bg-white p-4 rounded shadow">
-          <div className="text-sm text-gray-500">Tasks</div>
-          <div className="text-2xl font-bold">{dashboard?.metrics.completedTasks}/{dashboard?.metrics.totalTasks}</div>
-        </div>
-        <div className="bg-white p-4 rounded shadow">
-          <div className="text-sm text-gray-500">Budget Used</div>
-          <div className="text-2xl font-bold">{dashboard?.metrics.budgetUsage}%</div>
-        </div>
-        <div className="bg-white p-4 rounded shadow">
-          <div className="text-sm text-gray-500">Resources</div>
-          <div className="text-2xl font-bold">{dashboard?.metrics.resources}</div>
-        </div>
-      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+        <Card title="Task Status">
+          <KpiPie data={taskData} colors={TASK_COLORS} height={250} />
+        </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-4 rounded shadow">
-          <h2 className="text-lg font-semibold mb-4">Task Status</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={taskData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {taskData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white p-4 rounded shadow">
-          <h2 className="text-lg font-semibold mb-4">Cost Breakdown</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart
-              data={[
-                { name: 'Labor Cost', value: dashboard?.metrics.laborCost || 0 },
-                { name: 'Expenses', value: dashboard?.metrics.totalExpense || 0 },
-                { name: 'Total Cost', value: dashboard?.metrics.totalCost || 0 },
-              ]}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="value" fill="#f59e0b" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <Card title="Cost Breakdown">
+          <KpiBar data={costData} xKey="name" bars={[{ key: 'value', name: 'Amount', color: '#FFB23F' }]} height={250} />
+        </Card>
       </div>
     </div>
   );

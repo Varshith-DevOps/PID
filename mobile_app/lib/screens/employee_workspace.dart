@@ -2,17 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
-
-const _bg = Color(0xFF0B1020);
-const _panel = Color(0xFF111827);
-const _panelSoft = Color(0xFF172033);
-const _line = Color(0xFF263247);
-const _text = Color(0xFFE5E7EB);
-const _muted = Color(0xFF94A3B8);
-const _teal = Color(0xFF2DD4BF);
-const _amber = Color(0xFFF59E0B);
-const _rose = Color(0xFFFB7185);
-const _indigo = Color(0xFF818CF8);
+import '../theme/app_theme.dart';
+import '../widgets/ui.dart';
+import 'attendance_screen.dart';
 
 List<dynamic> _list(dynamic value) {
   if (value is List) return value;
@@ -92,6 +84,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final user = _map(_dashboard['user']);
     final focus = _map(_dashboard['focus']);
     final cards = _map(_dashboard['cards']);
@@ -121,7 +114,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
             icon: Icons.timer_outlined,
             label: 'Weekly hours',
             value: weeklyHours.toStringAsFixed(1),
-            accent: _teal,
+            accent: c.accent,
             insight: weeklyHours >= 36
                 ? 'Great consistency. Your weekly hours are on track.'
                 : 'Try logging time daily so project effort stays accurate.',
@@ -130,7 +123,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
             icon: Icons.event_available_outlined,
             label: 'Leave balance',
             value: leaveBalance.toStringAsFixed(0),
-            accent: _amber,
+            accent: c.warning,
             insight: leaveBalance >= 5
                 ? 'Healthy balance. You can plan time off without stress.'
                 : 'Leave balance is low. Check with HR before planning long leave.',
@@ -139,7 +132,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
             icon: Icons.task_alt_outlined,
             label: 'Open tasks',
             value: assignedTasks.toStringAsFixed(0),
-            accent: _indigo,
+            accent: c.leave,
             insight: assignedTasks <= 4
                 ? 'Nice focus. Your assigned workload looks manageable.'
                 : 'You have several open tasks. Prioritize blocked or due items first.',
@@ -148,15 +141,15 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
             icon: Icons.groups_2_outlined,
             label: 'Team present',
             value: '${_num(organization['attendanceRate']).toStringAsFixed(0)}%',
-            accent: _rose,
+            accent: c.danger,
             insight: 'Use team availability before booking meetings or handoffs.',
           ),
         ]),
         _Section(title: 'Quick actions', child: _QuickActions(actions: [
-          _ActionItem(Icons.login_rounded, 'Check in/out', 'Use Time tab', _teal),
-          _ActionItem(Icons.edit_calendar_outlined, 'Apply leave', 'Use Leave tab', _amber),
-          _ActionItem(Icons.receipt_long_outlined, 'Claim expense', 'Use Money tab', _rose),
-          _ActionItem(Icons.support_agent_outlined, 'Raise ticket', 'Use More tab', _indigo),
+          _ActionItem(Icons.login_rounded, 'Check in/out', 'Use Time tab', c.accent),
+          _ActionItem(Icons.edit_calendar_outlined, 'Apply leave', 'Use Leave tab', c.warning),
+          _ActionItem(Icons.receipt_long_outlined, 'Claim expense', 'Use Money tab', c.danger),
+          _ActionItem(Icons.support_agent_outlined, 'Raise ticket', 'Use More tab', c.leave),
         ])),
         _Section(
           title: 'Assigned projects',
@@ -259,17 +252,17 @@ class _EmployeeTimeScreenState extends State<EmployeeTimeScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+      backgroundColor: context.colors.raised,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => _SheetForm(
+        builder: (context, setSheetState) => SheetForm(
           title: 'Log timesheet',
           children: [
-            _FieldLabel('Task'),
+            const _FieldLabel('Task'),
             DropdownButtonFormField<String?>(
               value: taskId,
-              dropdownColor: _panel,
-              decoration: _inputDecoration('Select a task'),
+              dropdownColor: context.colors.raised,
+              decoration: _inputDecoration(context, 'Select a task'),
               items: [
                 const DropdownMenuItem<String?>(value: null, child: Text('General work')),
                 ..._tasks.map((task) {
@@ -283,11 +276,11 @@ class _EmployeeTimeScreenState extends State<EmployeeTimeScreen> {
               onChanged: (value) => setSheetState(() => taskId = value),
             ),
             const SizedBox(height: 12),
-            _FieldLabel('Hours'),
-            TextField(controller: hours, keyboardType: TextInputType.number, decoration: _inputDecoration('Hours worked')),
+            const _FieldLabel('Hours'),
+            TextField(controller: hours, keyboardType: TextInputType.number, decoration: _inputDecoration(context, 'Hours worked')),
             const SizedBox(height: 12),
-            _FieldLabel('Work note'),
-            TextField(controller: description, minLines: 2, maxLines: 3, decoration: _inputDecoration('What did you complete?')),
+            const _FieldLabel('Work note'),
+            TextField(controller: description, minLines: 2, maxLines: 3, decoration: _inputDecoration(context, 'What did you complete?')),
             const SizedBox(height: 12),
             _DateButton(
               label: 'Date: ${DateFormat('dd MMM yyyy').format(selectedDate)}',
@@ -301,7 +294,8 @@ class _EmployeeTimeScreenState extends State<EmployeeTimeScreen> {
                 if (picked != null) setSheetState(() => selectedDate = picked);
               },
             ),
-            _PrimaryButton(
+            PrimaryButton(
+              fullWidth: true,
               label: 'Save timesheet',
               icon: Icons.save_outlined,
               onPressed: () async {
@@ -334,7 +328,7 @@ class _EmployeeTimeScreenState extends State<EmployeeTimeScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(text),
-      backgroundColor: error ? _rose : _teal,
+      backgroundColor: error ? context.colors.danger : context.colors.accent,
     ));
   }
 
@@ -349,11 +343,24 @@ class _EmployeeTimeScreenState extends State<EmployeeTimeScreen> {
       children: [
         _Section(
           title: 'Attendance actions',
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _PrimaryButton(label: 'Check in', icon: Icons.login_rounded, onPressed: () => _attendanceAction(true))),
-              const SizedBox(width: 10),
-              Expanded(child: _SecondaryButton(label: 'Check out', icon: Icons.logout_rounded, onPressed: () => _attendanceAction(false))),
+              Row(
+                children: [
+                  Expanded(child: PrimaryButton(fullWidth: true, label: 'Check in', icon: Icons.login_rounded, onPressed: () => _attendanceAction(true))),
+                  const SizedBox(width: 10),
+                  Expanded(child: SecondaryButton(label: 'Check out', icon: Icons.logout_rounded, onPressed: () => _attendanceAction(false))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => AttendanceScreen(authProvider: widget.authProvider)),
+                ),
+                icon: const Icon(Icons.fingerprint, size: 18),
+                label: const Text('Swipe to punch'),
+              ),
             ],
           ),
         ),
@@ -443,17 +450,17 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+      backgroundColor: context.colors.raised,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => _SheetForm(
+        builder: (context, setSheetState) => SheetForm(
           title: 'Apply leave',
           children: [
-            _FieldLabel('Leave type'),
+            const _FieldLabel('Leave type'),
             DropdownButtonFormField<String>(
               value: leaveType,
-              dropdownColor: _panel,
-              decoration: _inputDecoration('Leave type'),
+              dropdownColor: context.colors.raised,
+              decoration: _inputDecoration(context, 'Leave type'),
               items: const ['CASUAL', 'SICK', 'EARNED', 'UNPAID']
                   .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
@@ -474,9 +481,11 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
                 if (picked != null) setSheetState(() => end = picked);
               },
             ),
-            _FieldLabel('Reason'),
-            TextField(controller: reason, minLines: 2, maxLines: 3, decoration: _inputDecoration('Reason for leave')),
-            _PrimaryButton(
+            const _FieldLabel('Reason'),
+            TextField(controller: reason, minLines: 2, maxLines: 3, decoration: _inputDecoration(context, 'Reason for leave')),
+            const SizedBox(height: 12),
+            PrimaryButton(
+              fullWidth: true,
               label: 'Submit leave',
               icon: Icons.send_outlined,
               onPressed: () async {
@@ -518,10 +527,10 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+      backgroundColor: context.colors.raised,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => _SheetForm(
+        builder: (context, setSheetState) => SheetForm(
           title: 'Regularize attendance',
           children: [
             _DateButton(
@@ -531,15 +540,17 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
                 if (picked != null) setSheetState(() => date = picked);
               },
             ),
-            _FieldLabel('Check-in time'),
-            TextField(controller: timeIn, decoration: _inputDecoration('09:30')),
+            const _FieldLabel('Check-in time'),
+            TextField(controller: timeIn, decoration: _inputDecoration(context, '09:30')),
             const SizedBox(height: 12),
-            _FieldLabel('Check-out time'),
-            TextField(controller: timeOut, decoration: _inputDecoration('18:30')),
+            const _FieldLabel('Check-out time'),
+            TextField(controller: timeOut, decoration: _inputDecoration(context, '18:30')),
             const SizedBox(height: 12),
-            _FieldLabel('Reason'),
-            TextField(controller: reason, minLines: 2, maxLines: 3, decoration: _inputDecoration('Why is correction needed?')),
-            _PrimaryButton(
+            const _FieldLabel('Reason'),
+            TextField(controller: reason, minLines: 2, maxLines: 3, decoration: _inputDecoration(context, 'Why is correction needed?')),
+            const SizedBox(height: 12),
+            PrimaryButton(
+              fullWidth: true,
               label: 'Submit correction',
               icon: Icons.fact_check_outlined,
               onPressed: () async {
@@ -569,7 +580,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
 
   void _toast(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? _rose : _teal));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? context.colors.danger : context.colors.accent));
   }
 
   @override
@@ -583,9 +594,9 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
       children: [
         Row(
           children: [
-            Expanded(child: _PrimaryButton(label: 'Apply leave', icon: Icons.edit_calendar_outlined, onPressed: _openLeaveDialog)),
+            Expanded(child: PrimaryButton(fullWidth: true, label: 'Apply leave', icon: Icons.edit_calendar_outlined, onPressed: _openLeaveDialog)),
             const SizedBox(width: 10),
-            Expanded(child: _SecondaryButton(label: 'Regularize', icon: Icons.fact_check_outlined, onPressed: _openRegularizationDialog)),
+            Expanded(child: SecondaryButton(label: 'Regularize', icon: Icons.fact_check_outlined, onPressed: _openRegularizationDialog)),
           ],
         ),
         _Section(title: 'Leave balances', child: _LeaveBalanceList(items: _balances)),
@@ -654,23 +665,25 @@ class _EmployeeMoneyScreenState extends State<EmployeeMoneyScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
-      builder: (context) => _SheetForm(
+      backgroundColor: context.colors.raised,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => SheetForm(
         title: 'Submit expense',
         children: [
-          _FieldLabel('Title'),
-          TextField(controller: title, decoration: _inputDecoration('Client visit taxi')),
+          const _FieldLabel('Title'),
+          TextField(controller: title, decoration: _inputDecoration(context, 'Client visit taxi')),
           const SizedBox(height: 12),
-          _FieldLabel('Category'),
-          TextField(controller: category, decoration: _inputDecoration('Travel, Meal, Internet')),
+          const _FieldLabel('Category'),
+          TextField(controller: category, decoration: _inputDecoration(context, 'Travel, Meal, Internet')),
           const SizedBox(height: 12),
-          _FieldLabel('Amount'),
-          TextField(controller: amount, keyboardType: TextInputType.number, decoration: _inputDecoration('Amount in INR')),
+          const _FieldLabel('Amount'),
+          TextField(controller: amount, keyboardType: TextInputType.number, decoration: _inputDecoration(context, 'Amount in INR')),
           const SizedBox(height: 12),
-          _FieldLabel('Description'),
-          TextField(controller: description, minLines: 2, maxLines: 3, decoration: _inputDecoration('Add details for approver')),
-          _PrimaryButton(
+          const _FieldLabel('Description'),
+          TextField(controller: description, minLines: 2, maxLines: 3, decoration: _inputDecoration(context, 'Add details for approver')),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            fullWidth: true,
             label: 'Submit claim',
             icon: Icons.receipt_long_outlined,
             onPressed: () async {
@@ -700,7 +713,7 @@ class _EmployeeMoneyScreenState extends State<EmployeeMoneyScreen> {
 
   void _toast(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? _rose : _teal));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? context.colors.danger : context.colors.accent));
   }
 
   @override
@@ -804,40 +817,42 @@ class _EmployeeMoreScreenState extends State<EmployeeMoreScreen> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+      backgroundColor: context.colors.raised,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => _SheetForm(
+        builder: (context, setSheetState) => SheetForm(
           title: 'Raise helpdesk ticket',
           children: [
-            _FieldLabel('Category'),
+            const _FieldLabel('Category'),
             DropdownButtonFormField<String>(
               value: category,
-              dropdownColor: _panel,
-              decoration: _inputDecoration('Category'),
+              dropdownColor: context.colors.raised,
+              decoration: _inputDecoration(context, 'Category'),
               items: const ['HR', 'IT', 'PAYROLL', 'ADMIN']
                   .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
               onChanged: (value) => setSheetState(() => category = value ?? category),
             ),
             const SizedBox(height: 12),
-            _FieldLabel('Priority'),
+            const _FieldLabel('Priority'),
             DropdownButtonFormField<String>(
               value: priority,
-              dropdownColor: _panel,
-              decoration: _inputDecoration('Priority'),
+              dropdownColor: context.colors.raised,
+              decoration: _inputDecoration(context, 'Priority'),
               items: const ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
                   .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
               onChanged: (value) => setSheetState(() => priority = value ?? priority),
             ),
             const SizedBox(height: 12),
-            _FieldLabel('Subject'),
-            TextField(controller: subject, decoration: _inputDecoration('Issue summary')),
+            const _FieldLabel('Subject'),
+            TextField(controller: subject, decoration: _inputDecoration(context, 'Issue summary')),
             const SizedBox(height: 12),
-            _FieldLabel('Description'),
-            TextField(controller: description, minLines: 3, maxLines: 4, decoration: _inputDecoration('Explain what support you need')),
-            _PrimaryButton(
+            const _FieldLabel('Description'),
+            TextField(controller: description, minLines: 3, maxLines: 4, decoration: _inputDecoration(context, 'Explain what support you need')),
+            const SizedBox(height: 12),
+            PrimaryButton(
+              fullWidth: true,
               label: 'Create ticket',
               icon: Icons.support_agent_outlined,
               onPressed: () async {
@@ -880,7 +895,7 @@ class _EmployeeMoreScreenState extends State<EmployeeMoreScreen> {
 
   void _toast(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? _rose : _teal));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? context.colors.danger : context.colors.accent));
   }
 
   @override
@@ -928,12 +943,13 @@ class _ScreenFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: c.canvas,
       body: RefreshIndicator(
         onRefresh: onRefresh,
-        color: _teal,
-        backgroundColor: _panel,
+        color: c.accent,
+        backgroundColor: c.raised,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
           children: [
@@ -943,15 +959,15 @@ class _ScreenFrame extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(color: _text, fontSize: 26, fontWeight: FontWeight.w800)),
+                      Text(title, style: TextStyle(color: c.textPrimary, fontSize: 26, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text(subtitle, style: const TextStyle(color: _muted, fontSize: 13)),
+                      Text(subtitle, style: TextStyle(color: c.textMuted, fontSize: 13)),
                     ],
                   ),
                 ),
                 IconButton(
                   onPressed: onRefresh,
-                  icon: const Icon(Icons.refresh_rounded, color: _muted),
+                  icon: Icon(Icons.refresh_rounded, color: c.textMuted),
                   tooltip: 'Refresh',
                 ),
               ],
@@ -961,7 +977,7 @@ class _ScreenFrame extends StatelessWidget {
             if (loading)
               const Padding(
                 padding: EdgeInsets.only(top: 80),
-                child: Center(child: CircularProgressIndicator(color: _teal)),
+                child: LoadingView(),
               )
             else
               ...children,
@@ -982,35 +998,31 @@ class _HeroPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final c = context.colors;
+    return AppCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
-      ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundColor: _teal.withOpacity(0.16),
-            child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'E', style: const TextStyle(color: _teal, fontWeight: FontWeight.w900, fontSize: 22)),
+            backgroundColor: c.accent.withOpacity(0.16),
+            child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'E', style: TextStyle(color: c.accent, fontWeight: FontWeight.w900, fontSize: 22)),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _text, fontSize: 18, fontWeight: FontWeight.w800)),
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 13)),
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted, fontSize: 13)),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _Pill(label: status.replaceAll('_', ' '), color: _teal),
-                    _Pill(label: '$unread unread', color: _amber),
+                    StatusChip(label: status.replaceAll('_', ' ')),
+                    StatusChip(label: '$unread unread', tone: ChipTone.warning),
                   ],
                 ),
               ],
@@ -1055,35 +1067,21 @@ class _InsightMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
+    final c = context.colors;
+    return MetricTile(
+      icon: icon,
+      label: label,
+      value: value,
+      accent: accent,
       onTap: () => showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          backgroundColor: _panel,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          title: Text(label, style: const TextStyle(color: _text, fontWeight: FontWeight.w800)),
-          content: Text(insight, style: const TextStyle(color: _muted)),
+          backgroundColor: c.raised,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          title: Text(label, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w800)),
+          content: Text(insight, style: TextStyle(color: c.textSecondary)),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Got it')),
-          ],
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _panel,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: accent, size: 22),
-            const Spacer(),
-            Text(value, style: const TextStyle(color: _text, fontSize: 24, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 2),
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 12)),
           ],
         ),
       ),
@@ -1100,21 +1098,12 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text(title, style: const TextStyle(color: _text, fontSize: 16, fontWeight: FontWeight.w800))),
-              if (action != null) action!,
-            ],
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: title, action: action),
+        child,
+      ],
     );
   }
 }
@@ -1154,42 +1143,31 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final c = context.colors;
+    return AppCard(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(8), border: Border.all(color: _line)),
       child: Row(
         children: [
-          Icon(action.icon, color: action.color),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(color: action.color.withOpacity(0.14), borderRadius: BorderRadius.circular(10)),
+            child: Icon(action.icon, color: action.color, size: 20),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(action.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _text, fontWeight: FontWeight.w700)),
+                Text(action.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 3),
-                Text(action.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 12)),
+                Text(action.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted, fontSize: 12)),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _Pill({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(999), border: Border.all(color: color.withOpacity(0.35))),
-      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -1201,82 +1179,17 @@ class _InlineMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: _rose.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: _rose.withOpacity(0.35))),
+      decoration: BoxDecoration(color: c.danger.withOpacity(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: c.danger.withOpacity(0.35))),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: _rose, size: 18),
+          Icon(Icons.info_outline, color: c.danger, size: 18),
           const SizedBox(width: 10),
-          Expanded(child: Text(message, style: const TextStyle(color: _text, fontSize: 13))),
+          Expanded(child: Text(message, style: TextStyle(color: c.textPrimary, fontSize: 13))),
         ],
-      ),
-    );
-  }
-}
-
-class _PrimaryButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  const _PrimaryButton({required this.label, required this.icon, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.icon(
-      style: FilledButton.styleFrom(backgroundColor: _teal, foregroundColor: const Color(0xFF042F2E), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-    );
-  }
-}
-
-class _SecondaryButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  const _SecondaryButton({required this.label, required this.icon, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(foregroundColor: _text, side: const BorderSide(color: _line), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-    );
-  }
-}
-
-class _SheetForm extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _SheetForm({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(left: 18, right: 18, top: 18, bottom: MediaQuery.of(context).viewInsets.bottom + 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(title, style: const TextStyle(color: _text, fontSize: 18, fontWeight: FontWeight.w800))),
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: _muted)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
       ),
     );
   }
@@ -1291,7 +1204,7 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(label, style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Text(label, style: TextStyle(color: context.colors.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -1304,28 +1217,30 @@ class _DateButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: OutlinedButton.icon(
         onPressed: onTap,
         icon: const Icon(Icons.calendar_month_outlined, size: 18),
         label: Text(label),
-        style: OutlinedButton.styleFrom(foregroundColor: _text, side: const BorderSide(color: _line), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+        style: OutlinedButton.styleFrom(foregroundColor: c.textSecondary, side: BorderSide(color: c.border), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
       ),
     );
   }
 }
 
-InputDecoration _inputDecoration(String hint) {
+InputDecoration _inputDecoration(BuildContext context, String hint) {
+  final c = context.colors;
   return InputDecoration(
     hintText: hint,
-    hintStyle: const TextStyle(color: _muted),
+    hintStyle: TextStyle(color: c.textMuted),
     filled: true,
-    fillColor: _panelSoft,
+    fillColor: c.sunken,
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _line)),
-    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _line)),
-    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _teal)),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c.border)),
+    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c.border)),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c.accent, width: 1.5)),
   );
 }
 
@@ -1336,11 +1251,11 @@ class _Empty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(8), border: Border.all(color: _line)),
-      child: Text(text, style: const TextStyle(color: _muted)),
+    return AppCard(
+      child: SizedBox(
+        width: double.infinity,
+        child: Text(text, style: TextStyle(color: context.colors.textMuted)),
+      ),
     );
   }
 }
@@ -1352,12 +1267,13 @@ class _ProjectList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (projects.isEmpty) return const _Empty('No assigned projects yet.');
     return Column(children: projects.map((item) {
       final project = _map(item);
       return _ListCard(
         icon: Icons.folder_copy_outlined,
-        color: _indigo,
+        color: c.leave,
         title: project['name']?.toString() ?? 'Project',
         subtitle: '${project['status'] ?? 'ACTIVE'} - ${_num(project['progress']).toStringAsFixed(0)}% progress',
         trailing: '${project['openTasks'] ?? 0} open',
@@ -1373,13 +1289,14 @@ class _AvailabilityList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (people.isEmpty) return const _Empty('Team availability will appear here.');
     return Column(children: people.map((item) {
       final person = _map(item);
       final status = person['status']?.toString() ?? 'UNKNOWN';
       return _ListCard(
         icon: Icons.person_pin_circle_outlined,
-        color: status == 'AVAILABLE' ? _teal : _amber,
+        color: status == 'AVAILABLE' ? c.accent : c.warning,
         title: person['name']?.toString() ?? 'Team member',
         subtitle: person['role']?.toString() ?? person['department']?.toString() ?? '',
         trailing: status.replaceAll('_', ' '),
@@ -1395,12 +1312,13 @@ class _BirthdayList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('No birthdays in the next 30 days.');
     return Column(children: items.map((item) {
       final birthday = _map(item);
       return _ListCard(
         icon: Icons.cake_outlined,
-        color: _rose,
+        color: c.danger,
         title: birthday['name']?.toString() ?? 'Colleague',
         subtitle: birthday['department']?.toString() ?? '',
         trailing: birthday['dayLabel']?.toString() ?? _date(birthday['date']),
@@ -1416,13 +1334,14 @@ class _AttendanceList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('No attendance has been marked today.');
     return Column(children: items.take(5).map((item) {
       final att = _map(item);
       final employee = _map(att['employee']);
       return _ListCard(
         icon: Icons.alarm_on_outlined,
-        color: att['status'] == 'LATE' ? _amber : _teal,
+        color: att['status'] == 'LATE' ? c.warning : c.accent,
         title: employee['firstName'] != null ? '${employee['firstName']} ${employee['lastName'] ?? ''}' : 'Attendance',
         subtitle: 'Status: ${att['status'] ?? '-'}',
         trailing: '${_num(att['workHours']).toStringAsFixed(1)}h',
@@ -1438,13 +1357,14 @@ class _TaskList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('No assigned tasks.');
     return Column(children: items.take(8).map((item) {
       final task = _map(item);
       final project = _map(task['project']);
       return _ListCard(
         icon: Icons.task_alt_outlined,
-        color: task['status'] == 'COMPLETED' ? _teal : _indigo,
+        color: task['status'] == 'COMPLETED' ? c.accent : c.leave,
         title: task['title']?.toString() ?? 'Task',
         subtitle: project['name']?.toString() ?? task['status']?.toString() ?? '',
         trailing: task['priority']?.toString() ?? _date(task['deadline']),
@@ -1460,13 +1380,14 @@ class _TimesheetList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('No timesheets logged yet.');
     return Column(children: items.take(8).map((item) {
       final sheet = _map(item);
       final task = _map(sheet['task']);
       return _ListCard(
         icon: Icons.more_time_outlined,
-        color: _teal,
+        color: c.accent,
         title: task['title']?.toString() ?? 'General work',
         subtitle: _date(sheet['date']),
         trailing: '${_num(sheet['hoursWorked']).toStringAsFixed(1)}h',
@@ -1482,6 +1403,7 @@ class _LeaveBalanceList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('Leave balances are not available yet.');
     return Column(children: items.map((item) {
       final balance = _map(item);
@@ -1489,7 +1411,7 @@ class _LeaveBalanceList extends StatelessWidget {
       final used = _num(balance['used']);
       return _ListCard(
         icon: Icons.event_available_outlined,
-        color: _amber,
+        color: c.warning,
         title: balance['leaveType']?.toString() ?? 'Leave',
         subtitle: 'Used ${used.toStringAsFixed(0)} of ${total.toStringAsFixed(0)}',
         trailing: '${(total - used).clamp(0, 999).toStringAsFixed(0)} left',
@@ -1505,12 +1427,13 @@ class _LeaveRequestList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('No leave requests yet.');
     return Column(children: items.take(10).map((item) {
       final leave = _map(item);
       return _ListCard(
         icon: Icons.beach_access_outlined,
-        color: leave['status'] == 'APPROVED' ? _teal : _amber,
+        color: leave['status'] == 'APPROVED' ? c.success : c.warning,
         title: leave['leaveType']?.toString() ?? 'Leave',
         subtitle: '${_date(leave['startDate'])} - ${_date(leave['endDate'])}',
         trailing: leave['status']?.toString() ?? 'PENDING',
@@ -1526,13 +1449,14 @@ class _PayslipList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('No payslips generated yet.');
     return Column(children: items.take(8).map((item) {
       final payslip = _map(item);
       final run = _map(payslip['payrollRun']);
       return _ListCard(
         icon: Icons.payments_outlined,
-        color: _teal,
+        color: c.payroll,
         title: 'Payslip ${run['month'] ?? payslip['month'] ?? ''}/${run['year'] ?? payslip['year'] ?? ''}',
         subtitle: 'Net pay',
         trailing: _money(payslip['netSalary']),
@@ -1549,12 +1473,13 @@ class _ExpenseList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return _Empty(empty);
     return Column(children: items.take(10).map((item) {
       final claim = _map(item);
       return _ListCard(
         icon: Icons.receipt_long_outlined,
-        color: claim['status'] == 'PAID' ? _teal : _amber,
+        color: claim['status'] == 'PAID' ? c.success : c.warning,
         title: claim['title']?.toString() ?? claim['purpose']?.toString() ?? 'Expense',
         subtitle: claim['status']?.toString() ?? 'PENDING',
         trailing: _money(claim['amount'] ?? claim['amountRequested']),
@@ -1571,18 +1496,17 @@ class _NotificationList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return const _Empty('No notifications.');
     return Column(children: items.take(10).map((item) {
       final notification = _map(item);
-      return InkWell(
+      return _ListCard(
         onTap: () => onTap(item),
-        child: _ListCard(
-          icon: notification['readAt'] == null ? Icons.notifications_active_outlined : Icons.notifications_none_outlined,
-          color: notification['readAt'] == null ? _amber : _muted,
-          title: notification['title']?.toString() ?? 'Notification',
-          subtitle: notification['message']?.toString() ?? '',
-          trailing: notification['readAt'] == null ? 'Unread' : 'Read',
-        ),
+        icon: notification['readAt'] == null ? Icons.notifications_active_outlined : Icons.notifications_none_outlined,
+        color: notification['readAt'] == null ? c.warning : c.textMuted,
+        title: notification['title']?.toString() ?? 'Notification',
+        subtitle: notification['message']?.toString() ?? '',
+        trailing: notification['readAt'] == null ? 'Unread' : 'Read',
       );
     }).toList());
   }
@@ -1598,12 +1522,13 @@ class _SimpleList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (items.isEmpty) return _Empty(empty);
     return Column(children: items.take(10).map((item) {
       final value = _map(item);
       return _ListCard(
         icon: Icons.circle_outlined,
-        color: _indigo,
+        color: c.leave,
         title: value[titleKey]?.toString() ?? 'Record',
         subtitle: value[subtitleKey]?.toString() ?? '',
         trailing: _date(value['createdAt'] ?? value['date']),
@@ -1618,37 +1543,41 @@ class _ListCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String trailing;
+  final VoidCallback? onTap;
 
-  const _ListCard({required this.icon, required this.color, required this.title, required this.subtitle, required this.trailing});
+  const _ListCard({required this.icon, required this.color, required this.title, required this.subtitle, required this.trailing, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(8), border: Border.all(color: _line)),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _text, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 3),
-                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 12)),
-              ],
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: AppCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 20),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(trailing, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textPrimary, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(trailing, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800)),
+          ],
+        ),
       ),
     );
   }
@@ -1661,29 +1590,28 @@ class _ProfilePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final name = user['name']?.toString() ?? 'Employee';
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(8), border: Border.all(color: _line)),
+    return AppCard(
       child: Row(
         children: [
           CircleAvatar(
             radius: 25,
-            backgroundColor: _indigo.withOpacity(0.16),
-            child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'E', style: const TextStyle(color: _indigo, fontSize: 20, fontWeight: FontWeight.w900)),
+            backgroundColor: c.leave.withOpacity(0.16),
+            child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'E', style: TextStyle(color: c.leave, fontSize: 20, fontWeight: FontWeight.w900)),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _text, fontSize: 17, fontWeight: FontWeight.w800)),
+                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textPrimary, fontSize: 17, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text(user['email']?.toString() ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 12)),
+                Text(user['email']?.toString() ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted, fontSize: 12)),
                 const SizedBox(height: 8),
-                Wrap(spacing: 8, children: [
-                  _Pill(label: user['role']?.toString() ?? 'EMPLOYEE', color: _teal),
-                  if (user['companyName'] != null) _Pill(label: user['companyName'].toString(), color: _amber),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  StatusChip(label: user['role']?.toString() ?? 'EMPLOYEE', tone: ChipTone.info),
+                  if (user['companyName'] != null) StatusChip(label: user['companyName'].toString(), tone: ChipTone.neutral),
                 ]),
               ],
             ),

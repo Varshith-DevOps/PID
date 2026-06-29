@@ -59,16 +59,20 @@ describe('InlineField', () => {
   it('saves a valid edit with a change reason', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    vi.spyOn(window, 'prompt').mockReturnValue('Correcting a typo');
     const { container } = render(
       <InlineField label="Job Title" value="Dev" fieldKey="jobTitle" canEdit onSave={onSave} />,
     );
 
     await user.click(container.querySelector('.edit-icon-btn')!);
-    const input = screen.getByRole('textbox') as HTMLInputElement;
+    const input = screen.getByDisplayValue('Dev') as HTMLInputElement;
     await user.clear(input);
     await user.type(input, 'Senior Developer');
     await user.click(screen.getByText('✓'));
+
+    // A reason dialog opens; a reason is required before the change is saved.
+    const reasonBox = screen.getByPlaceholderText('Add a brief note…');
+    await user.type(reasonBox, 'Correcting a typo');
+    await user.click(screen.getByText('Save change'));
 
     expect(onSave).toHaveBeenCalledWith('jobTitle', 'Senior Developer', 'Correcting a typo');
   });

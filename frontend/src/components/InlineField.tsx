@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { Validator } from '@/lib/validators';
 import { onlyDigits, onlyDecimal, upperAlnum, onlyAlpha } from '@/lib/validators';
+import { ConfirmDialog } from '@/components/ui';
 
 type Restrict = 'digits' | 'decimal' | 'upperAlnum' | 'alpha';
 
@@ -53,6 +54,7 @@ export default function InlineField({ label, value, fieldKey, canEdit, onSave, m
   const [editVal, setEditVal] = useState(value || '');
   const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const displayVal = (!value || value === 'null') ? 'N/A' : (masked && !revealed && maskType ? maskValue(value, maskType) : value);
 
@@ -77,17 +79,27 @@ export default function InlineField({ label, value, fieldKey, canEdit, onSave, m
             <button className="inline-save-btn" onClick={() => {
               const validationError = validator ? validator(editVal) : null;
               if (validationError) { setError(validationError); return; }
-              const reason = prompt('Reason for change:');
-              if (reason === null) return; // User cancelled
-              if (reason.trim() === '') { alert('A reason is required to make a change.'); return; }
-              onSave(fieldKey, editVal, reason);
-              setError(null);
-              setEditing(false);
+              setConfirmOpen(true);
             }}>✓</button>
             <button className="inline-cancel-btn" onClick={() => { setEditVal(value||''); setError(null); setEditing(false); }}>✗</button>
           </div>
         </div>
-        {error && <div style={{ marginTop: '0.35rem', fontSize: '0.75rem', color: '#f87171' }}>{error}</div>}
+        {error && <div style={{ marginTop: '0.35rem', fontSize: '0.75rem', color: 'var(--danger-fg)' }}>{error}</div>}
+        <ConfirmDialog
+          open={confirmOpen}
+          title={`Update ${label}`}
+          message="A reason is required to record this change."
+          confirmLabel="Save change"
+          requireReason
+          reasonLabel="Reason for change"
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={(reason) => {
+            onSave(fieldKey, editVal, reason);
+            setError(null);
+            setConfirmOpen(false);
+            setEditing(false);
+          }}
+        />
       </div>
     );
   }

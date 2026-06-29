@@ -6,6 +6,12 @@ import { useAuth } from '@/lib/authContext';
 import { getAllPayrollRuns, getPayrollReport, getPayrollPreflight, downloadPayrollExport, runPayroll, getEmployees, getSalaryStructure, setSalaryStructure, calculateEmployeeSalary, getPayrollSettings, updatePayrollSettings } from '@/lib/api';
 import { CanView, CanCreate, CanEdit } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
+import {
+  PageHeader, Tabs, Button, DataTable, StatCard, Card, Banner,
+  StatusChip, Stepper, Checkbox, ConfirmDialog,
+  LoadingBlock, EmptyState,
+} from '@/components/ui';
+import type { Column, Step, TabItem } from '@/components/ui';
 
 interface PayrollRun {
   id: string;
@@ -81,6 +87,10 @@ export default function PayrollPage() {
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, string>>({});
   const [activeCheckDetail, setActiveCheckDetail] = useState<string | null>(null);
 
+  // Dialog state (replaces native confirm/prompt)
+  const [confirmRun, setConfirmRun] = useState(false);
+  const [skipDialog, setSkipDialog] = useState<{ stage: string; fallback: string } | null>(null);
+
   useEffect(() => {
     if (!authLoading && (!user || user.role === 'EMPLOYEE')) router.push('/');
   }, [user, authLoading]);
@@ -99,11 +109,11 @@ export default function PayrollPage() {
     let headers = '';
     let rows: string[] = [];
     const empList = preflight?.employeeSummaries || [];
-    
+
     if (type === 'arrears') {
       headers = 'EmployeeID,EmployeeName,ArrearsAmount,Notes';
       if (empList.length > 0) {
-        rows = empList.slice(0, 3).map((e: any, index: number) => 
+        rows = empList.slice(0, 3).map((e: any, index: number) =>
           `"${e.employeeId}","${e.name}",${[5000, 2500, 3000][index] || 1000},"May Performance Arrears"`
         );
       } else {
@@ -112,7 +122,7 @@ export default function PayrollPage() {
     } else if (type === 'incentives') {
       headers = 'EmployeeID,EmployeeName,IncentiveAmount,Notes';
       if (empList.length > 0) {
-        rows = empList.slice(0, 3).map((e: any, index: number) => 
+        rows = empList.slice(0, 3).map((e: any, index: number) =>
           `"${e.employeeId}","${e.name}",${[8000, 4500, 6000][index] || 1500},"Milestone Incentive"`
         );
       } else {
@@ -121,7 +131,7 @@ export default function PayrollPage() {
     } else if (type === 'tax') {
       headers = 'EmployeeID,EmployeeName,Regime,Section80C,Section80D,HomeLoanInterest,HRAExemption';
       if (empList.length > 0) {
-        rows = empList.slice(0, 3).map((e: any, index: number) => 
+        rows = empList.slice(0, 3).map((e: any, index: number) =>
           `"${e.employeeId}","${e.name}","${index % 2 === 0 ? 'NEW' : 'OLD'}",${index % 2 === 0 ? 0 : 150000},${index % 2 === 0 ? 0 : 25000},0,0`
         );
       } else {
@@ -130,7 +140,7 @@ export default function PayrollPage() {
     } else if (type === 'proofs') {
       headers = 'EmployeeID,EmployeeName,DocumentType,AmountDeclared,AmountVerified,Remarks';
       if (empList.length > 0) {
-        rows = empList.slice(0, 3).map((e: any, index: number) => 
+        rows = empList.slice(0, 3).map((e: any, index: number) =>
           `"${e.employeeId}","${e.name}","80C PPF Receipts",150000,150000,"Verified and approved"`
         );
       } else {
@@ -158,10 +168,10 @@ export default function PayrollPage() {
         alert('CSV file is empty or only contains headers');
         return;
       }
-      
+
       const empList = preflight?.employeeSummaries || [];
       let count = 0;
-      
+
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
         const cols: string[] = [];
@@ -183,7 +193,7 @@ export default function PayrollPage() {
         const empId = cols[0];
         const valStr = cols[2];
         const notesVal = cols[3] || '';
-        
+
         if (!empId) continue;
         const matchedEmp = empList.find((e: any) => e.employeeId === empId || e.id === empId);
         if (matchedEmp) {
@@ -201,7 +211,7 @@ export default function PayrollPage() {
           count++;
         }
       }
-      
+
       setUploadedFiles(prev => ({ ...prev, [type]: file.name }));
       alert(`Successfully imported ${type} data for ${count} employees from ${file.name}`);
     };
@@ -260,7 +270,11 @@ export default function PayrollPage() {
       alert('Resolve blocking payroll checks before running payroll.');
       return;
     }
-    if (!confirm(`Run payroll for ${new Date(0, processMonth - 1).toLocaleString('en', { month: 'long' })} ${processYear}?`)) return;
+    setConfirmRun(true);
+  };
+
+  const runPayrollConfirmed = async () => {
+    setConfirmRun(false);
     setProcessing(true);
     try {
       await runPayroll(processMonth, processYear, { confirmations, adjustments });
@@ -375,21 +389,21 @@ export default function PayrollPage() {
     const basicSalary = form.basicSalary || 0;
     const da = form.da || 0;
     const grossEarnings = basicSalary + (form.hra || 0) + da + (form.conveyance || 0) + (form.medical || 0) + (form.specialAllowance || 0) + (form.otherAllowance || 0);
-    
+
     // Indian PF: 12% of Basic + DA capped at ₹15,000 wage base (Max ₹1,800/month)
     const pfWages = basicSalary + da;
     const pf = form.pfEnabled ? Math.min(pfWages * 0.12, 1800) : 0;
-    
+
     // ESI: 0.75% of Gross if monthly gross <= ₹21,000
     const esi = (form.esiEnabled !== false && grossEarnings <= 21000) ? (grossEarnings * 0.0075) : 0;
-    
+
     // Professional Tax (PT): ₹200 flat if gross > ₹25,000
     const pt = (form.professionalTaxEnabled !== false && grossEarnings > 25000) ? 200 : 0;
-    
+
     const tds = form.tdsEnabled ? calculateTDS(grossEarnings) : 0;
     const totalDeductions = pf + esi + pt + tds + (form.insurance || 0) + (form.otherDeduction || 0);
     const netSalary = grossEarnings - totalDeductions;
-    
+
     return {
       grossEarnings,
       employeePf: pf,
@@ -409,7 +423,7 @@ export default function PayrollPage() {
     const standardDeduction = 75000;
     const taxable = Math.max(0, annual - standardDeduction);
     if (taxable <= 700000) return 0; // Section 87A rebate
-    
+
     let tax = 0;
     if (taxable <= 300000) {
       tax = 0;
@@ -424,7 +438,7 @@ export default function PayrollPage() {
     } else {
       tax = 140000 + (taxable - 1500000) * 0.30;
     }
-    
+
     // Add 4% Cess
     const totalTax = tax * 1.04;
     return totalTax / 12;
@@ -441,103 +455,339 @@ export default function PayrollPage() {
 
   const preview = structure ? calculatePreview() : null;
 
+  // ---- Helpers for the migrated UI ----
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+
+  const monthName = (m: number) => new Date(0, m - 1).toLocaleString('en', { month: 'long' });
+
+  const confirmStage = (key: string) => {
+    setConfirmations(prev => ({ ...prev, [key]: true }));
+    setActiveManualStage(null);
+  };
+
+  const inputStyle = (readOnly?: boolean): React.CSSProperties => ({
+    opacity: readOnly ? 0.75 : 1,
+    cursor: readOnly ? 'not-allowed' : 'text',
+  });
+
+  // File upload control for stepper detail panels
+  const csvUploadControl = (type: string, stageKey: string) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <Button variant="ghost" size="sm" onClick={() => downloadCSVTemplate(type)}>Download Sample CSV Template</Button>
+      </div>
+      <input
+        type="file"
+        accept=".csv"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleCSVUpload(type, file);
+            setConfirmations(prev => ({ ...prev, [stageKey]: true }));
+          }
+        }}
+        style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
+      />
+      {uploadedFiles[type] && (
+        <div style={{ fontSize: '0.7rem', color: 'var(--success-fg)' }}>✓ Uploaded: {uploadedFiles[type]}</div>
+      )}
+    </div>
+  );
+
+  const stageContent = (stage: PayrollStage): React.ReactNode => {
+    const isSkipped = skipReasons[stage.key] !== undefined;
+
+    const wrap = (body: React.ReactNode) => (
+      <div>
+        {body}
+        {isSkipped && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--warning-fg)', marginTop: '0.5rem', fontStyle: 'italic' }}>
+            Skipped Reason: "{skipReasons[stage.key]}"
+          </div>
+        )}
+      </div>
+    );
+
+    switch (stage.key) {
+      case 'attendanceLocked':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Locking attendance prevents modifications during payroll generation and ensures all shifts are locked.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="primary" size="sm" onClick={() => window.open('/attendance', '_blank')}>Open Attendance Module</Button>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Confirm Locked</Button>
+          </div>
+        </div>);
+
+      case 'lopsAdded':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Verify unpaid leaves (Loss Of Pay days) in the Leave requests panel to ensure correct proportional basic calculations.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="primary" size="sm" onClick={() => window.open('/leave', '_blank')}>Open Leave Requests</Button>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Confirm Leaves Verified</Button>
+          </div>
+        </div>);
+
+      case 'salaryRevisionUpdated':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Make sure all appraisals, salary revisions, increment policies for this month have been committed to individual salary structures.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="primary" size="sm" onClick={() => setView('structure')}>Open Salary Structure Console</Button>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Confirm Revisions Checked</Button>
+          </div>
+        </div>);
+
+      case 'incomeTaxDeclaration':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Review and upload Employee tax declarations (Regime selection: OLD vs NEW) to update statutory TDS estimations.
+          </p>
+          {csvUploadControl('tax', stage.key)}
+          <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.5rem' }}>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Verify Declarations</Button>
+            <Button variant="ghost" size="sm" style={{ color: 'var(--warning-fg)' }} onClick={() => setSkipDialog({ stage: stage.key, fallback: 'Skipped' })}>Skip Step</Button>
+          </div>
+        </div>);
+
+      case 'investmentProofs':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Validate investment declarations proofs for 80C, 80D, home loans and HRA submitted by employees.
+          </p>
+          {csvUploadControl('proofs', stage.key)}
+          <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.5rem' }}>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Verify Investment Proofs</Button>
+            <Button variant="ghost" size="sm" style={{ color: 'var(--warning-fg)' }} onClick={() => setSkipDialog({ stage: stage.key, fallback: 'Skipped' })}>Skip Step</Button>
+          </div>
+        </div>);
+
+      case 'arrearsReviewed':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Bulk upload Arrears CSV file or key them in manually in the adjustments table below.
+          </p>
+          {csvUploadControl('arrears', stage.key)}
+          <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.5rem' }}>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Mark Verified</Button>
+            <Button variant="ghost" size="sm" style={{ color: 'var(--warning-fg)' }} onClick={() => setSkipDialog({ stage: stage.key, fallback: 'No arrears this month' })}>Skip (No Arrears)</Button>
+          </div>
+        </div>);
+
+      case 'incentivesReviewed':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Bulk upload Incentives/Bonus details via CSV file or enter them manually in the table below.
+          </p>
+          {csvUploadControl('incentives', stage.key)}
+          <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.5rem' }}>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Mark Verified</Button>
+            <Button variant="ghost" size="sm" style={{ color: 'var(--warning-fg)' }} onClick={() => setSkipDialog({ stage: stage.key, fallback: 'No incentives this month' })}>Skip (No Incentives)</Button>
+          </div>
+        </div>);
+
+      case 'overtimeApproved':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            All OT requests for the period must be marked approved or rejected in the Overtime center.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="primary" size="sm" onClick={() => window.open('/overtime', '_blank')}>Verify Overtime Approvals</Button>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Mark Verified</Button>
+          </div>
+        </div>);
+
+      case 'statutoryComplianceReviewed':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Review configured statutory formulas: EPF contribution split, Gratuity Act eligibility, state PT slabs, ESI cycles, and TDS tax brackets.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="primary" size="sm" onClick={() => setView('settings')}>View Statutory Constants Settings</Button>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Confirm Checked</Button>
+          </div>
+        </div>);
+
+      case 'bankAndPayoutVerified':
+        return wrap(<div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+            Confirm that employee bank accounts, routing details and payout templates are correct.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="primary" size="sm" onClick={() => window.open('/employees', '_blank')}>Verify Employee Bank Directory</Button>
+            <Button variant="success" size="sm" onClick={() => confirmStage(stage.key)}>Confirm Verified</Button>
+          </div>
+        </div>);
+
+      default:
+        return wrap(null);
+    }
+  };
+
   if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
   if (user.role === 'EMPLOYEE') return null;
+
+  const tabItems: TabItem[] = [
+    { key: 'runs', label: 'Runs' },
+    ...(isAdmin ? [{ key: 'process', label: 'Process' }] : []),
+    { key: 'structure', label: 'Salary Structure' },
+    ...(isAdmin ? [{ key: 'settings', label: 'Settings' }] : []),
+  ];
+
+  const runsColumns: Column<PayrollRun>[] = [
+    { key: 'period', header: 'Period', render: (run) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{monthName(run.month)} {run.year}</span> },
+    { key: 'employees', header: 'Employees', align: 'center', render: (run) => run.employeeCount },
+    { key: 'total', header: 'Total Amount', align: 'right', render: (run) => <span style={{ fontWeight: 600, color: 'var(--success-fg)' }}>₹{run.totalAmount?.toLocaleString()}</span> },
+    { key: 'status', header: 'Status', render: (run) => <StatusChip status={run.status} /> },
+    { key: 'actions', header: 'Actions', render: (run) => <Button size="sm" variant="primary" onClick={() => loadReport(run)}>View</Button> },
+  ];
+
+  const reportColumns: Column<PayrollRecord>[] = [
+    { key: 'employee', header: 'Employee', render: (rec) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rec.employee?.firstName} {rec.employee?.lastName}</span> },
+    { key: 'basic', header: 'Basic', align: 'right', render: (rec) => `₹${rec.basicSalary?.toFixed(0)}` },
+    { key: 'gross', header: 'Gross', align: 'right', render: (rec) => <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>₹{rec.grossEarnings?.toFixed(0)}</span> },
+    { key: 'lop', header: 'LOP', align: 'right', render: (rec) => rec.lopDays || rec.leaves || 0 },
+    { key: 'ot', header: 'OT', align: 'right', render: (rec) => `₹${(rec.overtimePay || 0).toFixed(0)}` },
+    { key: 'arrears', header: 'Arrears', align: 'right', render: (rec) => `₹${(rec.arrears || 0).toFixed(0)}` },
+    { key: 'incentives', header: 'Incentives', align: 'right', render: (rec) => `₹${(rec.incentives || 0).toFixed(0)}` },
+    { key: 'pf', header: 'PF', align: 'right', render: (rec) => <span style={{ color: 'var(--danger-fg)' }}>₹{rec.pf?.toFixed(0)}</span> },
+    { key: 'esi', header: 'ESI', align: 'right', render: (rec) => <span style={{ color: 'var(--danger-fg)' }}>₹{(rec.esi || 0).toFixed(0)}</span> },
+    { key: 'pt', header: 'PT', align: 'right', render: (rec) => <span style={{ color: 'var(--danger-fg)' }}>₹{(rec.professionalTax || 0).toFixed(0)}</span> },
+    { key: 'tax', header: 'Tax (TDS)', align: 'right', render: (rec) => <span style={{ color: 'var(--danger-fg)' }}>₹{rec.tax?.toFixed(0)}</span> },
+    { key: 'deductions', header: 'Deductions', align: 'right', render: (rec) => <span style={{ color: 'var(--danger-fg)' }}>₹{rec.totalDeductions?.toFixed(0)}</span> },
+    { key: 'net', header: 'Net', align: 'right', render: (rec) => <span style={{ fontWeight: 700, color: 'var(--success-fg)' }}>₹{rec.netSalary?.toFixed(0)}</span> },
+  ];
+
+  // System health check fix buttons
+  const checkFixButton = (check: any, affected: any[]): React.ReactNode => {
+    switch (check.key) {
+      case 'salaryStructures':
+        return <Button variant="primary" size="sm" onClick={() => { setView('structure'); if (affected[0]) loadStructure(affected[0].id); }}>Go Configure Salary Structures</Button>;
+      case 'bankDetails':
+        return <Button variant="ghost" size="sm" onClick={() => window.open('/employees', '_blank')}>Update Bank Details (New Window)</Button>;
+      case 'pfDetails':
+        return <Button variant="ghost" size="sm" onClick={() => window.open('/employees', '_blank')}>Update PF Details (New Window)</Button>;
+      case 'pendingOvertime':
+        return <Button variant="danger" size="sm" onClick={() => window.open('/overtime', '_blank')}>Go to Overtime Module to Approve</Button>;
+      case 'attendanceCaptured':
+        return <Button variant="ghost" size="sm" onClick={() => window.open('/attendance', '_blank')}>Verify Attendance (New Window)</Button>;
+      default:
+        return null;
+    }
+  };
+
+  // Build the stepper steps from manual stages
+  const manualStages: PayrollStage[] = preflight?.manualStages || [];
+  const steps: Step[] = manualStages.map((stage) => {
+    const isConfirmed = confirmations[stage.key] === true;
+    const isSkipped = skipReasons[stage.key] !== undefined;
+    const isActive = activeManualStage === stage.key;
+    const status: Step['status'] = isSkipped ? 'skipped' : isConfirmed ? 'done' : isActive ? 'active' : 'pending';
+    return {
+      key: stage.key,
+      status,
+      label: stage.label,
+      content: (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+            <Checkbox
+              label={stage.required ? 'Confirm this stage (required)' : 'Confirm this stage'}
+              checked={isConfirmed}
+              onChange={(checked) => {
+                setConfirmations(prev => ({ ...prev, [stage.key]: checked }));
+                if (!checked) {
+                  setSkipReasons(prev => {
+                    const next = { ...prev };
+                    delete next[stage.key];
+                    return next;
+                  });
+                }
+              }}
+            />
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              {isSkipped && <StatusChip status="SKIPPED" />}
+              {isConfirmed && !isSkipped && <StatusChip status="VERIFIED" />}
+              <button
+                onClick={() => setActiveManualStage(isActive ? null : stage.key)}
+                aria-label={isActive ? 'Collapse stage' : 'Expand stage'}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isActive ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform var(--motion-base)' }}><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+          </div>
+          {isActive && (
+            <div style={{ marginTop: '0.9rem', padding: '0.8rem', background: 'var(--surface-sunken)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent)' }}>
+              {stageContent(stage)}
+            </div>
+          )}
+        </div>
+      ),
+    };
+  });
 
   return (
     <div className="app-layout">
       <Sidebar />
       <main className="main-content">
-        <div className="page-header">
-          <div className="page-header-left">
-            <div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #182B6D, #0B7890)' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-            </div>
-            <div><h1 className="page-title">Payroll</h1><p className="page-subtitle">Process payroll & manage salary structures</p></div>
-          </div>
-          <div className="page-header-actions">
-            <div className="tab-group">
-              <button className={`tab-btn ${view === 'runs' ? 'active' : ''}`} onClick={() => setView('runs')}>Runs</button>
-              {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && <button className={`tab-btn ${view === 'process' ? 'active' : ''}`} onClick={() => setView('process')}>Process</button>}
-              <button className={`tab-btn ${view === 'structure' ? 'active' : ''}`} onClick={() => setView('structure')}>Salary Structure</button>
-              {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && <button className={`tab-btn ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')}>Settings</button>}
-            </div>
-          </div>
-        </div>
+        <PageHeader
+          title="Payroll"
+          subtitle="Process payroll & manage salary structures"
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>}
+          actions={<Tabs items={tabItems} value={view === 'report' ? 'runs' : view} onChange={(k) => setView(k as typeof view)} />}
+        />
 
         {view === 'runs' && (
           <>
-            {(user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (
+            {isAdmin && (
               <div style={{ marginBottom: '1.5rem' }}>
-                <button onClick={() => setView('process')} disabled={processing} className="btn btn-success">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <Button variant="success" disabled={processing} onClick={() => setView('process')} leftIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>}>
                   Open Payroll Process
-                </button>
+                </Button>
               </div>
             )}
 
-            <div className="glass-card" style={{ overflow: 'hidden' }}>
-              <table className="data-table">
-                <thead><tr><th>Period</th><th style={{ textAlign: 'center' }}>Employees</th><th style={{ textAlign: 'right' }}>Total Amount</th><th>Status</th><th>Actions</th></tr></thead>
-                <tbody>
-                  {loading ? <tr><td colSpan={5} className="loading-container"><div className="loading-spinner" />Loading...</td></tr> :
-                    runs.map((run) => (
-                      <tr key={run.id}>
-                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{new Date(0, run.month - 1).toLocaleString('en', { month: 'long' })} {run.year}</td>
-                        <td style={{ textAlign: 'center' }}>{run.employeeCount}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>₹{run.totalAmount?.toLocaleString()}</td>
-                        <td><span className={`badge ${run.status === 'PAID' ? 'badge-success' : 'badge-warning'}`}>{run.status}</span></td>
-                        <td><button onClick={() => loadReport(run)} className="btn btn-primary btn-sm">View</button></td>
-                      </tr>
-                    ))}
-                  {runs.length === 0 && !loading && <tr><td colSpan={5} className="empty-state">No payroll runs found</td></tr>}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={runsColumns}
+              rows={runs}
+              loading={loading}
+              rowKey={(run) => run.id}
+              empty={<EmptyState title="No payroll runs found" message="Run payroll for a period to see it listed here." />}
+            />
 
             {selectedRun && records.length > 0 && (
-              <div className="glass-card mt-2" style={{ overflow: 'hidden' }}>
+              <Card style={{ marginTop: '1rem' }} padded={false}>
                 <div style={{ padding: '1.25rem 1.25rem 0' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>{new Date(0, selectedRun.month - 1).toLocaleString('en', { month: 'long' })} {selectedRun.year} — {records.length} Employees</h3>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>{monthName(selectedRun.month)} {selectedRun.year} — {records.length} Employees</h3>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1.25rem 0.75rem' }}>
-                  <button className="btn btn-primary btn-sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'excel' })}>Excel</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'csv' })}>CSV</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'pdf' })}>PDF</button>
+                  <Button variant="primary" size="sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'excel' })}>Excel</Button>
+                  <Button variant="ghost" size="sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'csv' })}>CSV</Button>
+                  <Button variant="ghost" size="sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'pdf' })}>PDF</Button>
                 </div>
-                <table className="data-table">
-                  <thead><tr><th>Employee</th><th style={{ textAlign: 'right' }}>Basic</th><th style={{ textAlign: 'right' }}>Gross</th><th style={{ textAlign: 'right' }}>LOP</th><th style={{ textAlign: 'right' }}>OT</th><th style={{ textAlign: 'right' }}>Arrears</th><th style={{ textAlign: 'right' }}>Incentives</th><th style={{ textAlign: 'right' }}>PF</th><th style={{ textAlign: 'right' }}>ESI</th><th style={{ textAlign: 'right' }}>PT</th><th style={{ textAlign: 'right' }}>Tax (TDS)</th><th style={{ textAlign: 'right' }}>Deductions</th><th style={{ textAlign: 'right' }}>Net</th></tr></thead>
-                  <tbody>
-                    {records.map((rec) => (
-                      <tr key={rec.id}>
-                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rec.employee?.firstName} {rec.employee?.lastName}</td>
-                        <td style={{ textAlign: 'right' }}>₹{rec.basicSalary?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>₹{rec.grossEarnings?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right' }}>{rec.lopDays || rec.leaves || 0}</td>
-                        <td style={{ textAlign: 'right' }}>₹{(rec.overtimePay || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right' }}>₹{(rec.arrears || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right' }}>₹{(rec.incentives || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{rec.pf?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{(rec.esi || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{(rec.professionalTax || 0).toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{rec.tax?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--danger)' }}>₹{rec.totalDeductions?.toFixed(0)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>₹{rec.netSalary?.toFixed(0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                <div style={{ padding: '0 1.25rem 1.25rem' }}>
+                  <DataTable
+                    columns={reportColumns}
+                    rows={records}
+                    rowKey={(rec) => rec.id}
+                    stickyFirst
+                  />
+                </div>
+              </Card>
             )}
           </>
         )}
 
         {view === 'process' && (
           <div style={{ display: 'grid', gap: '1.5rem' }}>
-            <div className="glass-card" style={{ padding: '1.5rem' }}>
+            <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700, background: 'linear-gradient(135deg, #fff, #a5b4fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Payroll Processing Command Center</h2>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Payroll Processing Command Center</h2>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Verify system checks, run interactive manual tasks, and prepare variable payouts before processing.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -548,596 +798,107 @@ export default function PayrollPage() {
                 </div>
               </div>
 
-              <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
-                <div className="stat-card" style={{ borderLeft: '3px solid var(--accent-blue)', background: 'rgba(0, 167, 181, 0.05)' }}><div className="stat-card-value text-info" style={{ textShadow: '0 0 10px rgba(0, 167, 181, 0.3)' }}>{preflight?.summary?.activeEmployees || 0}</div><div className="stat-card-label">Active Employees</div></div>
-                <div className="stat-card" style={{ borderLeft: '3px solid var(--warning)', background: 'rgba(245, 158, 11, 0.05)' }}><div className="stat-card-value text-warning" style={{ textShadow: '0 0 10px rgba(245, 158, 11, 0.3)' }}>{preflight?.summary?.lopDays || 0}</div><div className="stat-card-label">LOP Days</div></div>
-                <div className="stat-card" style={{ borderLeft: '3px solid var(--success)', background: 'rgba(16, 185, 129, 0.05)' }}><div className="stat-card-value text-success" style={{ textShadow: '0 0 10px rgba(16, 185, 129, 0.3)' }}>{preflight?.summary?.approvedOvertimeHours || 0}</div><div className="stat-card-label">Approved OT Hours</div></div>
-                <div className="stat-card" style={{ borderLeft: '3px solid var(--danger)', background: 'rgba(239, 68, 68, 0.05)' }}><div className="stat-card-value text-danger" style={{ textShadow: '0 0 10px rgba(239, 68, 68, 0.3)' }}>{preflight?.summary?.pendingOvertime || 0}</div><div className="stat-card-label">Pending OT</div></div>
-              </div>
+              {loading ? (
+                <LoadingBlock label="Loading preflight checks…" />
+              ) : (
+                <>
+                  <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
+                    <StatCard label="Active Employees" value={preflight?.summary?.activeEmployees || 0} />
+                    <StatCard label="LOP Days" value={preflight?.summary?.lopDays || 0} />
+                    <StatCard label="Approved OT Hours" value={preflight?.summary?.approvedOvertimeHours || 0} />
+                    <StatCard label="Pending OT" value={preflight?.summary?.pendingOvertime || 0} />
+                  </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.5rem' }}>
-                {/* Left Column: System Checks */}
-                <div>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    System Health Checks
-                  </h3>
-                  <div style={{ display: 'grid', gap: '1rem' }}>
-                    {(preflight?.automaticChecks || []).map((check: any) => {
-                      const empList = preflight?.employeeSummaries || [];
-                      let affected: any[] = [];
-                      if (check.key === 'salaryStructures') {
-                        affected = empList.filter((e: any) => !e.salaryReady);
-                      } else if (check.key === 'bankDetails') {
-                        affected = empList.filter((e: any) => !e.bankReady);
-                      } else if (check.key === 'pfDetails') {
-                        affected = empList.filter((e: any) => !e.pfReady);
-                      } else if (check.key === 'attendanceCaptured') {
-                        affected = empList.filter((e: any) => e.attendanceEntries === 0);
-                      }
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.5rem' }}>
+                    {/* Left Column: System Checks */}
+                    <div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        System Health Checks
+                      </h3>
+                      <div style={{ display: 'grid', gap: '1rem' }}>
+                        {(preflight?.automaticChecks || []).map((check: any) => {
+                          const empList = preflight?.employeeSummaries || [];
+                          let affected: any[] = [];
+                          if (check.key === 'salaryStructures') {
+                            affected = empList.filter((e: any) => !e.salaryReady);
+                          } else if (check.key === 'bankDetails') {
+                            affected = empList.filter((e: any) => !e.bankReady);
+                          } else if (check.key === 'pfDetails') {
+                            affected = empList.filter((e: any) => !e.pfReady);
+                          } else if (check.key === 'attendanceCaptured') {
+                            affected = empList.filter((e: any) => e.attendanceEntries === 0);
+                          }
 
-                      const isExpanded = activeCheckDetail === check.key;
+                          const isExpanded = activeCheckDetail === check.key;
+                          const statusLabel = check.passed ? 'PASSED' : check.blocking ? 'BLOCKING' : 'REVIEW';
+                          const accent = check.passed ? 'var(--success-border)' : check.blocking ? 'var(--danger-border)' : 'var(--warning-border)';
 
-                      return (
-                        <div key={check.key} className="glass-card" style={{ 
-                          padding: '1rem', 
-                          borderLeft: `4px solid ${check.passed ? 'var(--success)' : check.blocking ? 'var(--danger)' : 'var(--warning)'}`,
-                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                          background: 'rgba(255, 255, 255, 0.02)',
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
-                            <div>
-                              <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{check.label}</strong>
-                              <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{check.detail}</div>
-                            </div>
-                            <span className={`badge ${check.passed ? 'badge-success' : check.blocking ? 'badge-danger' : 'badge-warning'}`} style={{ padding: '4px 10px', fontSize: '0.75rem', fontWeight: 700 }}>
-                              {check.passed ? 'PASSED' : check.blocking ? 'BLOCKING' : 'REVIEW'}
-                            </span>
-                          </div>
+                          return (
+                            <Card key={check.key} style={{ borderLeft: `4px solid ${accent}` }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start' }}>
+                                <div>
+                                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{check.label}</strong>
+                                  <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{check.detail}</div>
+                                </div>
+                                <StatusChip status={statusLabel} />
+                              </div>
 
-                          {!check.passed && (
-                            <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.75rem' }}>
-                              {affected.length > 0 && (
-                                <div style={{ marginBottom: '0.75rem' }}>
-                                  <button 
-                                    onClick={() => setActiveCheckDetail(isExpanded ? null : check.key)}
-                                    style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', fontSize: '0.75rem', padding: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                                  >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><polyline points="9 18 15 12 9 6"/></svg>
-                                    {isExpanded ? 'Hide' : 'View'} affected employees ({affected.length})
-                                  </button>
-                                  {isExpanded && (
-                                    <div style={{ background: 'rgba(0,0,0,0.15)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)', marginTop: '0.5rem', maxHeight: '120px', overflowY: 'auto', fontSize: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                                      {affected.map(e => (
-                                        <span key={e.id} style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
-                                          {e.name} ({e.employeeId})
-                                        </span>
-                                      ))}
+                              {!check.passed && (
+                                <div style={{ marginTop: '0.75rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem' }}>
+                                  {affected.length > 0 && (
+                                    <div style={{ marginBottom: '0.75rem' }}>
+                                      <button
+                                        onClick={() => setActiveCheckDetail(isExpanded ? null : check.key)}
+                                        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '0.75rem', padding: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform var(--motion-base)' }}><polyline points="9 18 15 12 9 6"/></svg>
+                                        {isExpanded ? 'Hide' : 'View'} affected employees ({affected.length})
+                                      </button>
+                                      {isExpanded && (
+                                        <div style={{ background: 'var(--surface-sunken)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)', marginTop: '0.5rem', maxHeight: '120px', overflowY: 'auto', fontSize: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                          {affected.map(e => (
+                                            <span key={e.id} style={{ background: 'var(--surface-raised)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
+                                              {e.name} ({e.employeeId})
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
+                                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    {checkFixButton(check, affected)}
+                                  </div>
                                 </div>
                               )}
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {check.key === 'salaryStructures' && (
-                                  <button 
-                                    onClick={() => {
-                                      setView('structure');
-                                      if (affected[0]) loadStructure(affected[0].id);
-                                    }}
-                                    className="btn btn-primary btn-sm" 
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
-                                  >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                                    Go Configure Salary Structures
-                                  </button>
-                                )}
-                                {check.key === 'bankDetails' && (
-                                  <button 
-                                    onClick={() => window.open('/employees', '_blank')}
-                                    className="btn btn-ghost btn-sm" 
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
-                                  >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                                    Update Bank Details (New Window)
-                                  </button>
-                                )}
-                                {check.key === 'pfDetails' && (
-                                  <button 
-                                    onClick={() => window.open('/employees', '_blank')}
-                                    className="btn btn-ghost btn-sm" 
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
-                                  >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                                    Update PF Details (New Window)
-                                  </button>
-                                )}
-                                {check.key === 'pendingOvertime' && (
-                                  <button 
-                                    onClick={() => window.open('/overtime', '_blank')}
-                                    className="btn btn-danger btn-sm" 
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
-                                  >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    Go to Overtime Module to Approve
-                                  </button>
-                                )}
-                                {check.key === 'attendanceCaptured' && (
-                                  <button 
-                                    onClick={() => window.open('/attendance', '_blank')}
-                                    className="btn btn-ghost btn-sm" 
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', padding: '4px 10px' }}
-                                  >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                    Verify Attendance (New Window)
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {/* Right Column: Interactive Task Board as a Stepper */}
+                    <div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        Interactive Task Board
+                      </h3>
+                      <Stepper steps={steps} />
+                    </div>
                   </div>
-                </div>
+                </>
+              )}
+            </Card>
 
-                {/* Right Column: Interactive Manual Process Stages */}
-                <div>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                    Interactive Task Board
-                  </h3>
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    {(preflight?.manualStages || []).map((stage: PayrollStage) => {
-                      const isConfirmed = confirmations[stage.key] === true;
-                      const isSkipped = skipReasons[stage.key] !== undefined;
-                      const isActive = activeManualStage === stage.key;
-
-                      let statusColor = 'rgba(255,255,255,0.03)';
-                      let borderStyle = '1px solid rgba(255,255,255,0.06)';
-                      if (isConfirmed && !isSkipped) {
-                        statusColor = 'rgba(16, 185, 129, 0.05)';
-                        borderStyle = '1px solid var(--success)';
-                      } else if (isSkipped) {
-                        statusColor = 'rgba(245, 158, 11, 0.05)';
-                        borderStyle = '1px solid var(--warning)';
-                      } else if (isActive) {
-                        statusColor = 'rgba(0, 167, 181, 0.08)';
-                        borderStyle = '1px solid var(--accent-blue)';
-                      }
-
-                      return (
-                        <div key={stage.key} className="glass-card" style={{ 
-                          padding: '1rem', 
-                          background: statusColor, 
-                          border: borderStyle,
-                          transition: 'all 0.3s ease',
-                          borderRadius: 'var(--radius-md)'
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <input 
-                                type="checkbox" 
-                                checked={isConfirmed} 
-                                onChange={(e) => {
-                                  setConfirmations(prev => ({ ...prev, [stage.key]: e.target.checked }));
-                                  if (!e.target.checked) {
-                                    setSkipReasons(prev => {
-                                      const next = { ...prev };
-                                      delete next[stage.key];
-                                      return next;
-                                    });
-                                  }
-                                }} 
-                                style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
-                              />
-                              <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{stage.label}</span>
-                            </div>
-                            
-                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                              {isSkipped && <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>SKIPPED</span>}
-                              {isConfirmed && !isSkipped && <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>VERIFIED</span>}
-                              
-                              <button 
-                                onClick={() => setActiveManualStage(isActive ? null : stage.key)}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '2px' }}
-                              >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isActive ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"/></svg>
-                              </button>
-                            </div>
-                          </div>
-
-                          {isActive && (
-                            <div style={{ marginTop: '0.9rem', padding: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-blue)' }}>
-                              
-                              {stage.key === 'attendanceLocked' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Locking attendance prevents modifications during payroll generation and ensures all shifts are locked.
-                                  </p>
-                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button onClick={() => window.open('/attendance', '_blank')} className="btn btn-primary btn-sm">
-                                      Open Attendance Module
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Confirm Locked
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'lopsAdded' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Verify unpaid leaves (Loss Of Pay days) in the Leave requests panel to ensure correct proportional basic calculations.
-                                  </p>
-                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button onClick={() => window.open('/leave', '_blank')} className="btn btn-primary btn-sm">
-                                      Open Leave Requests
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Confirm Leaves Verified
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'salaryRevisionUpdated' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Make sure all appraisals, salary revisions, increment policies for this month have been committed to individual salary structures.
-                                  </p>
-                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button onClick={() => setView('structure')} className="btn btn-primary btn-sm">
-                                      Open Salary Structure Console
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Confirm Revisions Checked
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'incomeTaxDeclaration' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Review and upload Employee tax declarations (Regime selection: OLD vs NEW) to update statutory TDS estimations.
-                                  </p>
-                                  
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                      <button onClick={() => downloadCSVTemplate('tax')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
-                                        Download Sample CSV Template
-                                      </button>
-                                    </div>
-                                    <input 
-                                      type="file" 
-                                      accept=".csv" 
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          handleCSVUpload('tax', file);
-                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        }
-                                      }} 
-                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
-                                    />
-                                    {uploadedFiles['tax'] && (
-                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
-                                        ✓ Uploaded: {uploadedFiles['tax']}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Verify Declarations
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        const reason = prompt('Reason for skipping tax declarations review this month?');
-                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'Skipped' }));
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }}
-                                      className="btn btn-ghost btn-sm"
-                                      style={{ color: 'var(--warning)' }}
-                                    >
-                                      Skip Step
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'investmentProofs' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Validate investment declarations proofs for 80C, 80D, home loans and HRA submitted by employees.
-                                  </p>
-
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                      <button onClick={() => downloadCSVTemplate('proofs')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
-                                        Download Sample CSV Template
-                                      </button>
-                                    </div>
-                                    <input 
-                                      type="file" 
-                                      accept=".csv" 
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          handleCSVUpload('proofs', file);
-                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        }
-                                      }} 
-                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
-                                    />
-                                    {uploadedFiles['proofs'] && (
-                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
-                                        ✓ Uploaded: {uploadedFiles['proofs']}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Verify Investment Proofs
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        const reason = prompt('Reason for skipping investment proofs verification?');
-                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'Skipped' }));
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }}
-                                      className="btn btn-ghost btn-sm"
-                                      style={{ color: 'var(--warning)' }}
-                                    >
-                                      Skip Step
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'arrearsReviewed' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Bulk upload Arrears CSV file or key them in manually in the adjustments table below.
-                                  </p>
-
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                      <button onClick={() => downloadCSVTemplate('arrears')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
-                                        Download Sample CSV Template
-                                      </button>
-                                    </div>
-                                    <input 
-                                      type="file" 
-                                      accept=".csv" 
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          handleCSVUpload('arrears', file);
-                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        }
-                                      }} 
-                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
-                                    />
-                                    {uploadedFiles['arrears'] && (
-                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
-                                        ✓ Uploaded: {uploadedFiles['arrears']}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Mark Verified
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        const reason = prompt('Reason for skipping arrears adjustments?');
-                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'No arrears this month' }));
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }}
-                                      className="btn btn-ghost btn-sm"
-                                      style={{ color: 'var(--warning)' }}
-                                    >
-                                      Skip (No Arrears)
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'incentivesReviewed' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Bulk upload Incentives/Bonus details via CSV file or enter them manually in the table below.
-                                  </p>
-
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                      <button onClick={() => downloadCSVTemplate('incentives')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.7rem' }}>
-                                        Download Sample CSV Template
-                                      </button>
-                                    </div>
-                                    <input 
-                                      type="file" 
-                                      accept=".csv" 
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          handleCSVUpload('incentives', file);
-                                          setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        }
-                                      }} 
-                                      style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
-                                    />
-                                    {uploadedFiles['incentives'] && (
-                                      <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>
-                                        ✓ Uploaded: {uploadedFiles['incentives']}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Mark Verified
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        const reason = prompt('Reason for skipping incentives?');
-                                        setSkipReasons(prev => ({ ...prev, [stage.key]: reason || 'No incentives this month' }));
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }}
-                                      className="btn btn-ghost btn-sm"
-                                      style={{ color: 'var(--warning)' }}
-                                    >
-                                      Skip (No Incentives)
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'overtimeApproved' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    All OT requests for the period must be marked approved or rejected in the Overtime center.
-                                  </p>
-                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button onClick={() => window.open('/overtime', '_blank')} className="btn btn-primary btn-sm">
-                                      Verify Overtime Approvals
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Mark Verified
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'statutoryComplianceReviewed' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Review configured statutory formulas: EPF contribution split, Gratuity Act eligibility, state PT slabs, ESI cycles, and TDS tax brackets.
-                                  </p>
-                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button onClick={() => setView('settings')} className="btn btn-primary btn-sm">
-                                      View Statutory Constants Settings
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Confirm Checked
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {stage.key === 'bankAndPayoutVerified' && (
-                                <div>
-                                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-                                    Confirm that employee bank accounts, routing details and payout templates are correct.
-                                  </p>
-                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button onClick={() => window.open('/employees', '_blank')} className="btn btn-primary btn-sm">
-                                      Verify Employee Bank Directory
-                                    </button>
-                                    <button 
-                                      onClick={() => {
-                                        setConfirmations(prev => ({ ...prev, [stage.key]: true }));
-                                        setActiveManualStage(null);
-                                      }} 
-                                      className="btn btn-success btn-sm"
-                                    >
-                                      Confirm Verified
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {isSkipped && (
-                                <div style={{ fontSize: '0.75rem', color: 'var(--warning)', marginTop: '0.5rem', fontStyle: 'italic' }}>
-                                  Skipped Reason: "{skipReasons[stage.key]}"
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="glass-card" style={{ padding: '1.5rem', overflow: 'hidden' }}>
+            <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Variable Inputs: Arrears, Incentives, OT and LOP Review</h3>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => downloadCSVTemplate('arrears')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem' }}>
-                    Download Arrears CSV Template
-                  </button>
-                  <button onClick={() => downloadCSVTemplate('incentives')} className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem' }}>
-                    Download Incentives CSV Template
-                  </button>
+                  <Button variant="ghost" size="sm" onClick={() => downloadCSVTemplate('arrears')}>Download Arrears CSV Template</Button>
+                  <Button variant="ghost" size="sm" onClick={() => downloadCSVTemplate('incentives')}>Download Incentives CSV Template</Button>
                 </div>
               </div>
-              <div style={{ overflow: 'auto' }}>
+              <div className="table-container">
                 <table className="data-table">
                   <thead><tr><th>Employee</th><th>Attendance</th><th>LOP</th><th>OT Hours</th><th>Arrears</th><th>Incentives</th><th>Notes</th></tr></thead>
                   <tbody>
@@ -1156,38 +917,41 @@ export default function PayrollPage() {
                 </table>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button onClick={handleRunPayroll} disabled={processing || !preflight?.canRun} className="btn btn-success">
+                <Button variant="success" disabled={processing || !preflight?.canRun} loading={processing} onClick={handleRunPayroll}>
                   {processing ? 'Processing...' : 'Run Payroll'}
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           </div>
         )}
 
         {view === 'structure' && (
           <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '1.5rem' }}>
-            <div className="glass-card" style={{ padding: '1.25rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-primary)' }}>Employees</h3>
+            <Card title="Employees">
               <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-                {employees.map((emp) => (
-                  <div key={emp.id} onClick={() => loadStructure(emp.id)} style={{ padding: '0.75rem', cursor: 'pointer', background: selectedEmployee?.id === emp.id ? 'rgba(0,167,181,0.15)' : 'transparent', borderRadius: 'var(--radius-sm)', marginBottom: '0.25rem', transition: 'var(--transition)' }}>
-                    <div style={{ fontWeight: 600, color: selectedEmployee?.id === emp.id ? 'var(--accent-blue)' : 'var(--text-primary)', fontSize: '0.9rem' }}>{emp.firstName} {emp.lastName}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{emp.employeeId}</div>
-                  </div>
-                ))}
+                {employees.map((emp) => {
+                  const active = selectedEmployee?.id === emp.id;
+                  return (
+                    <div key={emp.id} onClick={() => loadStructure(emp.id)} style={{ padding: '0.75rem', cursor: 'pointer', background: active ? 'var(--surface-sunken)' : 'transparent', borderRadius: 'var(--radius-sm)', marginBottom: '0.25rem', transition: 'var(--transition)' }}>
+                      <div style={{ fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text-primary)', fontSize: '0.9rem' }}>{emp.firstName} {emp.lastName}</div>
+                      <div className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{emp.employeeId}</div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            </Card>
 
-            <div className="glass-card" style={{ padding: '2rem' }}>
+            <Card>
               {selectedEmployee ? (
                 <>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>Salary Structure — {selectedEmployee.firstName} {selectedEmployee.lastName}</h3>
                   <div className="form-grid">
                     <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                      <label className="checkbox-label" style={{ fontWeight: 600, color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input type="checkbox" checked={form.usePercentSettings} onChange={(e) => handleUsePercentToggle(e.target.checked)} />
-                        Auto-calculate allowances using Payroll Settings percentage
-                      </label>
+                      <Checkbox
+                        label="Auto-calculate allowances using Payroll Settings percentage"
+                        checked={form.usePercentSettings}
+                        onChange={handleUsePercentToggle}
+                      />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Basic Salary *</label>
@@ -1195,71 +959,70 @@ export default function PayrollPage() {
                     </div>
                     <div className="form-group">
                       <label className="form-label">HRA {form.usePercentSettings && `(${globalSettings?.hraPercent ?? 40}%)`}</label>
-                      <input type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                      <input type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={inputStyle(form.usePercentSettings)} className="input-field" />
                     </div>
                     <div className="form-group">
                       <label className="form-label">DA {form.usePercentSettings && `(${globalSettings?.daPercent ?? 20}%)`}</label>
-                      <input type="number" value={form.da} onChange={(e) => setForm({ ...form, da: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                      <input type="number" value={form.da} onChange={(e) => setForm({ ...form, da: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={inputStyle(form.usePercentSettings)} className="input-field" />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Conveyance {form.usePercentSettings && `(${globalSettings?.conveyancePercent ?? 10}%)`}</label>
-                      <input type="number" value={form.conveyance} onChange={(e) => setForm({ ...form, conveyance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                      <input type="number" value={form.conveyance} onChange={(e) => setForm({ ...form, conveyance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={inputStyle(form.usePercentSettings)} className="input-field" />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Medical {form.usePercentSettings && `(${globalSettings?.medicalPercent ?? 5}%)`}</label>
-                      <input type="number" value={form.medical} onChange={(e) => setForm({ ...form, medical: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                      <input type="number" value={form.medical} onChange={(e) => setForm({ ...form, medical: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={inputStyle(form.usePercentSettings)} className="input-field" />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Special Allowance {form.usePercentSettings && `(${globalSettings?.specialAllowancePercent ?? 15}%)`}</label>
-                      <input type="number" value={form.specialAllowance} onChange={(e) => setForm({ ...form, specialAllowance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                      <input type="number" value={form.specialAllowance} onChange={(e) => setForm({ ...form, specialAllowance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={inputStyle(form.usePercentSettings)} className="input-field" />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Insurance Deduction {form.usePercentSettings && `(${globalSettings?.insurancePercent ?? 5}%)`}</label>
-                      <input type="number" value={form.insurance} onChange={(e) => setForm({ ...form, insurance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={{ opacity: form.usePercentSettings ? 0.75 : 1, cursor: form.usePercentSettings ? 'not-allowed' : 'text' }} className="input-field" />
+                      <input type="number" value={form.insurance} onChange={(e) => setForm({ ...form, insurance: parseFloat(e.target.value) || 0 })} readOnly={form.usePercentSettings} style={inputStyle(form.usePercentSettings)} className="input-field" />
                     </div>
-                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.pfEnabled} onChange={(e) => setForm({ ...form, pfEnabled: e.target.checked })} /> Enable EPF (12%)</label></div>
-                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.esiEnabled} onChange={(e) => setForm({ ...form, esiEnabled: e.target.checked })} /> Enable ESI (0.75%)</label></div>
-                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.professionalTaxEnabled} onChange={(e) => setForm({ ...form, professionalTaxEnabled: e.target.checked })} /> Enable Professional Tax (PT)</label></div>
-                    <div className="form-group"><label className="checkbox-label"><input type="checkbox" checked={form.tdsEnabled} onChange={(e) => setForm({ ...form, tdsEnabled: e.target.checked })} /> Enable TDS (New Regime)</label></div>
+                    <div className="form-group"><Checkbox label="Enable EPF (12%)" checked={form.pfEnabled} onChange={(v) => setForm({ ...form, pfEnabled: v })} /></div>
+                    <div className="form-group"><Checkbox label="Enable ESI (0.75%)" checked={form.esiEnabled} onChange={(v) => setForm({ ...form, esiEnabled: v })} /></div>
+                    <div className="form-group"><Checkbox label="Enable Professional Tax (PT)" checked={form.professionalTaxEnabled} onChange={(v) => setForm({ ...form, professionalTaxEnabled: v })} /></div>
+                    <div className="form-group"><Checkbox label="Enable TDS (New Regime)" checked={form.tdsEnabled} onChange={(v) => setForm({ ...form, tdsEnabled: v })} /></div>
                   </div>
- 
+
                   {preview && (
-                    <div className="glass-card mt-2" style={{ padding: '1.25rem' }}>
+                    <Card style={{ marginTop: '1rem' }}>
                       <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem' }}>Monthly Calculation Preview (Indian Compliance)</h4>
-                      <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                        <div><span className="form-label">Gross Earnings</span><div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>₹{preview.grossEarnings.toFixed(2)}</div></div>
-                        <div><span className="form-label">Employee PF (12%)</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.employeePf.toFixed(2)}</div></div>
-                        <div><span className="form-label">Employee ESI (0.75%)</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.employeeEsi.toFixed(2)}</div></div>
-                        <div><span className="form-label">Professional Tax (PT)</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.professionalTax.toFixed(2)}</div></div>
-                        <div><span className="form-label">TDS ({preview.taxSlab})</span><div style={{ fontSize: '1rem', color: 'var(--danger)' }}>₹{preview.tds.toFixed(2)}</div></div>
-                        <div><span className="form-label">Total Deductions</span><div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--danger)' }}>₹{preview.totalDeductions.toFixed(2)}</div></div>
+                      <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                        <StatCard label="Gross Earnings" value={`₹${preview.grossEarnings.toFixed(2)}`} />
+                        <StatCard label="Employee PF (12%)" value={<span style={{ color: 'var(--danger-fg)' }}>₹{preview.employeePf.toFixed(2)}</span>} />
+                        <StatCard label="Employee ESI (0.75%)" value={<span style={{ color: 'var(--danger-fg)' }}>₹{preview.employeeEsi.toFixed(2)}</span>} />
+                        <StatCard label="Professional Tax (PT)" value={<span style={{ color: 'var(--danger-fg)' }}>₹{preview.professionalTax.toFixed(2)}</span>} />
+                        <StatCard label={`TDS (${preview.taxSlab})`} value={<span style={{ color: 'var(--danger-fg)' }}>₹{preview.tds.toFixed(2)}</span>} />
+                        <StatCard label="Total Deductions" value={<span style={{ color: 'var(--danger-fg)' }}>₹{preview.totalDeductions.toFixed(2)}</span>} />
                       </div>
-                      <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '1rem', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: '1rem', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <span className="form-label">Net Salary (Take Home)</span>
-                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success)' }}>₹{preview.netSalary.toFixed(2)}</div>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-fg)' }}>₹{preview.netSalary.toFixed(2)}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <span className="form-label">Employer Share (PF + ESI)</span>
-                          <div style={{ fontSize: '1rem', color: 'var(--warning)' }}>₹{(preview.employerPf + preview.employerEsi).toFixed(2)}</div>
+                          <div style={{ fontSize: '1rem', color: 'var(--warning-fg)' }}>₹{(preview.employerPf + preview.employerEsi).toFixed(2)}</div>
                         </div>
                       </div>
-                    </div>
+                    </Card>
                   )}
- 
-                  <button onClick={handleSaveStructure} className="btn btn-primary mt-2">Save Structure</button>
+
+                  <Button variant="primary" style={{ marginTop: '1rem' }} onClick={handleSaveStructure}>Save Structure</Button>
                 </>
               ) : (
-                <div className="empty-state">Select an employee to configure salary structure</div>
+                <EmptyState title="Select an employee" message="Choose an employee to configure their salary structure." />
               )}
-            </div>
+            </Card>
           </div>
         )}
 
         {view === 'settings' && globalSettings && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', maxWidth: '1200px' }}>
-            <div className="glass-card" style={{ padding: '2rem' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Statutory Rates & Thresholds</h2>
+            <Card title="Statutory Rates & Thresholds">
               <div style={{ display: 'grid', gap: '1.25rem' }}>
                 <div className="form-group">
                   <label className="form-label">EPF Contribution Rate (Employee)</label>
@@ -1276,17 +1039,13 @@ export default function PayrollPage() {
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>e.g. 0.0481 (15/26 days per year of service)</span>
                 </div>
                 <div className="form-group" style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem' }}>
-                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={globalSettings.tdsEnabled} onChange={(e) => setGlobalSettings({ ...globalSettings, tdsEnabled: e.target.checked })} /> Enable TDS Projection
-                  </label>
-                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={globalSettings.epfEnabled} onChange={(e) => setGlobalSettings({ ...globalSettings, epfEnabled: e.target.checked })} /> Enable EPF Deduction
-                  </label>
+                  <Checkbox label="Enable TDS Projection" checked={globalSettings.tdsEnabled} onChange={(v) => setGlobalSettings({ ...globalSettings, tdsEnabled: v })} />
+                  <Checkbox label="Enable EPF Deduction" checked={globalSettings.epfEnabled} onChange={(v) => setGlobalSettings({ ...globalSettings, epfEnabled: v })} />
                 </div>
               </div>
-            </div>
+            </Card>
 
-            <div className="glass-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <Card style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <div>
                 <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Salary Component Allocations (% of Basic)</h2>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -1318,7 +1077,7 @@ export default function PayrollPage() {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                <button onClick={async () => {
+                <Button variant="primary" onClick={async () => {
                   try {
                     await updatePayrollSettings(globalSettings);
                     alert('Payroll settings and component percentages updated successfully.');
@@ -1326,24 +1085,58 @@ export default function PayrollPage() {
                   } catch (err) {
                     alert('Failed to update settings');
                   }
-                }} className="btn btn-primary">Save Settings</button>
+                }}>Save Settings</Button>
               </div>
-            </div>
+            </Card>
 
-            <div className="glass-card" style={{ padding: '1rem', gridColumn: 'span 2', borderLeft: '3px solid var(--warning)' }}>
-              <h4 style={{ marginBottom: '0.5rem', color: 'var(--warning)', fontSize: '0.9rem', fontWeight: 700 }}>Indian New Tax Slabs (Budget 2024-25 / 2026)</h4>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                <div>₹0 - ₹3.0L: Nil</div>
-                <div>₹3.0L - ₹7.0L: 5% (Rebate under Section 87A if taxable &le; ₹7L)</div>
-                <div>₹7.0L - ₹10.0L: 10%</div>
-                <div>₹10.0L - ₹12.0L: 15%</div>
-                <div>₹12.0L - ₹15.0L: 20%</div>
-                <div>₹15.0L+: 30%</div>
-                <div style={{ marginTop: '0.5rem', fontWeight: 600 }}>Standard Deduction: ₹75,000 | Cess: 4% Surcharge</div>
-              </div>
+            <div style={{ gridColumn: 'span 2' }}>
+              <Banner tone="warning" title="Indian New Tax Slabs (Budget 2024-25 / 2026)">
+                <div style={{ fontSize: '0.8rem', lineHeight: 1.8 }}>
+                  <div>₹0 - ₹3.0L: Nil</div>
+                  <div>₹3.0L - ₹7.0L: 5% (Rebate under Section 87A if taxable &le; ₹7L)</div>
+                  <div>₹7.0L - ₹10.0L: 10%</div>
+                  <div>₹10.0L - ₹12.0L: 15%</div>
+                  <div>₹12.0L - ₹15.0L: 20%</div>
+                  <div>₹15.0L+: 30%</div>
+                  <div style={{ marginTop: '0.5rem', fontWeight: 600 }}>Standard Deduction: ₹75,000 | Cess: 4% Surcharge</div>
+                </div>
+              </Banner>
             </div>
           </div>
         )}
+
+        {/* Run payroll confirmation */}
+        <ConfirmDialog
+          open={confirmRun}
+          title="Run Payroll"
+          message={`Run payroll for ${monthName(processMonth)} ${processYear}?`}
+          confirmLabel="Run Payroll"
+          loading={processing}
+          onConfirm={runPayrollConfirmed}
+          onCancel={() => setConfirmRun(false)}
+        />
+
+        {/* Skip-stage reason capture (replaces native prompt) */}
+        <ConfirmDialog
+          open={skipDialog !== null}
+          title="Skip stage"
+          message="Provide a reason for skipping this payroll stage. It will be recorded against the run."
+          confirmLabel="Skip stage"
+          tone="primary"
+          requireReason
+          reasonLabel="Reason for skipping"
+          onConfirm={(reason) => {
+            if (skipDialog) {
+              const key = skipDialog.stage;
+              const value = reason || skipDialog.fallback;
+              setSkipReasons(prev => ({ ...prev, [key]: value }));
+              setConfirmations(prev => ({ ...prev, [key]: true }));
+              setActiveManualStage(null);
+            }
+            setSkipDialog(null);
+          }}
+          onCancel={() => setSkipDialog(null)}
+        />
       </main>
     </div>
   );

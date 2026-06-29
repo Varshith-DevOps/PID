@@ -32,6 +32,7 @@ function setCsrfCookie(res, token) {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Lax',
+    domain: process.env.COOKIE_DOMAIN || undefined,
     maxAge: 24 * 60 * 60 * 1000,
   });
 }

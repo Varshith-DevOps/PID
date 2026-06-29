@@ -98,6 +98,22 @@ const silentSuccessUrls: (string | RegExp)[] = [
   '/notifications/read',
 ];
 
+/**
+ * Endpoints whose FAILURES must not raise a toast. These are session-management
+ * probes (the app checks them on load) or screens that render their own inline
+ * error — a toast here is alarming noise (e.g. the "session expired" banners that
+ * popped up on the public login page).
+ */
+const silentErrorUrls: (string | RegExp)[] = [
+  '/auth/profile',
+  '/auth/refresh',
+  '/auth/csrf',
+  '/auth/logout',
+  '/auth/login',
+  '/auth/mfa/verify-login',
+  '/public/tenant',
+];
+
 const errorRules: MessageRule[] = [
   { id: 'auth-login-fail', match: '/auth/login', message: 'Login failed. Check your email, password, and MFA if enabled.' },
   { id: 'auth-session-fail', match: '/auth/profile', message: 'Your session could not be verified. Please log in again.' },
@@ -174,15 +190,44 @@ export function getActionErrorMessage(method: string, url: string, errorResponse
     status: errorResponse?.status,
     serverMessage: errorResponse?.data?.error || errorResponse?.data?.message,
   };
+
+  // Session-management probes and self-handling screens stay silent (no toast).
+  const normalizedUrl = normalize(url);
+  const isSilent = silentErrorUrls.some((pattern) =>
+    typeof pattern === 'string' ? normalizedUrl.includes(pattern) : pattern.test(normalizedUrl)
+  );
+  if (isSilent) return '';
+
+  // Prefer a clear, user-friendly server message for client (4xx) errors so
+  // specific, actionable guidance (KYC, workspace, duplicates, conflicts, validation)
+  // reaches the user instead of a generic module message.
+  const status = ctx.status || 0;
+  if (status >= 400 && status < 500 && ctx.serverMessage && ctx.serverMessage.length <= 220) {
+    return ctx.serverMessage;
+  }
+
   return applyRule(errorRules, ctx)
-    || statusMessages[ctx.status || 0]
+    || statusMessages[status]
     || ctx.serverMessage
     || 'Action failed. Check the details and try again.';
 }
 
+// Signals that a manually-shown message (e.g. via alert(), which the ToastProvider
+// renders as a toast) is a failure/validation message rather than a confirmation.
+// Tuned so imperative validation phrasing ("Please…", "… is required", "Resolve…",
+// "… must be…") is classified as an error instead of a green success toast.
+const ERROR_SIGNALS = [
+  'failed', 'error', 'invalid', 'required', 'denied', 'missing', 'cannot', "can't",
+  'blocked', 'unable', 'not allowed', 'no permission', 'unauthorized', 'forbidden',
+  'please ', 'must ', 'resolve ', 'complete all', 'before running', 'before you',
+  'select a ', 'specify ', 'provide a', 'provide an', 'empty or', 'at least',
+  'already exist', 'exceed', 'too many', 'too large', 'not found', 'no record',
+  'unavailable', 'out of pocket', 'out-of-pocket',
+];
+
 export function normalizeManualMessage(message: unknown): { message: string; type: 'success' | 'error' } {
   const text = String(message || 'Action completed.');
   const lower = text.toLowerCase();
-  const isError = ['failed', 'error', 'invalid', 'required', 'denied', 'missing', 'cannot', 'blocked'].some((word) => lower.includes(word));
+  const isError = ERROR_SIGNALS.some((word) => lower.includes(word));
   return { message: text, type: isError ? 'error' : 'success' };
 }

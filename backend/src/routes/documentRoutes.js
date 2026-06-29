@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const { ensureUploadDir } = require('../config/storage');
+const fileStorage = require('../services/fileStorage');
 const { authenticate } = require('../middleware/auth');
 const { rbacMiddleware } = require('../rbac/rbacMiddleware');
 const {
@@ -21,20 +21,9 @@ const {
 
 // ──── Multer Configuration ─────────────────────────────────────────────────
 
-/** Ensure upload directory exists */
-const uploadDir = ensureUploadDir();
-
-/**
- * Multer disk storage configuration.
- * Files are saved to /uploads with unique timestamped names.
- */
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
+// Storage is pluggable: local disk in dev/test, Amazon S3 in production (set
+// AWS_S3_BUCKET). The controller persists the file via fileStorage.persist().
+const storage = fileStorage.multerStorage('documents');
 
 /** File upload handler with 10MB size limit and safe file type validation */
 const upload = multer({

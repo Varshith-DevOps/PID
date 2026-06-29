@@ -6,7 +6,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY prisma ./prisma
-RUN npx prisma generate
+COPY scripts ./scripts
+# Production runs on PostgreSQL — generate the client from the PG schema so it
+# matches the runtime DATABASE_URL (a SQLite-generated client would fail there).
+RUN node scripts/make-postgres-schema.js \
+ && npx prisma generate --schema=prisma/schema.postgres.prisma
 COPY . .
 
 FROM node:20-alpine AS runtime

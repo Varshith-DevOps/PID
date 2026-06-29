@@ -1,6 +1,22 @@
 'use client';
 import InlineField from '@/components/InlineField';
 import { required } from '@/lib/validators';
+import { DataTable } from '@/components/ui';
+import type { Column } from '@/components/ui';
+
+const experienceColumns: Column<any>[] = [
+  { key: 'company', header: 'Company' },
+  { key: 'designation', header: 'Designation' },
+  { key: 'fromDate', header: 'From', render: (exp) => new Date(exp.fromDate).toLocaleDateString() },
+  { key: 'toDate', header: 'To', render: (exp) => (exp.toDate ? new Date(exp.toDate).toLocaleDateString() : 'Present') },
+];
+
+const educationColumns: Column<any>[] = [
+  { key: 'degree', header: 'Degree', render: (edu) => <>{edu.degree} {edu.specialization && `(${edu.specialization})`}</> },
+  { key: 'institution', header: 'Institution' },
+  { key: 'yearOfPassing', header: 'Year' },
+  { key: 'percentage', header: '%', render: (edu) => edu.percentage || '-' },
+];
 
 export default function ProfessionalTab({ employee, canEdit, onSave }: any) {
   return (
@@ -21,36 +37,11 @@ export default function ProfessionalTab({ employee, canEdit, onSave }: any) {
         <InlineField label="Account Stage" value={employee.accountStage} fieldKey="accountStage" canEdit={false} onSave={onSave} />
       </div>
 
-      <h3 style={{ fontSize: '1rem', marginTop: '2rem', marginBottom: '1rem', color: 'var(--accent-cyan)' }}>Experience History</h3>
-      {employee.experience?.length > 0 ? (
-        <table className="data-table">
-          <thead><tr><th>Company</th><th>Designation</th><th>From</th><th>To</th></tr></thead>
-          <tbody>
-            {employee.experience.map((exp: any) => (
-              <tr key={exp.id}>
-                <td>{exp.company}</td><td>{exp.designation}</td>
-                <td>{new Date(exp.fromDate).toLocaleDateString()}</td>
-                <td>{exp.toDate ? new Date(exp.toDate).toLocaleDateString() : 'Present'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : <p style={{ color: 'var(--text-muted)' }}>No experience records found.</p>}
+      <h3 style={{ fontSize: '1rem', marginTop: '2rem', marginBottom: '1rem', color: 'var(--accent)' }}>Experience History</h3>
+      <DataTable columns={experienceColumns} rows={employee.experience || []} rowKey={(exp) => exp.id} emptyTitle="No experience records found" />
 
-      <h3 style={{ fontSize: '1rem', marginTop: '2rem', marginBottom: '1rem', color: 'var(--accent-cyan)' }}>Education</h3>
-      {employee.education?.length > 0 ? (
-        <table className="data-table">
-          <thead><tr><th>Degree</th><th>Institution</th><th>Year</th><th>%</th></tr></thead>
-          <tbody>
-            {employee.education.map((edu: any) => (
-              <tr key={edu.id}>
-                <td>{edu.degree} {edu.specialization && `(${edu.specialization})`}</td>
-                <td>{edu.institution}</td><td>{edu.yearOfPassing}</td><td>{edu.percentage || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : <p style={{ color: 'var(--text-muted)' }}>No education records found.</p>}
+      <h3 style={{ fontSize: '1rem', marginTop: '2rem', marginBottom: '1rem', color: 'var(--accent)' }}>Education</h3>
+      <DataTable columns={educationColumns} rows={employee.education || []} rowKey={(edu) => edu.id} emptyTitle="No education records found" />
     </div>
   );
 }

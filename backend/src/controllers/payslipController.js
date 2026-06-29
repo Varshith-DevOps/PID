@@ -12,10 +12,13 @@ const fs = require('fs');
 const path = require('path');
 const { canAccessEmployee } = require('../services/accessControl');
 
+const SMTP_PORT = Number(process.env.SMTP_PORT) || 587;
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 587,
-  secure: false,
+  port: SMTP_PORT,
+  // Implicit TLS on 465; STARTTLS (upgraded) on 587/other. Require TLS either way.
+  secure: SMTP_PORT === 465,
+  requireTLS: SMTP_PORT !== 465,
   auth: {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',

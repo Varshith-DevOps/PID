@@ -72,7 +72,19 @@ describe('KYC Compliance & Free Trial Gating Tests', () => {
         .set('Authorization', `Bearer ${testUserToken}`);
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toContain('KYC not approved. Access restricted to Attendance and Leave modules.');
+      expect(res.body.kycRequired).toBe(true);
+      expect(res.body.error).toContain('Finish KYC verification to unlock this module');
+    });
+
+    it('should allow employee data-entry (EMPLOYEES module) before verification', async () => {
+      // A newly created tenant can set up its workforce while KYC is pending; the
+      // request may fail later business validation, but never with a KYC gating error.
+      const res = await request(app)
+        .get('/api/employees')
+        .set('Authorization', `Bearer ${testUserToken}`);
+
+      expect(res.body.kycRequired).toBeUndefined();
+      expect(res.status).not.toBe(403);
     });
   });
 

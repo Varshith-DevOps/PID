@@ -22,6 +22,54 @@ const {
 const { logSecurityEvent, clientIp } = require('../utils/securityEvents');
 const loginGuard = require('../utils/loginGuard');
 const { BCRYPT_ROUNDS } = require('../utils/password');
+const { normalizeSubdomain, slugifySubdomain } = require('../utils/subdomain');
+const { isPlatformAccount } = require('../rbac/platformRoles');
+
+// Owner-side accounts can be required to use MFA (set REQUIRE_PLATFORM_MFA=true in
+// production). Surfaced as `mustSetupMfa` so the client forces enrolment before use.
+const requirePlatformMfa = (role, mfaEnabled) =>
+  process.env.REQUIRE_PLATFORM_MFA === 'true' && isPlatformAccount(role) && !mfaEnabled;
+
+// App-owner accounts authenticate on the apex domain (no tenant subdomain).
+const OWNER_ROLES = ['SUPER_ADMIN', 'SALES', 'SUPPORT'];
+
+// Subdomain-per-tenant binding is only meaningful when the deployment actually
+// serves tenants on real subdomains (wildcard DNS), configured via APP_BASE_DOMAIN.
+// On a single domain / local dev (no APP_BASE_DOMAIN, or 'localhost'), binding is
+// OFF so every account signs in normally on the one host.
+const SUBDOMAIN_TENANCY = Boolean(process.env.APP_BASE_DOMAIN)
+  && process.env.APP_BASE_DOMAIN.toLowerCase() !== 'localhost';
+
+/**
+ * Strict tenant-subdomain binding (only when SUBDOMAIN_TENANCY is enabled).
+ * Browser clients send `x-tenant-subdomain` (the workspace host). Tenant users may
+ * only sign in on their own workspace; owner accounts only on the apex. Returns an
+ * error response object to send, or null when the login may proceed.
+ */
+const checkWorkspaceBinding = async (req, user) => {
+  if (!SUBDOMAIN_TENANCY) return null; // single-domain / local dev — no binding
+  const subHeader = req.headers['x-tenant-subdomain'];
+  if (subHeader === undefined) return null;
+  const requestedSub = normalizeSubdomain(subHeader);
+
+  if (requestedSub) {
+    const workspace = await prisma.company.findFirst({ where: { subdomain: requestedSub } });
+    if (!workspace || user.companyId !== workspace.id) {
+      return { status: 403, body: { error: 'This account does not belong to this workspace.', wrongWorkspace: true } };
+    }
+    return null;
+  }
+  // Apex/owner domain: only owner accounts. Point tenant users to their workspace.
+  if (!OWNER_ROLES.includes(user.role)) {
+    let subdomain = null;
+    if (user.companyId) {
+      const c = await prisma.company.findUnique({ where: { id: user.companyId } });
+      subdomain = c?.subdomain || c?.code || null;
+    }
+    return { status: 403, body: { error: 'Use your organization workspace to sign in.', wrongWorkspace: true, subdomain } };
+  }
+  return null;
+};
 
 // Access tokens are short-lived by default; a refresh flow renews them. Operators
 // can override via ACCESS_TOKEN_TTL / JWT_EXPIRES_IN.
@@ -41,11 +89,16 @@ const signRefreshToken = (user) => jwt.sign(
   { expiresIn: REFRESH_TOKEN_TTL }
 );
 
+// Set COOKIE_DOMAIN=.yourdomain.com in production so the session is shared across
+// all tenant subdomains and the API host. Left unset locally (host-only cookie).
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
+
 const setRefreshCookie = (res, token) => {
   res.cookie('refreshToken', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Lax',
+    domain: COOKIE_DOMAIN,
     path: REFRESH_COOKIE_PATH, // only sent to /api/auth/* (refresh, logout)
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
@@ -56,6 +109,7 @@ const setAuthCookie = (res, token, user) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Lax',
+    domain: COOKIE_DOMAIN,
     maxAge: 24 * 60 * 60 * 1000
   });
   // Pair the session cookie with a readable CSRF token (double-submit pattern).
@@ -87,9 +141,13 @@ const buildLoginPayload = async (user, token) => {
   let companyName = null;
   let companyLogo = null;
   let companyKycStatus = null;
+  let companyKycRemarks = null;
   let companyCin = null;
+  let companySubdomain = null;
   let hasUsedFreeTrial = false;
   let freeTrialExpiresAt = null;
+  let billingStatus = null;
+  let graceEndsAt = null;
 
   if (user.companyId) {
     const company = await prisma.company.findUnique({
@@ -99,9 +157,13 @@ const buildLoginPayload = async (user, token) => {
       companyName = company.name;
       companyLogo = company.logoUrl;
       companyKycStatus = company.kycStatus;
+      companyKycRemarks = company.kycRemarks;
       companyCin = company.cin;
+      companySubdomain = company.subdomain || company.code;
       hasUsedFreeTrial = company.hasUsedFreeTrial;
       freeTrialExpiresAt = company.freeTrialExpiresAt;
+      billingStatus = company.billingStatus;
+      graceEndsAt = company.graceEndsAt;
     }
   }
 
@@ -115,13 +177,18 @@ const buildLoginPayload = async (user, token) => {
       employeeId: employee?.id || null,
       mfaEnabled: user.mfaEnabled,
       mustChangePassword: user.mustChangePassword || false,
+      mustSetupMfa: requirePlatformMfa(user.role, user.mfaEnabled),
       subscriptionFeatures,
       companyName,
       companyLogo,
       companyKycStatus,
+      companyKycRemarks,
       companyCin,
+      companySubdomain,
       hasUsedFreeTrial,
       freeTrialExpiresAt,
+      billingStatus,
+      graceEndsAt,
     },
     permissions,
   };
@@ -170,6 +237,14 @@ const login = async (req, res) => {
       loginGuard.recordFailure(email, ip);
       await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: email, details: { reason: 'bad_password' } });
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Strict workspace binding: tenant users only on their subdomain, owners on apex.
+    const binding = await checkWorkspaceBinding(req, user);
+    if (binding) {
+      loginGuard.recordFailure(email, ip);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_WRONG_WORKSPACE', userId: user.id, userEmail: email });
+      return res.status(binding.status).json(binding.body);
     }
 
     if (user.mfaEnabled) {
@@ -285,8 +360,13 @@ const register = async (req, res) => {
  */
 const getProfile = async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
+    // Support users are company-less, but their reads are scoped to the tenant
+    // they're viewing — so look up their OWN row without tenant scoping.
+    const selfWhere = req.user.role === 'SUPPORT'
+      ? { id: req.user.id, companyId: null }
+      : { id: req.user.id };
+    const user = await prisma.user.findFirst({
+      where: selfWhere,
       include: { permissions: true },
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -298,10 +378,14 @@ const getProfile = async (req, res) => {
     // Find linked employee record
     const employee = await prisma.employee.findFirst({ where: { userId: user.id } });
 
+    // The effective company is the tenant under the request context: the support
+    // user's currently-viewed customer, or a normal user's own company.
+    const effectiveCompanyId = req.user.companyId;
+
     let subscriptionFeatures = null;
-    if (user.companyId && user.role !== 'SUPER_ADMIN') {
+    if (effectiveCompanyId && user.role !== 'SUPER_ADMIN') {
       const activeSub = await prisma.subscription.findFirst({
-        where: { companyId: user.companyId, status: 'ACTIVE' },
+        where: { companyId: effectiveCompanyId, status: 'ACTIVE' },
         include: { plan: true },
         orderBy: { endDate: 'desc' }
       });
@@ -315,21 +399,29 @@ const getProfile = async (req, res) => {
     let companyName = null;
     let companyLogo = null;
     let companyKycStatus = null;
+    let companyKycRemarks = null;
     let companyCin = null;
+    let companySubdomain = null;
     let hasUsedFreeTrial = false;
     let freeTrialExpiresAt = null;
+    let billingStatus = null;
+    let graceEndsAt = null;
 
-    if (user.companyId) {
+    if (effectiveCompanyId) {
       const company = await prisma.company.findUnique({
-        where: { id: user.companyId }
+        where: { id: effectiveCompanyId }
       });
       if (company) {
         companyName = company.name;
         companyLogo = company.logoUrl;
         companyKycStatus = company.kycStatus;
+        companyKycRemarks = company.kycRemarks;
         companyCin = company.cin;
+        companySubdomain = company.subdomain || company.code;
         hasUsedFreeTrial = company.hasUsedFreeTrial;
         freeTrialExpiresAt = company.freeTrialExpiresAt;
+        billingStatus = company.billingStatus;
+        graceEndsAt = company.graceEndsAt;
       }
     }
 
@@ -340,15 +432,21 @@ const getProfile = async (req, res) => {
       role: user.role,
       mfaEnabled: user.mfaEnabled,
       mustChangePassword: user.mustChangePassword || false,
+      mustSetupMfa: requirePlatformMfa(user.role, user.mfaEnabled),
       employeeId: employee?.id || null,
       permissions,
       subscriptionFeatures,
       companyName,
       companyLogo,
       companyKycStatus,
+      companyKycRemarks,
       companyCin,
+      companySubdomain,
       hasUsedFreeTrial,
       freeTrialExpiresAt,
+      billingStatus,
+      graceEndsAt,
+      supportViewCompanyId: req.user.supportViewCompanyId || null,
     });
   } catch (error) {
     console.error('[GET PROFILE ERROR]:', error.message);
@@ -614,6 +712,8 @@ const signup = async (req, res) => {
         data: {
           name: companyName,
           code: companyCode.toLowerCase(),
+          // Workspace subdomain defaults to the chosen tenant code.
+          subdomain: slugifySubdomain(companyCode),
           email,
           phone,
           companySize,
@@ -683,9 +783,9 @@ const logout = async (req, res) => {
         data: { tokenVersion: { increment: 1 } },
       }).catch(() => {});
     }
-    res.clearCookie('token');
-    res.clearCookie('csrfToken');
-    res.clearCookie('refreshToken', { path: REFRESH_COOKIE_PATH });
+    res.clearCookie('token', { domain: COOKIE_DOMAIN });
+    res.clearCookie('csrfToken', { domain: COOKIE_DOMAIN });
+    res.clearCookie('refreshToken', { domain: COOKIE_DOMAIN, path: REFRESH_COOKIE_PATH });
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('[LOGOUT ERROR]:', error.message);

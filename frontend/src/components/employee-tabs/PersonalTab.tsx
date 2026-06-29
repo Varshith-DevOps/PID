@@ -26,7 +26,7 @@ export default function PersonalTab({ employee, canEdit, onSave, shouldMask }: a
         <InlineField label="Aadhar Number" value={employee.aadharNumber} fieldKey="aadharNumber" canEdit={canEdit} onSave={onSave} masked={shouldMask} maskType="aadhar" validator={aadhaar} restrict="digits" maxLength={12} />
       </div>
 
-      <h3 style={{ fontSize: '1rem', marginTop: '2rem', marginBottom: '1rem', color: 'var(--accent-cyan)' }}>Emergency Contact</h3>
+      <h3 style={{ fontSize: '1rem', marginTop: '2rem', marginBottom: '1rem', color: 'var(--accent)' }}>Emergency Contact</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
         <InlineField label="Contact Name" value={employee.emergencyContactName} fieldKey="emergencyContactName" canEdit={canEdit} onSave={onSave} validator={personName('Contact name')} restrict="alpha" />
         <InlineField label="Relation" value={employee.emergencyContactRelation} fieldKey="emergencyContactRelation" canEdit={canEdit} onSave={onSave} />

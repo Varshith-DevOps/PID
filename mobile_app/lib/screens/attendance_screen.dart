@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final AuthProvider authProvider;
@@ -133,17 +134,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: const Color(0xFF0A0E1A),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6))),
+      return Scaffold(
+        backgroundColor: c.canvas,
+        body: Center(child: CircularProgressIndicator(color: c.accent)),
       );
     }
 
+    // The active/clock-in accent vs. the clock-out (danger) accent.
+    final actionColor = _isCheckedIn ? c.danger : c.accent;
     final currentDateStr = DateFormat('EEEE, MMMM d, y').format(DateTime.now());
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: c.canvas,
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
         child: Column(
@@ -155,8 +159,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               children: [
                 Text(
                   currentDateStr,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
+                  style: TextStyle(
+                    color: c.textMuted,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
@@ -165,7 +169,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 Text(
                   _isCheckedIn ? 'Shift Active' : 'Not Checked In',
                   style: TextStyle(
-                    color: _isCheckedIn ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    color: _isCheckedIn ? c.success : c.danger,
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.5,
@@ -178,14 +182,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               Container(
                 padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withOpacity(0.1),
+                  color: c.danger.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.2)),
+                  border: Border.all(color: c.danger.withOpacity(0.2)),
                 ),
                 child: Text(
                   _errorMessage!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Color(0xFFF87171), fontSize: 13),
+                  style: TextStyle(color: c.danger, fontSize: 13),
                 ),
               ),
 
@@ -196,15 +200,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 height: 240,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF0F172A),
+                  color: c.raised,
                   border: Border.all(
-                    color: _isCheckedIn ? const Color(0xFF3B82F6).withOpacity(0.3) : const Color(0xFF1E293B),
+                    color: _isCheckedIn ? c.accent.withOpacity(0.3) : c.border,
                     width: 6,
                   ),
                   boxShadow: [
                     if (_isCheckedIn)
                       BoxShadow(
-                        color: const Color(0xFF3B82F6).withOpacity(0.15),
+                        color: c.accent.withOpacity(0.15),
                         blurRadius: 40,
                         spreadRadius: 2,
                       ),
@@ -214,25 +218,25 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      _isCheckedIn ? Icons.fingerprint_rounded : Icons.fingerprint_rounded,
-                      color: _isCheckedIn ? const Color(0xFF3B82F6) : const Color(0xFF475569),
+                      Icons.fingerprint_rounded,
+                      color: _isCheckedIn ? c.accent : c.textMuted,
                       size: 48,
                     ),
                     const SizedBox(height: 16),
                     Text(
                       _timeString,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: c.textPrimary,
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'TOTAL WORK HOURS',
                       style: TextStyle(
-                        color: Color(0xFF64748B),
+                        color: c.textMuted,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1,
@@ -248,8 +252,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               children: [
                 Text(
                   _isCheckedIn ? 'Swipe right to Clock Out' : 'Swipe right to Clock In',
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
+                  style: TextStyle(
+                    color: c.textSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -264,9 +268,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     return Container(
                       height: 58,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
+                        color: c.raised,
                         borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: const Color(0xFF1E293B)),
+                        border: Border.all(color: c.border),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Stack(
@@ -281,14 +285,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                 children: [
                                   Icon(
                                     Icons.double_arrow_rounded,
-                                    color: _isCheckedIn ? const Color(0xFFEF4444).withOpacity(0.6) : const Color(0xFF3B82F6).withOpacity(0.6),
+                                    color: actionColor.withOpacity(0.6),
                                     size: 16,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     _isCheckedIn ? 'SLIDE TO CHECK-OUT' : 'SLIDE TO CHECK-IN',
                                     style: TextStyle(
-                                      color: _isCheckedIn ? const Color(0xFFEF4444).withOpacity(0.7) : const Color(0xFF3B82F6).withOpacity(0.7),
+                                      color: actionColor.withOpacity(0.7),
                                       fontSize: 11,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 1.5,
@@ -323,12 +327,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   shape: BoxShape.circle,
                                   gradient: LinearGradient(
                                     colors: _isCheckedIn
-                                        ? [const Color(0xFFEF4444), const Color(0xFFB91C1C)]
-                                        : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)],
+                                        ? [c.danger, c.danger.withOpacity(0.7)]
+                                        : [c.accent, c.accent.withOpacity(0.7)],
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: _isCheckedIn ? const Color(0xFFEF4444).withOpacity(0.3) : const Color(0xFF3B82F6).withOpacity(0.3),
+                                      color: actionColor.withOpacity(0.3),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
