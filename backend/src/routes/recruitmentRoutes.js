@@ -32,8 +32,14 @@ const {
   scheduleInterview,
   resendInterviewEmail,
   submitInterviewFeedback,
+  getApplicantOffers,
   createJobOffer,
+  getJobOffer,
+  updateJobOffer,
+  generateJobOfferPdf,
   downloadOfferLetter,
+  sendJobOffer,
+  cancelJobOffer,
 } = require('../controllers/recruitmentController');
 
 // ──── Resume Upload Configuration ──────────────────────────────────────────
@@ -144,7 +150,16 @@ router.post('/interviews/:id/resend-email', authenticate, rbacMiddleware('RECRUI
 router.put('/interviews/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), submitInterviewFeedback);
 
 // Offers
+router.get('/applicants/:applicantId/offers', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getApplicantOffers);
+router.post('/applicants/:applicantId/offers', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOffer);
 router.post('/offers', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOffer);
+router.get('/offers/:id', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getJobOffer);
+router.patch('/offers/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateJobOffer);
+router.post('/offers/:id/generate', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), generateJobOfferPdf);
+router.post('/offers/:id/send', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), sendJobOffer);
+router.post('/offers/:id/resend', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), sendJobOffer);
+router.post('/offers/:id/cancel', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), cancelJobOffer);
+router.get('/offers/:id/download', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), downloadOfferLetter);
 router.get('/offers/:id/pdf', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), downloadOfferLetter);
 
 module.exports = router;

@@ -14,7 +14,11 @@ import {
   resendInterviewEmail,
   submitInterviewFeedback,
   createJobOffer,
+  updateJobOffer,
+  generateJobOfferPdf,
+  sendJobOffer,
   downloadOfferLetterPDF,
+  type JobOfferPayload,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import { validateForm, email as vEmail, mobile as vMobile, personName, required, date as vDate, amount } from '@/lib/validators';
@@ -52,8 +56,34 @@ interface Interview {
 interface JobOffer {
   id: string;
   offeredSalary: number;
+  offeredCtc?: number | string;
+  basicSalary?: number | string | null;
+  hra?: number | string | null;
+  specialAllowance?: number | string | null;
+  otherAllowances?: number | string | null;
+  variablePay?: number | string | null;
+  joiningBonus?: number | string | null;
+  workLocation?: string | null;
+  employmentType?: string | null;
   joiningDate: string;
+  probationPeriod?: string | null;
+  noticePeriod?: string | null;
+  reportingManager?: string | null;
+  reportingManagerTitle?: string | null;
+  workingHours?: string | null;
+  offerExpiryDate?: string | null;
+  additionalTerms?: string | null;
+  signatoryName?: string | null;
+  signatoryDesignation?: string | null;
   status: string;
+  pdfFileName?: string | null;
+  pdfStorageKey?: string | null;
+  sentAt?: string | null;
+  acceptedAt?: string | null;
+  rejectedAt?: string | null;
+  emailStatus?: string | null;
+  emailFailureReason?: string | null;
+  updatedAt?: string;
 }
 
 interface Applicant {
@@ -198,6 +228,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const [showScheduleInterview, setShowScheduleInterview] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState<Interview | null>(null);
   const [showOfferModal, setShowOfferModal] = useState(false);
+  const [showOfferPreview, setShowOfferPreview] = useState(false);
 
   // Validation states
   const [submitted, setSubmitted] = useState(false);
@@ -209,6 +240,8 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const [savingInterview, setSavingInterview] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [savingOffer, setSavingOffer] = useState(false);
+  const [generatingOfferId, setGeneratingOfferId] = useState<string | null>(null);
+  const [sendingOfferId, setSendingOfferId] = useState<string | null>(null);
   const [savingReview, setSavingReview] = useState(false);
   const [resendingInterviewId, setResendingInterviewId] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState('');
@@ -246,8 +279,85 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const [draftRating, setDraftRating] = useState(0);
 
   const [offerForm, setOfferForm] = useState({
-    offeredSalary: '',
+    offeredCtc: '',
+    basicSalary: '',
+    hra: '',
+    specialAllowance: '',
+    otherAllowances: '',
+    variablePay: '',
+    joiningBonus: '',
+    workLocation: '',
+    employmentType: 'FULL_TIME',
     joiningDate: '',
+    probationPeriod: '6 months',
+    noticePeriod: '',
+    reportingManager: '',
+    reportingManagerTitle: '',
+    workingHours: '9:30 AM to 6:30 PM',
+    offerExpiryDate: '',
+    additionalTerms: '',
+    signatoryName: '',
+    signatoryDesignation: '',
+  });
+
+  const toNumberOrNull = (value: string) => {
+    if (!value.trim()) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const fixedCompensation = ['basicSalary', 'hra', 'specialAllowance', 'otherAllowances']
+    .reduce((sum, key) => sum + Number((offerForm as any)[key] || 0), 0);
+  const variableCompensation = Number(offerForm.variablePay || 0) + Number(offerForm.joiningBonus || 0);
+  const salaryTotal = fixedCompensation + variableCompensation;
+  const offeredCtcNumber = Number(offerForm.offeredCtc || 0);
+
+  const resetOfferForm = (applicant?: Applicant | null) => {
+    const offer = applicant?.jobOffer;
+    setOfferForm({
+      offeredCtc: String(offer?.offeredCtc ?? offer?.offeredSalary ?? ''),
+      basicSalary: String(offer?.basicSalary ?? ''),
+      hra: String(offer?.hra ?? ''),
+      specialAllowance: String(offer?.specialAllowance ?? ''),
+      otherAllowances: String(offer?.otherAllowances ?? ''),
+      variablePay: String(offer?.variablePay ?? ''),
+      joiningBonus: String(offer?.joiningBonus ?? ''),
+      workLocation: offer?.workLocation || job?.location || '',
+      employmentType: offer?.employmentType || job?.employmentType || 'FULL_TIME',
+      joiningDate: offer?.joiningDate ? offer.joiningDate.slice(0, 10) : '',
+      probationPeriod: offer?.probationPeriod || '6 months',
+      noticePeriod: offer?.noticePeriod || applicant?.noticePeriod || '',
+      reportingManager: offer?.reportingManager || '',
+      reportingManagerTitle: offer?.reportingManagerTitle || '',
+      workingHours: offer?.workingHours || '9:30 AM to 6:30 PM',
+      offerExpiryDate: offer?.offerExpiryDate ? offer.offerExpiryDate.slice(0, 10) : '',
+      additionalTerms: offer?.additionalTerms || '',
+      signatoryName: offer?.signatoryName || '',
+      signatoryDesignation: offer?.signatoryDesignation || '',
+    });
+  };
+
+  const buildOfferPayload = (): JobOfferPayload => ({
+    offeredCtc: Number(offerForm.offeredCtc),
+    basicSalary: toNumberOrNull(offerForm.basicSalary),
+    hra: toNumberOrNull(offerForm.hra),
+    specialAllowance: toNumberOrNull(offerForm.specialAllowance),
+    otherAllowances: toNumberOrNull(offerForm.otherAllowances),
+    variablePay: toNumberOrNull(offerForm.variablePay),
+    joiningBonus: toNumberOrNull(offerForm.joiningBonus),
+    workLocation: offerForm.workLocation.trim(),
+    employmentType: offerForm.employmentType,
+    joiningDate: offerForm.joiningDate,
+    probationPeriod: offerForm.probationPeriod.trim(),
+    noticePeriod: offerForm.noticePeriod.trim(),
+    reportingManager: offerForm.reportingManager.trim(),
+    reportingManagerTitle: offerForm.reportingManagerTitle.trim(),
+    workingHours: offerForm.workingHours.trim(),
+    offerExpiryDate: offerForm.offerExpiryDate,
+    additionalTerms: offerForm.additionalTerms.trim(),
+    signatoryName: offerForm.signatoryName.trim(),
+    signatoryDesignation: offerForm.signatoryDesignation.trim(),
+    updatedAt: selectedApplicant?.jobOffer?.updatedAt,
   });
 
   useEffect(() => {
@@ -595,35 +705,79 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     setSubmitted(true);
     const { isValid, firstError } = validateForm(
       {
-        offeredSalary: offerForm.offeredSalary,
+        offeredCtc: offerForm.offeredCtc,
         joiningDate: offerForm.joiningDate,
+        workLocation: offerForm.workLocation,
+        employmentType: offerForm.employmentType,
+        reportingManager: offerForm.reportingManager,
+        offerExpiryDate: offerForm.offerExpiryDate,
+        signatoryName: offerForm.signatoryName,
+        signatoryDesignation: offerForm.signatoryDesignation,
       },
       {
-        offeredSalary: amount,
+        offeredCtc: amount,
         joiningDate: vDate('Joining date'),
+        workLocation: required('Work location'),
+        employmentType: required('Employment type'),
+        reportingManager: required('Reporting manager'),
+        offerExpiryDate: vDate('Offer expiry date'),
+        signatoryName: personName('HR signatory name'),
+        signatoryDesignation: required('HR signatory designation'),
       }
     );
     if (!isValid) {
       setFormError(firstError || 'Please correct the highlighted fields.');
       return;
     }
+    if (new Date(offerForm.offerExpiryDate) >= new Date(offerForm.joiningDate)) {
+      setFormError('Offer expiry date must be before the joining date.');
+      return;
+    }
     setFormError('');
     setSavingOffer(true);
     try {
-      await createJobOffer({
-        applicantId: selectedApplicant.id,
-        offeredSalary: parseFloat(offerForm.offeredSalary),
-        joiningDate: offerForm.joiningDate,
-      });
+      const payload = buildOfferPayload();
+      const savedOffer = selectedApplicant.jobOffer?.id
+        ? await updateJobOffer(selectedApplicant.jobOffer.id, payload)
+        : await createJobOffer(selectedApplicant.id, payload);
+      updateApplicantInState(selectedApplicant.id, { jobOffer: savedOffer });
       setShowOfferModal(false);
+      setShowOfferPreview(false);
       setSubmitted(false);
-      setOfferForm({ offeredSalary: '', joiningDate: '' });
-      loadData();
-    } catch (err) {
+      showToast('Offer draft saved.', 'success');
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to issue job offer');
+      setFormError(err?.response?.data?.error || 'Failed to save job offer draft');
     } finally {
       setSavingOffer(false);
+    }
+  };
+
+  const handleGenerateOfferPdf = async (offerId: string) => {
+    if (generatingOfferId) return;
+    setGeneratingOfferId(offerId);
+    try {
+      const offer = await generateJobOfferPdf(offerId);
+      if (selectedApplicant) updateApplicantInState(selectedApplicant.id, { jobOffer: offer });
+      showToast('Offer PDF generated.', 'success');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || 'Could not generate offer PDF.', 'error');
+    } finally {
+      setGeneratingOfferId(null);
+    }
+  };
+
+  const handleSendOffer = async (offerId: string) => {
+    if (sendingOfferId) return;
+    setSendingOfferId(offerId);
+    try {
+      const offer = await sendJobOffer(offerId);
+      if (selectedApplicant) updateApplicantInState(selectedApplicant.id, { jobOffer: offer });
+      showToast(offer.emailStatus === 'SENT' ? 'Offer sent to candidate.' : 'Offer email failed. You can resend it.', offer.emailStatus === 'SENT' ? 'success' : 'error');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || 'Could not send offer.', 'error');
+    } finally {
+      setSendingOfferId(null);
     }
   };
 
@@ -1028,11 +1182,35 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Annual Salary: ₹{selectedApplicant.jobOffer.offeredSalary.toLocaleString()}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Target Joining Date: {new Date(selectedApplicant.jobOffer.joiningDate).toLocaleDateString()}</div>
+                    {selectedApplicant.jobOffer.emailStatus === 'FAILED' && (
+                      <Banner tone="danger">Email delivery failed safely. The generated offer is preserved.</Banner>
+                    )}
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                      <Button size="sm" variant="ghost" onClick={() => { resetOfferForm(selectedApplicant); setShowOfferPreview(true); }}>
+                        View
+                      </Button>
+                      {selectedApplicant.jobOffer.status === 'DRAFT' && (
+                        <Button size="sm" loading={generatingOfferId === selectedApplicant.jobOffer.id} disabled={!!generatingOfferId} onClick={() => handleGenerateOfferPdf(selectedApplicant.jobOffer!.id)}>
+                          Generate PDF
+                        </Button>
+                      )}
+                      {['GENERATED', 'SENT', 'VIEWED'].includes(selectedApplicant.jobOffer.status) && (
+                        <Button size="sm" variant="warning" loading={sendingOfferId === selectedApplicant.jobOffer.id} disabled={!!sendingOfferId} onClick={() => handleSendOffer(selectedApplicant.jobOffer!.id)}>
+                          {selectedApplicant.jobOffer.status === 'GENERATED' ? 'Send Offer' : 'Resend'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ) : (
-                  <Button variant="warning" fullWidth onClick={() => { setSubmitted(false); setFormError(''); setShowOfferModal(true); }}>
-                    Extend Job Offer Letter
-                  </Button>
+                  selectedApplicant.stage === 'OFFER' ? (
+                    <Button variant="warning" fullWidth onClick={() => { resetOfferForm(selectedApplicant); setSubmitted(false); setFormError(''); setShowOfferModal(true); }}>
+                      Generate Offer Letter
+                    </Button>
+                  ) : (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--surface-sunken)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-subtle)' }}>
+                      Offer generation becomes available when the candidate reaches Offer Extended.
+                    </div>
+                  )
                 )}
               </div>
             </div>
@@ -1203,11 +1381,56 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               type="text"
               placeholder="e.g. 1200000"
               required
-              value={offerForm.offeredSalary}
-              onChange={v => setOfferForm({ ...offerForm, offeredSalary: v })}
+              value={offerForm.offeredCtc}
+              onChange={v => setOfferForm({ ...offerForm, offeredCtc: v })}
               validator={amount}
               restrict="digits"
               forceError={submitted}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.65rem' }}>
+              {[
+                ['basicSalary', 'Basic Salary'],
+                ['hra', 'HRA'],
+                ['specialAllowance', 'Special Allowance'],
+                ['otherAllowances', 'Other Allowances'],
+                ['variablePay', 'Variable Pay'],
+                ['joiningBonus', 'Joining Bonus'],
+              ].map(([key, label]) => (
+                <TextField
+                  key={key}
+                  label={label}
+                  type="text"
+                  value={(offerForm as any)[key]}
+                  onChange={v => setOfferForm({ ...offerForm, [key]: v })}
+                  restrict="digits"
+                />
+              ))}
+            </div>
+
+            <div style={{ fontSize: '0.72rem', color: salaryTotal && offeredCtcNumber && salaryTotal !== offeredCtcNumber ? 'var(--warning-fg)' : 'var(--text-muted)', margin: '0.4rem 0 0.75rem' }}>
+              Salary components total INR {salaryTotal.toLocaleString()} {salaryTotal && offeredCtcNumber && salaryTotal !== offeredCtcNumber ? 'and do not reconcile with offered CTC.' : ''}
+            </div>
+
+            <TextField
+              label="Work Location"
+              required
+              value={offerForm.workLocation}
+              onChange={v => setOfferForm({ ...offerForm, workLocation: v })}
+              validator={required('Work location')}
+              forceError={submitted}
+            />
+
+            <Select
+              label="Employment Type"
+              value={offerForm.employmentType}
+              onChange={v => setOfferForm({ ...offerForm, employmentType: v })}
+              options={[
+                { value: 'FULL_TIME', label: 'Full time' },
+                { value: 'PART_TIME', label: 'Part time' },
+                { value: 'CONTRACT', label: 'Contract' },
+                { value: 'INTERN', label: 'Intern' },
+              ]}
             />
 
             <div className="form-group">
@@ -1215,11 +1438,100 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               <input type="date" required value={offerForm.joiningDate} onChange={e => setOfferForm({ ...offerForm, joiningDate: e.target.value })} className="input-field" />
             </div>
 
+            <div className="form-group">
+              <label className="form-label">Offer Expiry Date</label>
+              <input type="date" required value={offerForm.offerExpiryDate} onChange={e => setOfferForm({ ...offerForm, offerExpiryDate: e.target.value })} className="input-field" />
+            </div>
+
+            <TextField
+              label="Reporting Manager"
+              required
+              value={offerForm.reportingManager}
+              onChange={v => setOfferForm({ ...offerForm, reportingManager: v })}
+              validator={personName('Reporting manager')}
+              forceError={submitted}
+            />
+
+            <TextField
+              label="Reporting Manager Designation"
+              value={offerForm.reportingManagerTitle}
+              onChange={v => setOfferForm({ ...offerForm, reportingManagerTitle: v })}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.65rem' }}>
+              <TextField label="Probation Period" value={offerForm.probationPeriod} onChange={v => setOfferForm({ ...offerForm, probationPeriod: v })} />
+              <TextField label="Notice Period" value={offerForm.noticePeriod} onChange={v => setOfferForm({ ...offerForm, noticePeriod: v })} />
+              <TextField label="Working Hours" value={offerForm.workingHours} onChange={v => setOfferForm({ ...offerForm, workingHours: v })} />
+            </div>
+
+            <Textarea
+              label="Additional Terms"
+              value={offerForm.additionalTerms}
+              onChange={v => setOfferForm({ ...offerForm, additionalTerms: v })}
+            />
+
+            <TextField
+              label="HR Signatory Name"
+              required
+              value={offerForm.signatoryName}
+              onChange={v => setOfferForm({ ...offerForm, signatoryName: v })}
+              validator={personName('HR signatory name')}
+              forceError={submitted}
+            />
+
+            <TextField
+              label="HR Signatory Designation"
+              required
+              value={offerForm.signatoryDesignation}
+              onChange={v => setOfferForm({ ...offerForm, signatoryDesignation: v })}
+              validator={required('HR signatory designation')}
+              forceError={submitted}
+            />
+
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <Button type="button" variant="ghost" onClick={() => setShowOfferModal(false)}>Cancel</Button>
-              <Button type="submit" variant="warning" loading={savingOffer}>Extend Offer Letter</Button>
+              <Button type="button" variant="ghost" onClick={() => setShowOfferPreview(true)}>Preview</Button>
+              <Button type="submit" variant="warning" loading={savingOffer}>Save Draft</Button>
             </div>
           </form>
+        </Modal>
+
+        <Modal
+          open={showOfferPreview}
+          onClose={() => setShowOfferPreview(false)}
+          title="Offer Letter Preview"
+          width={720}
+        >
+          <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '1rem', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>PID HCMS</div>
+                <div>{job.location}</div>
+              </div>
+              <div>{new Date().toLocaleDateString()}</div>
+            </div>
+            <div style={{ textAlign: 'center', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '1rem' }}>Offer of Employment</div>
+            <p>Dear {selectedApplicant?.fullName},</p>
+            <p>We are pleased to offer you the position of <strong>{job.title}</strong> in the {job.department.name} department.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem', margin: '1rem 0' }}>
+              <div><strong>Work Location:</strong> {offerForm.workLocation || job.location}</div>
+              <div><strong>Employment Type:</strong> {offerForm.employmentType}</div>
+              <div><strong>Joining Date:</strong> {offerForm.joiningDate || 'Not set'}</div>
+              <div><strong>Reporting Manager:</strong> {offerForm.reportingManager || 'Not set'}</div>
+              <div><strong>Offer Expiry:</strong> {offerForm.offerExpiryDate || 'Not set'}</div>
+              <div><strong>Offered CTC:</strong> INR {Number(offerForm.offeredCtc || 0).toLocaleString()}</div>
+            </div>
+            <p>This offer is subject to successful background verification, company policies, confidentiality obligations, and completion of required joining documentation.</p>
+            {offerForm.additionalTerms && <p>{offerForm.additionalTerms}</p>}
+            <div style={{ marginTop: '2rem' }}>
+              <strong>{offerForm.signatoryName || 'HR Signatory'}</strong><br />
+              {offerForm.signatoryDesignation || 'Designation'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+            <Button type="button" variant="ghost" onClick={() => setShowOfferPreview(false)}>Back to Edit</Button>
+            <Button type="button" variant="warning" onClick={handleCreateOffer as any} loading={savingOffer}>Save Draft</Button>
+          </div>
         </Modal>
 
         <ConfirmDialog

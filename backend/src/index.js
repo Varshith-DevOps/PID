@@ -45,6 +45,7 @@ const contactRoutes = require('./routes/contactRoutes');
 const platformAdminRoutes = require('./routes/platformAdminRoutes');
 const supportRoutes = require('./routes/supportRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const careerOfferRoutes = require('./routes/careerOfferRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const appUpdateRoutes = require('./routes/appUpdateRoutes');
 const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
@@ -145,6 +146,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/platform-admin', platformAdminRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/career', careerOfferRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/app', appUpdateRoutes);
 

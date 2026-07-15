@@ -845,16 +845,51 @@ model Interview {
 }
 
 model JobOffer {
-  id            String       @id @default(uuid())
-  applicant     JobApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
-  applicantId   String       @unique
-  offeredSalary Float
-  joiningDate   DateTime
-  status        String       @default("SENT") // DRAFT, SENT, ACCEPTED, DECLINED
-  offerLetter   String? // Generated PDF path
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                    String       @id @default(uuid())
+  applicant             JobApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  applicantId           String       @unique
+  offeredSalary         Float
+  offeredCtc            Decimal?
+  basicSalary           Decimal?
+  hra                   Decimal?
+  specialAllowance      Decimal?
+  otherAllowances       Decimal?
+  variablePay           Decimal?
+  joiningBonus          Decimal?
+  workLocation          String?
+  employmentType        String?
+  joiningDate           DateTime
+  probationPeriod       String?
+  noticePeriod          String?
+  reportingManager      String?
+  reportingManagerTitle String?
+  workingHours          String?
+  offerExpiryDate       DateTime?
+  additionalTerms       String?
+  signatoryName         String?
+  signatoryDesignation  String?
+  status                String       @default("DRAFT") // DRAFT, GENERATED, SENT, VIEWED, ACCEPTED, REJECTED, EXPIRED, CANCELLED
+  offerLetter           String?
+  pdfFileName           String?
+  pdfStorageKey         String?
+  publicTokenHash       String?
+  tokenExpiresAt        DateTime?
+  sentAt                DateTime?
+  viewedAt              DateTime?
+  acceptedAt            DateTime?
+  rejectedAt            DateTime?
+  cancelledAt           DateTime?
+  candidateResponseName String?
+  rejectionReason       String?
+  emailStatus           String?
+  emailFailureReason    String?
+  createdBy             String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
+  @@index([applicantId])
+  @@index([status])
+  @@index([publicTokenHash])
   @@map("job_offers")
 }
 

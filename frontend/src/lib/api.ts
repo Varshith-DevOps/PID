@@ -920,13 +920,62 @@ export const submitInterviewFeedback = async (id: string, feedback: { feedback: 
   return data;
 };
 
-export const createJobOffer = async (offer: { applicantId: string; offeredSalary: number; joiningDate: string }) => {
-  const { data } = await api.post('/recruitment/offers', offer);
+export interface JobOfferPayload {
+  applicantId?: string;
+  offeredCtc: number;
+  basicSalary?: number | null;
+  hra?: number | null;
+  specialAllowance?: number | null;
+  otherAllowances?: number | null;
+  variablePay?: number | null;
+  joiningBonus?: number | null;
+  workLocation: string;
+  employmentType: string;
+  joiningDate: string;
+  probationPeriod?: string;
+  noticePeriod?: string;
+  reportingManager: string;
+  reportingManagerTitle?: string;
+  workingHours?: string;
+  offerExpiryDate: string;
+  additionalTerms?: string;
+  signatoryName: string;
+  signatoryDesignation: string;
+  updatedAt?: string;
+}
+
+export const getApplicantOffers = async (applicantId: string) => {
+  const { data } = await api.get(`/recruitment/applicants/${applicantId}/offers`);
+  return data;
+};
+
+export const createJobOffer = async (applicantId: string, offer: JobOfferPayload) => {
+  const { data } = await api.post(`/recruitment/applicants/${applicantId}/offers`, offer);
+  return data;
+};
+
+export const updateJobOffer = async (offerId: string, offer: JobOfferPayload) => {
+  const { data } = await api.patch(`/recruitment/offers/${offerId}`, offer);
+  return data;
+};
+
+export const generateJobOfferPdf = async (offerId: string) => {
+  const { data } = await api.post(`/recruitment/offers/${offerId}/generate`);
+  return data;
+};
+
+export const sendJobOffer = async (offerId: string) => {
+  const { data } = await api.post(`/recruitment/offers/${offerId}/send`);
+  return data;
+};
+
+export const cancelJobOffer = async (offerId: string) => {
+  const { data } = await api.post(`/recruitment/offers/${offerId}/cancel`);
   return data;
 };
 
 export const downloadOfferLetterPDF = async (offerId: string, fullName: string) => {
-  const response = await api.get(`/recruitment/offers/${offerId}/pdf`, { responseType: 'blob' });
+  const response = await api.get(`/recruitment/offers/${offerId}/download`, { responseType: 'blob' });
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement('a');
   link.href = url;
@@ -935,6 +984,33 @@ export const downloadOfferLetterPDF = async (offerId: string, fullName: string) 
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+};
+
+export const getPublicOffer = async (token: string) => {
+  const { data } = await api.get(`/career/offers/${token}`);
+  return data;
+};
+
+export const downloadPublicOfferPDF = async (token: string, fileName = 'offer-letter.pdf') => {
+  const response = await api.get(`/career/offers/${token}/download`, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', fileName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const acceptPublicOffer = async (token: string, payload: { acceptedTerms: boolean; candidateName?: string }) => {
+  const { data } = await api.post(`/career/offers/${token}/accept`, payload);
+  return data;
+};
+
+export const rejectPublicOffer = async (token: string, payload: { reason?: string }) => {
+  const { data } = await api.post(`/career/offers/${token}/reject`, payload);
+  return data;
 };
 
 export const getKras = async (employeeId?: string) => {
