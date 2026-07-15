@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import { getEmployees, getDepartments, createEmployee, getShiftTypes } from '@/lib/api';
@@ -16,6 +16,7 @@ import type { Column } from '@/components/ui';
 interface Employee {
   id: string; employeeId: string; firstName: string; lastName: string; email: string;
   jobTitle: string; department: { id: string; name: string }; photoUrl?: string; accountStage?: string; joinDate?: string;
+  isActive?: boolean;
   [key: string]: unknown;
 }
 
@@ -37,7 +38,9 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
 
   // Add Employee Form States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -55,23 +58,33 @@ export default function EmployeesPage() {
     shiftTypeId: '',
   });
 
-  useEffect(() => { if (!authLoading && !user) router.push('/'); }, [user, authLoading]);
-  useEffect(() => { if (user) loadData(); }, [user, search, selectedDepartment]);
-
-  const loadData = async () => {
-    setLoading(true);
-    setError(false);
+  const loadMasterData = useCallback(async () => {
     try {
-      const [empData, deptData, shiftsData] = await Promise.all([
-        getEmployees({ search, departmentId: selectedDepartment }),
+      const [deptData, shiftsData] = await Promise.all([
         getDepartments(),
         getShiftTypes(),
       ]);
-      setEmployees(empData.employees);
       setDepartments(deptData);
       setShiftTypes(shiftsData || []);
+    } catch (err) { console.error(err); }
+  }, []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const empData = await getEmployees({ search: debouncedSearch, departmentId: selectedDepartment, status: statusFilter });
+      setEmployees(empData.employees);
     } catch (err) { console.error(err); setError(true); } finally { setLoading(false); }
-  };
+  }, [debouncedSearch, selectedDepartment, statusFilter]);
+
+  useEffect(() => { if (!authLoading && !user) router.push('/'); }, [user, authLoading, router]);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(id);
+  }, [search]);
+  useEffect(() => { if (user) loadMasterData(); }, [user, loadMasterData]);
+  useEffect(() => { if (user) loadData(); }, [user, loadData]);
 
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,9 +139,19 @@ export default function EmployeesPage() {
     }
   };
 
-  if (authLoading || !user) return <LoadingBlock />;
+  if (authLoading || !user) {
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/employees" />
+        <main className="main-content">
+          <LoadingBlock label="Loading employees..." />
+        </main>
+      </div>
+    );
+  }
 
   const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+  const canViewInactive = ['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR'].includes(user.role || '');
 
   const columns: Column<Employee>[] = [
     {
@@ -167,6 +190,12 @@ export default function EmployeesPage() {
       width: 160,
       render: (emp) => emp.department?.name ? <Badge tone="info">{emp.department.name}</Badge> : <span style={{ color: 'var(--text-muted)' }}>—</span>,
     },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 110,
+      render: (emp) => <Badge tone={emp.isActive === false ? 'danger' : 'success'}>{emp.isActive === false ? 'INACTIVE' : 'ACTIVE'}</Badge>,
+    },
   ];
 
   return (
@@ -196,6 +225,18 @@ export default function EmployeesPage() {
               ...departments.map((d: any) => ({ value: d.id, label: d.name })),
             ]}
           />
+          {canViewInactive && (
+            <FilterSelect
+              ariaLabel="Filter by employee status"
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as 'active' | 'inactive' | 'all')}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+                { value: 'all', label: 'All Employees' },
+              ]}
+            />
+          )}
         </FilterBar>
 
         {/* Employee directory */}

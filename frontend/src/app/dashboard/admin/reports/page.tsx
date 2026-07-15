@@ -279,7 +279,14 @@ export default function ReportsDashboard() {
   };
 
   if (authLoading || !user) {
-    return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/dashboard/admin/reports" />
+        <main className="main-content">
+          <Card padded><SkeletonTable rows={3} cols={4} /></Card>
+        </main>
+      </div>
+    );
   }
 
   const summary = center?.summary || {};

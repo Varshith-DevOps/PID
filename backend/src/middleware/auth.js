@@ -45,7 +45,7 @@ const authenticate = async (req, res, next) => {
     });
 
     if (!user || !user.isActive) {
-      return res.status(403).json({ error: 'Access denied. Account inactive.' });
+      return res.status(403).json({ error: 'Your account has been deactivated. Contact HR.' });
     }
 
     // Token revocation: a token is invalid once the user's tokenVersion advances

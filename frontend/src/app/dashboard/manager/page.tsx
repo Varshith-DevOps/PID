@@ -69,7 +69,17 @@ export default function ManagerDashboard() {
     }
   };
 
-  if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
+  if (authLoading || !user) {
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/dashboard/manager" />
+        <main className="main-content">
+          <Skeleton height={28} width="30%" />
+          <Skeleton height={14} width="55%" style={{ marginTop: '0.75rem' }} />
+        </main>
+      </div>
+    );
+  }
 
   const workloadData = dashboard?.teamWorkload || [];
 

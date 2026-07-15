@@ -7,7 +7,128 @@
 
 const prisma = require('../config/database');
 const { generatePayslipPDF } = require('../services/pdfService'); // We will reuse or create PDF helpers
+const { deliverInterviewScheduledEmail } = require('../services/interviewEmailService');
 const PDFDocument = require('pdfkit');
+
+const APPLICANT_SOURCES = new Set(['MANUAL', 'SOCIAL_MEDIA', 'CAREER_PORTAL']);
+const NOTICE_PERIODS = new Set([
+  'Immediate',
+  '15 Days',
+  '30 Days',
+  '45 Days',
+  '60 Days',
+  '90 Days',
+  'More than 90 Days',
+]);
+const ACTIVE_APPLICANT_STAGE_ORDER = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'ONBOARDING'];
+const TERMINAL_APPLICANT_STAGE = 'REJECTED';
+
+const cleanText = (value) => {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || null;
+};
+
+const hasNegativeAmount = (value) => /^\s*-/.test(String(value ?? '')) || /-\s*\d/.test(String(value ?? ''));
+
+const validateCareerPortalCompensation = ({ currentCtc, expectedCtc, noticePeriod }) => {
+  if (!currentCtc) return 'Current CTC is required.';
+  if (!expectedCtc) return 'Expected CTC is required.';
+  if (hasNegativeAmount(currentCtc)) return 'Current CTC cannot be negative.';
+  if (hasNegativeAmount(expectedCtc)) return 'Expected CTC cannot be negative.';
+  if (!noticePeriod) return 'Notice Period is required.';
+  if (!NOTICE_PERIODS.has(noticePeriod)) return 'Select a valid Notice Period.';
+  return null;
+};
+
+const getAllowedApplicantStageTransitions = (currentStage) => {
+  if (currentStage === 'ONBOARDING' || currentStage === TERMINAL_APPLICANT_STAGE) return [];
+  const currentIndex = ACTIVE_APPLICANT_STAGE_ORDER.indexOf(currentStage);
+  if (currentIndex === -1) return [];
+
+  return [...ACTIVE_APPLICANT_STAGE_ORDER.slice(currentIndex + 1), TERMINAL_APPLICANT_STAGE];
+};
+
+const validateApplicantStageTransition = (currentStage, requestedStage) => {
+  if (currentStage === requestedStage) return 'Candidate can only move forward in the recruitment pipeline.';
+  const allowedStages = getAllowedApplicantStageTransitions(currentStage);
+  if (allowedStages.includes(requestedStage)) return null;
+
+  return 'Candidate can only move forward in the recruitment pipeline.';
+};
+
+const validateInterviewSchedulingStage = (stage) => {
+  if (stage !== 'INTERVIEW') return 'Interview rounds can only be scheduled when the candidate is in the Interviews stage.';
+  return null;
+};
+
+const parseFutureDate = (value) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) || parsed <= new Date()) return null;
+  return parsed;
+};
+
+const INTERVIEW_MODES = new Set(['ONLINE', 'IN_PERSON', 'PHONE']);
+
+const normalizeInterviewDetails = ({ interviewMode, meetingLink, location, instructions }) => {
+  const mode = String(interviewMode || 'ONLINE').trim().toUpperCase();
+  const link = cleanText(meetingLink);
+  const place = cleanText(location);
+  const notes = cleanText(instructions);
+
+  if (!INTERVIEW_MODES.has(mode)) return { error: 'Select a valid interview mode.' };
+  if (mode === 'ONLINE' && !link) return { error: 'Meeting link is required for online interviews.' };
+  if (mode === 'IN_PERSON' && !place) return { error: 'Location is required for in-person interviews.' };
+
+  return {
+    interviewMode: mode,
+    meetingLink: link,
+    location: place,
+    instructions: notes,
+  };
+};
+
+const interviewResponseMessage = (emailStatus) => emailStatus === 'SENT'
+  ? 'Interview scheduled and email sent successfully.'
+  : 'Interview scheduled, but the email could not be delivered.';
+
+const formatCandidateReview = (review) => ({
+  id: review.id,
+  reviewerName: review.reviewerName,
+  reviewerRole: review.reviewerRole,
+  rating: review.rating,
+  reviewText: review.reviewText,
+  candidateStage: review.candidateStage,
+  reviewType: review.reviewType || 'GENERAL_REVIEW',
+  interviewRoundId: review.interviewRoundId || null,
+  interviewRoundName: review.interviewRoundName || null,
+  createdAt: review.createdAt,
+  updatedAt: review.updatedAt,
+});
+
+const formatInterviewFeedbackReview = (interview) => ({
+  id: `interview-${interview.id}`,
+  reviewerName: interview.interviewerName,
+  reviewerRole: 'Interviewer',
+  rating: interview.rating,
+  reviewText: interview.feedback,
+  candidateStage: 'INTERVIEW',
+  reviewType: 'INTERVIEW_FEEDBACK',
+  interviewRoundId: interview.id,
+  interviewRoundName: interview.roundName,
+  createdAt: interview.updatedAt || interview.createdAt,
+  updatedAt: interview.updatedAt,
+});
+
+const careerConnectJobSelect = {
+  id: true,
+  title: true,
+  location: true,
+  employmentType: true,
+  salaryRange: true,
+  status: true,
+  createdAt: true,
+  department: { select: { id: true, name: true } },
+};
 
 // ──── Job Openings ─────────────────────────────────────────────────────────
 
@@ -30,6 +151,62 @@ const getJobOpenings = async (req, res) => {
   } catch (error) {
     console.error('[GET JOB OPENINGS ERROR]:', error.message);
     res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * List active organization jobs for Career Connect.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+const getCareerConnectJobs = async (req, res) => {
+  try {
+    const jobs = await prisma.jobOpening.findMany({
+      where: {
+        status: { in: ['OPEN', 'DRAFT'] },
+        ...(req.user?.companyId ? { companyId: req.user.companyId } : {}),
+      },
+      select: careerConnectJobSelect,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(jobs);
+  } catch (error) {
+    console.error('[GET CAREER CONNECT JOBS ERROR]:', error.message);
+    res.status(500).json({ error: 'Unable to load organization career portal jobs.' });
+  }
+};
+
+/**
+ * Get a single active job for the organization career portal application page.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+const getCareerPortalJobById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const job = await prisma.jobOpening.findFirst({
+      where: {
+        id,
+        status: { in: ['OPEN', 'DRAFT'] },
+      },
+      select: {
+        ...careerConnectJobSelect,
+        description: true,
+        requirements: true,
+      },
+    });
+
+    if (!job) {
+      return res.status(404).json({ error: 'Job opening not found' });
+    }
+
+    res.json(job);
+  } catch (error) {
+    console.error('[GET CAREER PORTAL JOB ERROR]:', error.message);
+    res.status(500).json({ error: 'Unable to load career portal job.' });
   }
 };
 
@@ -198,28 +375,51 @@ const getApplicants = async (req, res) => {
  */
 const applyForJob = async (req, res) => {
   try {
-    const { jobOpeningId, fullName, email, phone, coverLetter } = req.body;
+    const { jobOpeningId, fullName, email, phone, coverLetter, experience, skills, source } = req.body;
 
-    if (!jobOpeningId || !fullName || !email || !phone) {
+    const applicantSource = source ? String(source).trim().toUpperCase() : 'CAREER_PORTAL';
+    if (!APPLICANT_SOURCES.has(applicantSource)) {
+      return res.status(400).json({ error: 'Invalid applicant source' });
+    }
+
+    const normalized = {
+      jobOpeningId: cleanText(jobOpeningId),
+      fullName: cleanText(fullName),
+      email: cleanText(email),
+      phone: cleanText(phone),
+      coverLetter: cleanText(coverLetter),
+      experience: cleanText(experience),
+      skills: cleanText(skills),
+      currentCtc: cleanText(req.body.currentCtc),
+      expectedCtc: cleanText(req.body.expectedCtc),
+      noticePeriod: cleanText(req.body.noticePeriod),
+    };
+
+    if (!normalized.jobOpeningId || !normalized.fullName || !normalized.email || !normalized.phone) {
       return res.status(400).json({ error: 'Required applicant details missing' });
     }
 
+    if (applicantSource === 'CAREER_PORTAL') {
+      const validationError = validateCareerPortalCompensation(normalized);
+      if (validationError) return res.status(400).json({ error: validationError });
+    }
+
     const job = await prisma.jobOpening.findUnique({
-      where: { id: jobOpeningId },
+      where: { id: normalized.jobOpeningId },
       select: { id: true, status: true },
     });
     if (!job) return res.status(404).json({ error: 'Job opening not found' });
-    if (job.status !== 'OPEN') {
+    if (!['OPEN', 'DRAFT'].includes(job.status)) {
       return res.status(400).json({ error: 'This job opening is not accepting applications.' });
     }
 
     // Check for duplicate applicant for this specific job opening by email or phone number
     const existingApplicant = await prisma.jobApplicant.findFirst({
       where: {
-        jobOpeningId,
+        jobOpeningId: normalized.jobOpeningId,
         OR: [
-          { email: email },
-          { phone: phone }
+          { email: normalized.email },
+          { phone: normalized.phone }
         ]
       }
     });
@@ -235,12 +435,18 @@ const applyForJob = async (req, res) => {
 
     const applicant = await prisma.jobApplicant.create({
       data: {
-        jobOpeningId,
-        fullName,
-        email,
-        phone,
-        coverLetter,
+        jobOpeningId: normalized.jobOpeningId,
+        fullName: normalized.fullName,
+        email: normalized.email,
+        phone: normalized.phone,
+        coverLetter: normalized.coverLetter,
         resumeUrl,
+        experience: normalized.experience,
+        skills: normalized.skills,
+        currentCtc: normalized.currentCtc,
+        expectedCtc: normalized.expectedCtc,
+        noticePeriod: normalized.noticePeriod,
+        source: applicantSource,
         stage: 'APPLIED',
       },
     });
@@ -263,17 +469,33 @@ const updateApplicantStage = async (req, res) => {
     const { id } = req.params;
     const { stage, rating, notes } = req.body;
 
+    const existingApplicant = await prisma.jobApplicant.findUnique({
+      where: { id },
+      select: { id: true, stage: true },
+    });
+    if (!existingApplicant) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    const requestedStage = stage || existingApplicant.stage;
+    const isMetadataOnlyUpdate = requestedStage === existingApplicant.stage
+      && (Object.prototype.hasOwnProperty.call(req.body, 'rating') || Object.prototype.hasOwnProperty.call(req.body, 'notes'));
+    const transitionError = isMetadataOnlyUpdate ? null : validateApplicantStageTransition(existingApplicant.stage, requestedStage);
+    if (transitionError) {
+      return res.status(400).json({ error: transitionError });
+    }
+
     const applicant = await prisma.jobApplicant.update({
       where: { id },
-      data: { stage, rating, notes },
+      data: { stage: requestedStage, rating, notes },
     });
 
     // ──── AUTOMATION: Recruitment → Onboarding Pipeline ────
-    // When a candidate is HIRED, automatically:
+    // When a candidate reaches ONBOARDING, automatically:
     //   1. Create an Employee record with accountStage = 'ONBOARDING'
     //   2. Create a linked User account  
     //   3. Auto-instantiate the first matching ONBOARDING checklist template
-    if (stage === 'HIRED') {
+    if (existingApplicant.stage !== 'ONBOARDING' && requestedStage === 'ONBOARDING') {
       const fullApplicant = await prisma.jobApplicant.findUnique({
         where: { id },
         include: {
@@ -375,6 +597,201 @@ const updateApplicantStage = async (req, res) => {
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  */
+const updateApplicantEvaluation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, reviewNotes, notes, updatedAt } = req.body;
+
+    const existingApplicant = await prisma.jobApplicant.findUnique({
+      where: { id },
+      select: { id: true, rating: true, notes: true, stage: true, updatedAt: true },
+    });
+    if (!existingApplicant) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    if (updatedAt && new Date(updatedAt).getTime() !== existingApplicant.updatedAt.getTime()) {
+      return res.status(409).json({ error: 'This record was updated by another user. Refresh before saving.' });
+    }
+
+    const nextNotes = String(reviewNotes ?? notes ?? '').trim();
+    if (nextNotes.length > 5000) {
+      return res.status(400).json({ error: 'Review notes cannot exceed 5000 characters.' });
+    }
+
+    const nextRating = rating === undefined || rating === null || rating === ''
+      ? null
+      : Number(rating);
+    if (nextRating !== null && (!Number.isInteger(nextRating) || nextRating < 0 || nextRating > 5)) {
+      return res.status(400).json({ error: 'Rating must be a whole number between 0 and 5.' });
+    }
+
+    const applicant = await prisma.jobApplicant.update({
+      where: { id },
+      data: {
+        rating: nextRating,
+        notes: nextNotes,
+      },
+      select: {
+        id: true,
+        rating: true,
+        notes: true,
+        stage: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      candidate: {
+        ...applicant,
+        reviewNotes: applicant.notes,
+      },
+    });
+  } catch (error) {
+    console.error('[UPDATE APPLICANT EVALUATION ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const getApplicantReviews = async (req, res) => {
+  try {
+    const { applicantId } = req.params;
+    const applicant = await prisma.jobApplicant.findUnique({
+      where: { id: applicantId },
+      select: {
+        id: true,
+        rating: true,
+        notes: true,
+        stage: true,
+        updatedAt: true,
+        reviews: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        interviews: {
+          where: {
+            feedback: { not: null },
+          },
+          select: {
+            id: true,
+            interviewerName: true,
+            roundName: true,
+            feedback: true,
+            rating: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!applicant) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    const reviews = applicant.reviews.map(formatCandidateReview);
+    const interviewReviews = applicant.interviews
+      .filter((interview) => interview.feedback)
+      .map(formatInterviewFeedbackReview);
+    const legacyReviews = reviews.length === 0 && (applicant.notes || applicant.rating)
+      ? [{
+          id: `legacy-${applicant.id}`,
+          reviewerName: 'Legacy review',
+          reviewerRole: 'Recruitment',
+          rating: applicant.rating || 0,
+          reviewText: applicant.notes || '',
+          candidateStage: applicant.stage,
+          reviewType: 'LEGACY_REVIEW',
+          interviewRoundId: null,
+          interviewRoundName: null,
+          createdAt: applicant.updatedAt,
+          updatedAt: applicant.updatedAt,
+        }]
+      : [];
+
+    const combined = [...reviews, ...interviewReviews, ...legacyReviews]
+      .filter((review) => review.reviewText || review.rating)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({ success: true, reviews: combined });
+  } catch (error) {
+    console.error('[GET APPLICANT REVIEWS ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const createApplicantReview = async (req, res) => {
+  try {
+    const { applicantId } = req.params;
+    const { rating, reviewText, interviewRoundId } = req.body;
+    const parsedRating = Number(rating);
+    const text = String(reviewText ?? '').trim();
+
+    if (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+      return res.status(400).json({ error: 'Rating must be between 1 and 5.' });
+    }
+    if (!text) {
+      return res.status(400).json({ error: 'Review text is required.' });
+    }
+    if (text.length > 5000) {
+      return res.status(400).json({ error: 'Review text cannot exceed 5000 characters.' });
+    }
+
+    const applicant = await prisma.jobApplicant.findUnique({
+      where: { id: applicantId },
+      select: { id: true, stage: true },
+    });
+    if (!applicant) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    let interviewRoundName = null;
+    if (interviewRoundId) {
+      const interview = await prisma.interview.findFirst({
+        where: { id: interviewRoundId, applicantId },
+        select: { roundName: true },
+      });
+      if (!interview) {
+        return res.status(400).json({ error: 'Interview round does not belong to this candidate.' });
+      }
+      interviewRoundName = interview.roundName;
+    }
+
+    const reviewer = req.user?.id
+      ? await prisma.user.findUnique({
+          where: { id: req.user.id },
+          select: { id: true, name: true, role: true },
+        })
+      : null;
+
+    const review = await prisma.candidateReview.create({
+      data: {
+        applicantId,
+        reviewerId: reviewer?.id || req.user?.id || null,
+        reviewerName: reviewer?.name || req.user?.email || 'Unknown user',
+        reviewerRole: reviewer?.role || req.user?.role || null,
+        rating: parsedRating,
+        reviewText: text,
+        candidateStage: applicant.stage,
+        reviewType: interviewRoundId ? 'INTERVIEW_FEEDBACK' : 'GENERAL_REVIEW',
+        interviewRoundId: interviewRoundId || null,
+        interviewRoundName,
+      },
+    });
+
+    await prisma.jobApplicant.update({
+      where: { id: applicantId },
+      data: { rating: parsedRating, notes: text },
+    });
+
+    res.status(201).json({ success: true, review: formatCandidateReview(review) });
+  } catch (error) {
+    console.error('[CREATE APPLICANT REVIEW ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 const scheduleInterview = async (req, res) => {
   try {
     const { applicantId, interviewerName, interviewDate, roundName } = req.body;
@@ -383,25 +800,91 @@ const scheduleInterview = async (req, res) => {
       return res.status(400).json({ error: 'Required fields missing' });
     }
 
-    const interview = await prisma.interview.create({
-      data: {
-        applicantId,
-        interviewerName,
-        interviewDate: new Date(interviewDate),
-        roundName,
-        status: 'SCHEDULED',
-      },
+    const scheduledAt = parseFutureDate(interviewDate);
+    if (!scheduledAt) {
+      return res.status(400).json({ error: 'Please select a future interview date and time.' });
+    }
+
+    const interviewDetails = normalizeInterviewDetails(req.body);
+    if (interviewDetails.error) {
+      return res.status(400).json({ error: interviewDetails.error });
+    }
+
+    const interview = await prisma.$transaction(async (tx) => {
+      const applicant = await tx.jobApplicant.findUnique({
+        where: { id: applicantId },
+        select: { id: true, stage: true },
+      });
+      if (!applicant) {
+        const error = new Error('Candidate not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const schedulingError = validateInterviewSchedulingStage(applicant.stage);
+      if (schedulingError) {
+        const error = new Error(schedulingError);
+        error.statusCode = 400;
+        error.payload = { success: false, message: schedulingError };
+        throw error;
+      }
+
+      const createdInterview = await tx.interview.create({
+        data: {
+          applicantId,
+          interviewerName: String(interviewerName).trim(),
+          interviewDate: scheduledAt,
+          roundName: String(roundName).trim(),
+          interviewMode: interviewDetails.interviewMode,
+          meetingLink: interviewDetails.meetingLink,
+          location: interviewDetails.location,
+          instructions: interviewDetails.instructions,
+          emailStatus: 'PENDING',
+          status: 'SCHEDULED',
+        },
+      });
+
+      return createdInterview;
     });
 
-    // Automatically transition applicant stage to 'INTERVIEW'
-    await prisma.jobApplicant.update({
-      where: { id: applicantId },
-      data: { stage: 'INTERVIEW' },
-    });
+    const delivery = await deliverInterviewScheduledEmail(prisma, interview.id);
 
-    res.status(201).json(interview);
+    res.status(201).json({
+      success: true,
+      message: interviewResponseMessage(delivery.emailStatus),
+      emailStatus: delivery.emailStatus,
+      interview: delivery.interview,
+    });
   } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json(error.payload || { error: error.message });
     console.error('[SCHEDULE INTERVIEW ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const resendInterviewEmail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.interview.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Interview round not found.' });
+
+    await prisma.interview.update({
+      where: { id },
+      data: { emailStatus: 'PENDING', emailFailureReason: null },
+    });
+
+    const delivery = await deliverInterviewScheduledEmail(prisma, id);
+    res.json({
+      success: true,
+      message: delivery.emailStatus === 'SENT'
+        ? 'Interview email resent successfully.'
+        : 'Interview email could not be resent.',
+      emailStatus: delivery.emailStatus,
+      interview: delivery.interview,
+    });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
+    console.error('[RESEND INTERVIEW EMAIL ERROR]:', error.message);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -448,6 +931,14 @@ const createJobOffer = async (req, res) => {
     if (!applicantId || !offeredSalary || !joiningDate) {
       return res.status(400).json({ error: 'Required offer details missing' });
     }
+
+    const applicant = await prisma.jobApplicant.findUnique({
+      where: { id: applicantId },
+      select: { id: true, stage: true },
+    });
+    if (!applicant) return res.status(404).json({ error: 'Candidate not found' });
+    const transitionError = validateApplicantStageTransition(applicant.stage, 'OFFER');
+    if (transitionError) return res.status(400).json({ error: transitionError });
 
     const joinDateTime = new Date(joiningDate);
     const today = new Date();
@@ -545,6 +1036,8 @@ const downloadOfferLetter = async (req, res) => {
 
 module.exports = {
   getJobOpenings,
+  getCareerConnectJobs,
+  getCareerPortalJobById,
   getJobOpeningById,
   createJobOpening,
   updateJobOpening,
@@ -552,7 +1045,11 @@ module.exports = {
   getApplicants,
   applyForJob,
   updateApplicantStage,
+  updateApplicantEvaluation,
+  getApplicantReviews,
+  createApplicantReview,
   scheduleInterview,
+  resendInterviewEmail,
   submitInterviewFeedback,
   createJobOffer,
   downloadOfferLetter,

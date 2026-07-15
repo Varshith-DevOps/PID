@@ -126,11 +126,15 @@ api.interceptors.response.use(
 // shared module cache on the server would leak data across users), short-lived,
 // and fully invalidated after any mutation so the user never sees stale writes.
 const GET_CACHE = new Map<string, { ts: number; response: any }>();
-const CACHE_TTL_MS = 12000;
+const GET_IN_FLIGHT = new Map<string, Promise<any>>();
+const CACHE_TTL_MS = 30000;
 // Session/live endpoints that must always hit the network.
 const CACHE_SKIP = ['/auth/', '/notifications'];
 
-export function clearApiCache() { GET_CACHE.clear(); }
+export function clearApiCache() {
+  GET_CACHE.clear();
+  GET_IN_FLIGHT.clear();
+}
 
 function cacheKeyOf(config: any): string {
   const h = config.headers || {};
@@ -157,9 +161,20 @@ api.defaults.adapter = async (config: any) => {
       const data = typeof structuredClone === 'function' ? structuredClone(hit.response.data) : hit.response.data;
       return { ...hit.response, data, config, request: {}, cached: true };
     }
-    const res = await baseAdapter(config);
-    GET_CACHE.set(key, { ts: Date.now(), response: { ...res, config: undefined, request: undefined } });
-    return res;
+    const pending = GET_IN_FLIGHT.get(key);
+    if (pending) {
+      const res = await pending;
+      const data = typeof structuredClone === 'function' ? structuredClone(res.data) : res.data;
+      return { ...res, data, config, request: {}, cached: true };
+    }
+    const request = baseAdapter(config)
+      .then((res) => {
+        GET_CACHE.set(key, { ts: Date.now(), response: { ...res, config: undefined, request: undefined } });
+        return res;
+      })
+      .finally(() => GET_IN_FLIGHT.delete(key));
+    GET_IN_FLIGHT.set(key, request);
+    return request;
   }
 
   const res = await baseAdapter(config);
@@ -233,7 +248,7 @@ export const resetPermissions = async (userId: string) => {
   return data;
 };
 
-export const getEmployees = async (params?: { departmentId?: string; search?: string; page?: number; limit?: number; gender?: string; location?: string }) => {
+export const getEmployees = async (params?: { departmentId?: string; search?: string; page?: number; limit?: number; gender?: string; location?: string; status?: 'active' | 'inactive' | 'all' }) => {
   const { data } = await api.get('/employees', { params });
   return data;
 };
@@ -260,6 +275,16 @@ export const updateEmployeeAccountStage = async (id: string, accountStage: strin
 
 export const deleteEmployee = async (id: string) => {
   const { data } = await api.delete(`/employees/${id}`);
+  return data;
+};
+
+export const deactivateEmployee = async (id: string, payload: { reason: string; effectiveDate: string; remarks?: string; confirmation: string }) => {
+  const { data } = await api.patch(`/employees/${id}/deactivate`, payload);
+  return data;
+};
+
+export const reactivateEmployee = async (id: string, payload?: { remarks?: string }) => {
+  const { data } = await api.patch(`/employees/${id}/reactivate`, payload || {});
   return data;
 };
 
@@ -834,6 +859,16 @@ export const getApplicants = async (params?: { jobOpeningId?: string; stage?: st
   return data;
 };
 
+export const getCareerConnectJobs = async () => {
+  const { data } = await api.get('/recruitment/career-connect/jobs');
+  return data;
+};
+
+export const getCareerPortalJobById = async (id: string) => {
+  const { data } = await api.get(`/recruitment/career-portal/jobs/${id}`);
+  return data;
+};
+
 export const applyForJob = async (formData: FormData) => {
   const { data } = await api.post('/recruitment/applicants', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -846,8 +881,37 @@ export const updateApplicantStage = async (id: string, payload: { stage: string;
   return data;
 };
 
-export const scheduleInterview = async (interview: { applicantId: string; interviewerName: string; interviewDate: string; roundName: string }) => {
+export const updateApplicantEvaluation = async (id: string, payload: { rating: number | null; reviewNotes: string; updatedAt?: string }) => {
+  const { data } = await api.patch(`/recruitment/applicants/${id}/evaluation`, payload);
+  return data;
+};
+
+export const getApplicantReviews = async (applicantId: string) => {
+  const { data } = await api.get(`/recruitment/applicants/${applicantId}/reviews`);
+  return data;
+};
+
+export const createApplicantReview = async (applicantId: string, payload: { rating: number; reviewText: string; interviewRoundId?: string | null }) => {
+  const { data } = await api.post(`/recruitment/applicants/${applicantId}/reviews`, payload);
+  return data;
+};
+
+export const scheduleInterview = async (interview: {
+  applicantId: string;
+  interviewerName: string;
+  interviewDate: string;
+  roundName: string;
+  interviewMode?: string;
+  meetingLink?: string;
+  location?: string;
+  instructions?: string;
+}) => {
   const { data } = await api.post('/recruitment/interviews', interview);
+  return data;
+};
+
+export const resendInterviewEmail = async (id: string) => {
+  const { data } = await api.post(`/recruitment/interviews/${id}/resend-email`);
   return data;
 };
 

@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
-import { getJobOpenings, createJobOpening, getDepartments } from '@/lib/api';
+import {
+  getJobOpenings,
+  createJobOpening,
+  getDepartments,
+  getCareerConnectJobs,
+} from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import { validateForm, required } from '@/lib/validators';
 import {
@@ -30,6 +35,9 @@ interface Job {
   location: string;
   employmentType: string;
   salaryRange?: string;
+  openings?: number;
+  numberOfOpenings?: number;
+  vacancies?: number;
   status: string;
   createdAt: string;
   _count: { applicants: number };
@@ -69,6 +77,10 @@ export default function RecruitmentDashboard() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [showCareerConnect, setShowCareerConnect] = useState(false);
+  const [careerConnectJobs, setCareerConnectJobs] = useState<Job[]>([]);
+  const [careerConnectLoading, setCareerConnectLoading] = useState(false);
+  const [careerConnectError, setCareerConnectError] = useState('');
 
   // New Job Opening State
   const [newJob, setNewJob] = useState({
@@ -158,8 +170,39 @@ export default function RecruitmentDashboard() {
     }
   };
 
+  const loadCareerConnectJobs = async () => {
+    setCareerConnectLoading(true);
+    setCareerConnectError('');
+    try {
+      const data = await getCareerConnectJobs();
+      setCareerConnectJobs(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error(err);
+      setCareerConnectError(err?.response?.data?.error || 'Unable to load organization career portal jobs.');
+      setCareerConnectJobs([]);
+    } finally {
+      setCareerConnectLoading(false);
+    }
+  };
+
+  const openCareerConnect = () => {
+    setShowCareerConnect(true);
+    loadCareerConnectJobs();
+  };
+
+  const getOpeningsCount = (job: Job) => {
+    return job.openings ?? job.numberOfOpenings ?? job.vacancies ?? 1;
+  };
+
   if (authLoading || !user) {
-    return <LoadingBlock label="Loading…" />;
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/recruitment" />
+        <main className="main-content">
+          <LoadingBlock label="Loading recruitment..." />
+        </main>
+      </div>
+    );
   }
 
   // Aggregate Stats
@@ -176,9 +219,14 @@ export default function RecruitmentDashboard() {
           subtitle="Manage jobs, requisitions, and applicant pipeline stages"
           icon={RECRUIT_ICON}
           actions={
-            <Button leftIcon={PlusIcon} onClick={() => { setSubmitted(false); setFormError(''); setShowModal(true); }}>
-              Create Job Requisition
-            </Button>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <Button variant="ghost" onClick={openCareerConnect}>
+                Career Connect
+              </Button>
+              <Button leftIcon={PlusIcon} onClick={() => { setSubmitted(false); setFormError(''); setShowModal(true); }}>
+                Create Job Requisition
+              </Button>
+            </div>
           }
         />
 
@@ -240,6 +288,70 @@ export default function RecruitmentDashboard() {
             ))}
           </div>
         )}
+
+        {/* Organization Career Portal Modal */}
+        <Modal
+          open={showCareerConnect}
+          onClose={() => setShowCareerConnect(false)}
+          title="Organization Career Portal"
+          width={980}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {careerConnectError && <Banner tone="danger">{careerConnectError}</Banner>}
+
+            {careerConnectLoading ? (
+              <LoadingBlock label="Loading organization jobs..." />
+            ) : careerConnectJobs.length === 0 ? (
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '2rem', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+                No open or draft organization jobs found.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                {careerConnectJobs.map(job => (
+                  <Card key={job.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
+                      <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>{job.title}</h3>
+                      <StatusChip status={job.status} />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', fontSize: '0.76rem' }}>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)' }}>Department</div>
+                        <strong style={{ color: 'var(--text-primary)' }}>{job.department?.name || 'Unassigned'}</strong>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)' }}>Location</div>
+                        <strong style={{ color: 'var(--text-primary)' }}>{job.location}</strong>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)' }}>Employment type</div>
+                        <strong style={{ color: 'var(--text-primary)' }}>{job.employmentType.replace('_', ' ')}</strong>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)' }}>Salary range</div>
+                        <strong style={{ color: 'var(--text-primary)' }}>{job.salaryRange || 'Not disclosed'}</strong>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)' }}>Openings</div>
+                        <strong style={{ color: 'var(--text-primary)' }}>{getOpeningsCount(job)}</strong>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)' }}>Job status</div>
+                        <strong style={{ color: 'var(--text-primary)' }}>{job.status}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button type="button" size="sm" onClick={() => router.push(`/career-portal/jobs/${job.id}/apply`)}>
+                        Proceed
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
 
         {/* Create Requisition Modal */}
         <Modal

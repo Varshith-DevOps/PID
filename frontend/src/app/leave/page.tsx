@@ -270,7 +270,16 @@ export default function LeavePage() {
     [leaves]
   );
 
-  if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
+  if (authLoading || !user) {
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/leave" />
+        <main className="main-content">
+          <LoadingBlock label="Loading leave..." />
+        </main>
+      </div>
+    );
+  }
 
   const tabs: TabItem[] = [
     { key: 'list', label: 'Requests' },

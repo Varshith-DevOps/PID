@@ -14,6 +14,8 @@ import {
   getRegularizations,
   submitRegularization,
   actionRegularization,
+  checkIn,
+  checkOut,
 } from '@/lib/api';
 import { CanView, CanCreate, CanEdit } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
@@ -90,6 +92,7 @@ export default function AttendancePage() {
   const [settings, setSettings] = useState<any>(null);
   const [dateFilter, setDateFilter] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() });
   const [employeeId, setEmployeeId] = useState('');
+  const [clockLoading, setClockLoading] = useState(false);
   const [regAction, setRegAction] = useState<{ id: string; status: 'APPROVED' | 'REJECTED' } | null>(null);
   const [regActionLoading, setRegActionLoading] = useState(false);
 
@@ -156,6 +159,40 @@ export default function AttendancePage() {
       setMyAttendance(data.attendances || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
+  };
+
+  const reloadEmployeeAttendance = async () => {
+    if (!employeeId) return;
+    const data = await getMyAttendanceHistory(employeeId, {});
+    setMyAttendance(data.attendances || []);
+  };
+
+  const handleClockIn = async () => {
+    if (!employeeId) return;
+    setClockLoading(true);
+    try {
+      await checkIn(employeeId);
+      await reloadEmployeeAttendance();
+      alert('Checked in successfully');
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Check-in failed');
+    } finally {
+      setClockLoading(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    if (!employeeId) return;
+    setClockLoading(true);
+    try {
+      await checkOut(employeeId);
+      await reloadEmployeeAttendance();
+      alert('Checked out successfully');
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Check-out failed');
+    } finally {
+      setClockLoading(false);
+    }
   };
 
   const handleSaveSettings = async () => { try { await updateAttendanceSettings(settings); alert('Settings updated'); } catch (err) { alert('Failed to update settings'); } };
@@ -230,8 +267,21 @@ export default function AttendancePage() {
   };
 
   const pendingCorrections = regularizations.filter(r => r.status === 'PENDING').length;
+  const todayKey = new Date().toLocaleDateString('en-CA');
+  const todayAttendance = myAttendance.find((a) => new Date(a.date).toLocaleDateString('en-CA') === todayKey);
+  const hasCheckedIn = Boolean(todayAttendance?.checkIn);
+  const hasCheckedOut = Boolean(todayAttendance?.checkOut);
 
-  if (authLoading || !user) return <LoadingBlock label="Loading…" />;
+  if (authLoading || !user) {
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/attendance" />
+        <main className="main-content">
+          <LoadingBlock label="Loading attendance..." />
+        </main>
+      </div>
+    );
+  }
 
   // Role-dependent tab set
   const tabItems = isEmployee
@@ -336,6 +386,37 @@ export default function AttendancePage() {
         {/* Employee's own attendance view */}
         {view === 'my' && isEmployee && (
           <>
+            <Card style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                    Time Clock
+                  </h2>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {!hasCheckedIn && 'You have not clocked in today.'}
+                    {hasCheckedIn && !hasCheckedOut && `Clocked in at ${new Date(todayAttendance!.checkIn!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
+                    {hasCheckedIn && hasCheckedOut && `Shift completed. Clocked out at ${new Date(todayAttendance!.checkOut!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {!hasCheckedIn && (
+                    <Button variant="success" onClick={handleClockIn} loading={clockLoading} disabled={!employeeId}>
+                      Clock In
+                    </Button>
+                  )}
+                  {hasCheckedIn && !hasCheckedOut && (
+                    <Button variant="danger" onClick={handleClockOut} loading={clockLoading} disabled={!employeeId}>
+                      Clock Out
+                    </Button>
+                  )}
+                  {hasCheckedIn && hasCheckedOut && (
+                    <Badge tone="success" dot>Completed Today</Badge>
+                  )}
+                </div>
+              </div>
+            </Card>
+
             <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
               <StatCard label="Present" value={<span className="text-success">{myStats.present}</span>} />
               <StatCard label="Late" value={<span className="text-warning">{myStats.late}</span>} />

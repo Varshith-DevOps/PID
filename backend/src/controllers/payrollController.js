@@ -281,6 +281,7 @@ const getPayrollPreflight = async (req, res) => {
         joinDate: { lte: endDate },
         OR: [
           { isActive: true },
+          { deactivationEffectiveDate: { gte: startDate } },
           { exitDetails: { is: { lastWorkingDate: { gte: startDate } } } },
         ],
       },
@@ -402,6 +403,7 @@ const runPayroll = async (req, res) => {
         joinDate: { lte: endDate },
         OR: [
           { isActive: true },
+          { deactivationEffectiveDate: { gte: startDate } },
           { exitDetails: { is: { lastWorkingDate: { gte: startDate } } } },
         ],
       },

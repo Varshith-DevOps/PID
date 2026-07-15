@@ -226,10 +226,15 @@ const login = async (req, res) => {
       include: { permissions: true },
     });
 
-    if (!user || !user.isActive) {
+    if (!user) {
       loginGuard.recordFailure(email, ip);
-      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userEmail: email, details: { reason: 'unknown_or_inactive' } });
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userEmail: email, details: { reason: 'unknown_user' } });
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    if (!user.isActive) {
+      loginGuard.recordFailure(email, ip);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: email, details: { reason: 'deactivated_account' } });
+      return res.status(403).json({ error: 'Your account has been deactivated. Contact HR.' });
     }
 
     const isValid = await bcrypt.compare(password, user.password);

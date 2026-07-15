@@ -37,7 +37,13 @@ const getUpcomingBirthdays = async (limit = 8) => {
 
   const employees = await prisma.employee.findMany({
     where: { isActive: true, dateOfBirth: { not: null } },
-    include: { department: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      dateOfBirth: true,
+      department: { select: { name: true } },
+    },
   });
 
   return employees
@@ -106,8 +112,14 @@ const getPayrollSnapshot = async () => {
   const year = now.getFullYear();
 
   const [latestRun, currentRun, activeEmployees, salaryStructures, bankDetails, pendingExpenses] = await Promise.all([
-    prisma.payrollRun.findFirst({ orderBy: { createdAt: 'desc' }, include: { records: true } }),
-    prisma.payrollRun.findFirst({ where: { month, year }, include: { records: true } }),
+    prisma.payrollRun.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true, employeeCount: true, totalAmount: true },
+    }),
+    prisma.payrollRun.findFirst({
+      where: { month, year },
+      select: { id: true, status: true, employeeCount: true, totalAmount: true },
+    }),
     prisma.employee.count({ where: { isActive: true } }),
     prisma.salaryStructure.count({ where: { employee: { isActive: true } } }),
     prisma.bankDetails.count({ where: { employee: { isActive: true } } }),
@@ -115,14 +127,21 @@ const getPayrollSnapshot = async () => {
   ]);
 
   const run = currentRun || latestRun;
-  const gross = run?.records?.reduce((sum, record) => sum + Number(record.grossEarnings || 0), 0) || 0;
-  const net = run?.records?.reduce((sum, record) => sum + Number(record.netSalary || 0), 0) || 0;
+  const totals = run
+    ? await prisma.payrollRecord.aggregate({
+      where: { payrollRunId: run.id },
+      _sum: { grossEarnings: true, netSalary: true },
+      _count: true,
+    })
+    : null;
+  const gross = Number(totals?._sum?.grossEarnings || run?.totalAmount || 0);
+  const net = Number(totals?._sum?.netSalary || 0);
 
   return {
     month,
     year,
     status: run?.status || 'NOT_RUN',
-    employeeCount: run?.records?.length || 0,
+    employeeCount: totals?._count || run?.employeeCount || 0,
     gross,
     net,
     salaryReadiness: pct(salaryStructures, activeEmployees),
@@ -292,6 +311,7 @@ const getPersonalizedDashboard = async (req, res) => {
         prisma.overtime.count({ where: { employeeId: { in: teamIds.length ? teamIds : ['__empty__'] }, status: 'PENDING' } }),
       ]);
 
+      const teamAvailability = await getAvailability(team);
       const workload = team.map((member) => {
         const hours = teamTimesheets.filter((item) => item.employeeId === member.id).reduce((sum, item) => sum + item.hoursWorked, 0);
         const tasks = teamTasks.filter((task) => task.assigneeId === member.id);
@@ -311,13 +331,13 @@ const getPersonalizedDashboard = async (req, res) => {
         dashboardType: 'MANAGER',
         focus: {
           teamSize: team.length,
-          teamAvailability: pct((await getAvailability(team)).filter((item) => item.status === 'AVAILABLE' || item.status === 'LATE_ONLINE').length, team.length),
+          teamAvailability: pct(teamAvailability.filter((item) => item.status === 'AVAILABLE' || item.status === 'LATE_ONLINE').length, team.length),
           openTeamTasks: teamTasks.length,
           pendingTeamLeaves: teamLeaves.length,
           pendingOvertime,
         },
         cards: {
-          teamAvailability: await getAvailability(team),
+          teamAvailability,
           workload,
           teamTasks: teamTasks.map((task) => ({
             id: task.id,

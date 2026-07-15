@@ -3,11 +3,15 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
+import { useToast } from '@/lib/toastContext';
 import {
   getJobOpeningById,
   updateApplicantStage,
+  getApplicantReviews,
+  createApplicantReview,
   applyForJob,
   scheduleInterview,
+  resendInterviewEmail,
   submitInterviewFeedback,
   createJobOffer,
   downloadOfferLetterPDF,
@@ -18,6 +22,7 @@ import {
   Badge,
   Banner,
   Button,
+  ConfirmDialog,
   Drawer,
   LoadingBlock,
   Modal,
@@ -33,6 +38,13 @@ interface Interview {
   interviewerName: string;
   interviewDate: string;
   status: string;
+  interviewMode?: string;
+  meetingLink?: string;
+  location?: string;
+  instructions?: string;
+  emailStatus?: string;
+  emailSentAt?: string;
+  emailFailureReason?: string;
   feedback?: string;
   rating?: number;
 }
@@ -51,12 +63,32 @@ interface Applicant {
   phone: string;
   coverLetter?: string;
   resumeUrl?: string;
+  experience?: string;
+  skills?: string;
+  currentCtc?: string;
+  expectedCtc?: string;
+  noticePeriod?: string;
   stage: string;
   rating?: number;
   notes?: string;
+  updatedAt?: string;
   interviews: Interview[];
   jobOffer?: JobOffer;
   createdAt: string;
+}
+
+interface CandidateReview {
+  id: string;
+  reviewerName: string;
+  reviewerRole?: string;
+  rating: number;
+  reviewText: string;
+  candidateStage: string;
+  reviewType?: string;
+  interviewRoundId?: string | null;
+  interviewRoundName?: string | null;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 interface JobDetails {
@@ -71,7 +103,9 @@ interface JobDetails {
   applicants: Applicant[];
 }
 
-const STAGES = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'HIRED'];
+const ACTIVE_STAGE_ORDER = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'ONBOARDING'];
+const TERMINAL_STAGE = 'REJECTED';
+const STAGES = [...ACTIVE_STAGE_ORDER, TERMINAL_STAGE];
 
 const STAGE_LABELS: Record<string, string> = {
   APPLIED: 'Applied',
@@ -79,7 +113,8 @@ const STAGE_LABELS: Record<string, string> = {
   INTERVIEW: 'Interviews',
   OFFER: 'Offer Extended',
   REJECTED: 'Archived / Rejected',
-  HIRED: 'Hired → Onboarding',
+  ONBOARDING: 'Onboarding',
+  HIRED: 'Hired',
 };
 
 // Tokenized stage accent colors (no hardcoded hex).
@@ -90,6 +125,7 @@ const STAGE_COLORS: Record<string, string> = {
   OFFER: 'var(--warning-fg)',
   REJECTED: 'var(--danger-fg)',
   HIRED: 'var(--success-fg)',
+  ONBOARDING: 'var(--success-fg)',
 };
 
 const STAGE_TONE: Record<string, Tone> = {
@@ -99,6 +135,7 @@ const STAGE_TONE: Record<string, Tone> = {
   OFFER: 'warning',
   REJECTED: 'danger',
   HIRED: 'success',
+  ONBOARDING: 'success',
 };
 
 const RATING_OPTIONS = [
@@ -116,6 +153,25 @@ const ROUND_OPTIONS = [
   { value: 'HR & Culture Round', label: 'HR & Culture Round' },
 ];
 
+const INTERVIEW_MODE_OPTIONS = [
+  { value: 'ONLINE', label: 'Online' },
+  { value: 'IN_PERSON', label: 'In person' },
+  { value: 'PHONE', label: 'Phone' },
+];
+
+const getAllowedForwardStages = (currentStage: string) => {
+  if (currentStage === 'ONBOARDING' || currentStage === TERMINAL_STAGE) return [];
+  const currentIndex = ACTIVE_STAGE_ORDER.indexOf(currentStage);
+  if (currentIndex === -1) return [];
+
+  return [...ACTIVE_STAGE_ORDER.slice(currentIndex + 1), TERMINAL_STAGE];
+};
+
+const toDatetimeLocalValue = (date: Date) => {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
 const AddCandidateIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
 );
@@ -127,11 +183,15 @@ const BackIcon = (
 export default function JobBoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: jobId } = use(params);
   const { user, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [job, setJob] = useState<JobDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null);
+  const [pendingApplicant, setPendingApplicant] = useState<Applicant | null>(null);
+  const [pendingDrawerClose, setPendingDrawerClose] = useState(false);
+  const [stageUpdatingId, setStageUpdatingId] = useState<string | null>(null);
 
   // Modals & Drawers
   const [showAddApplicant, setShowAddApplicant] = useState(false);
@@ -142,12 +202,19 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   // Validation states
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState('');
+  const [interviewDateError, setInterviewDateError] = useState('');
 
   // Submit-in-flight states
   const [savingApplicant, setSavingApplicant] = useState(false);
   const [savingInterview, setSavingInterview] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [savingOffer, setSavingOffer] = useState(false);
+  const [savingReview, setSavingReview] = useState(false);
+  const [resendingInterviewId, setResendingInterviewId] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState('');
+  const [reviewSuccess, setReviewSuccess] = useState('');
+  const [reviewHistory, setReviewHistory] = useState<CandidateReview[]>([]);
+  const [reviewHistoryLoading, setReviewHistoryLoading] = useState(false);
 
   // Form states
   const [applicantForm, setApplicantForm] = useState({
@@ -162,6 +229,10 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     interviewerName: '',
     interviewDate: '',
     roundName: 'Technical Round 1',
+    interviewMode: 'ONLINE',
+    meetingLink: '',
+    location: '',
+    instructions: '',
   });
 
   const [feedbackForm, setFeedbackForm] = useState({
@@ -169,6 +240,10 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     rating: 5,
     status: 'COMPLETED',
   });
+  const [savedReview, setSavedReview] = useState('');
+  const [draftReview, setDraftReview] = useState('');
+  const [savedRating, setSavedRating] = useState(0);
+  const [draftRating, setDraftRating] = useState(0);
 
   const [offerForm, setOfferForm] = useState({
     offeredSalary: '',
@@ -182,6 +257,17 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   useEffect(() => {
     if (user) loadData();
   }, [user, jobId]);
+
+  useEffect(() => {
+    if (!selectedApplicant) return;
+    setSavedReview('');
+    setDraftReview('');
+    setSavedRating(0);
+    setDraftRating(0);
+    setReviewError('');
+    setReviewSuccess('');
+    loadReviewHistory(selectedApplicant.id);
+  }, [selectedApplicant?.id]);
 
   const loadData = async () => {
     setLoading(true);
@@ -199,30 +285,140 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     }
   };
 
+  const updateApplicantInState = (applicantId: string, patch: Partial<Applicant>) => {
+    setJob(prev => prev ? {
+      ...prev,
+      applicants: prev.applicants.map(app => app.id === applicantId ? { ...app, ...patch } : app),
+    } : prev);
+    setSelectedApplicant(prev => prev?.id === applicantId ? { ...prev, ...patch } : prev);
+  };
+
+  const loadReviewHistory = async (applicantId: string) => {
+    setReviewHistoryLoading(true);
+    try {
+      const data = await getApplicantReviews(applicantId);
+      setReviewHistory(Array.isArray(data?.reviews) ? data.reviews : []);
+    } catch (err) {
+      console.error(err);
+      setReviewHistory([]);
+    } finally {
+      setReviewHistoryLoading(false);
+    }
+  };
+
+  const isReviewDirty = !!selectedApplicant && (
+    draftReview !== savedReview || draftRating !== savedRating
+  );
+
+  useEffect(() => {
+    if (!isReviewDirty) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isReviewDirty]);
+
+  const resetReviewDraft = () => {
+    setDraftReview(savedReview);
+    setDraftRating(savedRating);
+    setReviewError('');
+    setReviewSuccess('');
+  };
+
+  const handleSelectApplicant = (applicant: Applicant) => {
+    if (selectedApplicant?.id === applicant.id) return;
+    if (isReviewDirty) {
+      setPendingApplicant(applicant);
+      return;
+    }
+    setSelectedApplicant(applicant);
+  };
+
+  const handleCandidateDrawerClose = () => {
+    if (isReviewDirty) {
+      setPendingDrawerClose(true);
+      return;
+    }
+    setSelectedApplicant(null);
+  };
+
+  const discardReviewChanges = () => {
+    resetReviewDraft();
+    if (pendingApplicant) {
+      setSelectedApplicant(pendingApplicant);
+      setPendingApplicant(null);
+    } else if (pendingDrawerClose) {
+      setSelectedApplicant(null);
+      setPendingDrawerClose(false);
+    }
+  };
+
+  const handleSaveReview = async () => {
+    if (!selectedApplicant || !isReviewDirty || savingReview) return;
+    const trimmedReview = draftReview.trim();
+    if (!draftRating) {
+      setReviewError('Select a rating before adding the review.');
+      return;
+    }
+    if (!trimmedReview) {
+      setReviewError('Review text is required.');
+      return;
+    }
+    if (trimmedReview.length > 5000) {
+      setReviewError('Review notes cannot exceed 5000 characters.');
+      return;
+    }
+
+    setSavingReview(true);
+    setReviewError('');
+    setReviewSuccess('');
+    try {
+      const result = await createApplicantReview(selectedApplicant.id, {
+        rating: draftRating,
+        reviewText: trimmedReview,
+      });
+      const createdReview = result?.review;
+      if (createdReview) {
+        setReviewHistory(current => [createdReview, ...current]);
+      }
+      updateApplicantInState(selectedApplicant.id, {
+        rating: draftRating,
+        notes: trimmedReview,
+      });
+      setSavedReview('');
+      setDraftReview('');
+      setSavedRating(0);
+      setDraftRating(0);
+      setReviewSuccess('Review saved successfully.');
+      showToast('Review saved successfully.', 'success');
+    } catch (err: any) {
+      setReviewError(err?.response?.data?.error || 'Could not save the review. Please try again.');
+      showToast('Could not save the review. Please try again.', 'error');
+    } finally {
+      setSavingReview(false);
+    }
+  };
+
   const handleStageChange = async (applicantId: string, newStage: string) => {
-    try {
-      await updateApplicantStage(applicantId, { stage: newStage });
-      loadData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    if (stageUpdatingId) return;
+    const currentApplicant = job?.applicants.find(app => app.id === applicantId);
+    if (!currentApplicant || currentApplicant.stage === newStage) return;
+    const allowedStages = getAllowedForwardStages(currentApplicant.stage);
+    if (!allowedStages.includes(newStage)) return;
 
-  const handleRatingChange = async (applicantId: string, rating: number) => {
+    const previousStage = currentApplicant.stage;
+    setStageUpdatingId(applicantId);
+    updateApplicantInState(applicantId, { stage: newStage });
     try {
-      await updateApplicantStage(applicantId, { stage: selectedApplicant?.stage || 'APPLIED', rating });
-      loadData();
+      const updatedApplicant = await updateApplicantStage(applicantId, { stage: newStage });
+      updateApplicantInState(applicantId, updatedApplicant);
     } catch (err) {
       console.error(err);
-    }
-  };
-
-  const handleNotesChange = async (applicantId: string, notes: string) => {
-    try {
-      await updateApplicantStage(applicantId, { stage: selectedApplicant?.stage || 'APPLIED', notes });
-      loadData();
-    } catch (err) {
-      console.error(err);
+      updateApplicantInState(applicantId, { stage: previousStage });
+    } finally {
+      setStageUpdatingId(null);
     }
   };
 
@@ -254,6 +450,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
       formData.append('email', applicantForm.email);
       formData.append('phone', applicantForm.phone);
       formData.append('coverLetter', applicantForm.coverLetter);
+      formData.append('source', 'MANUAL');
       if (resumeFile) formData.append('resume', resumeFile);
 
       await applyForJob(formData);
@@ -272,8 +469,14 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
   const handleScheduleInterview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedApplicant) return;
+    if (!selectedApplicant || savingInterview) return;
+    if (selectedApplicant.stage !== 'INTERVIEW') {
+      setFormError('Interview rounds can only be scheduled when the candidate is in the Interviews stage.');
+      return;
+    }
     setSubmitted(true);
+    setFormError('');
+    setInterviewDateError('');
     const { isValid, firstError } = validateForm(
       {
         interviewerName: interviewForm.interviewerName,
@@ -290,22 +493,71 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
       setFormError(firstError || 'Please correct the highlighted fields.');
       return;
     }
+
+    const scheduledAt = new Date(interviewForm.interviewDate);
+    if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) {
+      setInterviewDateError('Please select a future interview date and time.');
+      setFormError('Please select a future interview date and time.');
+      return;
+    }
+    if (interviewForm.interviewMode === 'ONLINE' && !interviewForm.meetingLink.trim()) {
+      setFormError('Meeting link is required for online interviews.');
+      return;
+    }
+    if (interviewForm.interviewMode === 'IN_PERSON' && !interviewForm.location.trim()) {
+      setFormError('Location is required for in-person interviews.');
+      return;
+    }
+
     setFormError('');
     setSavingInterview(true);
     try {
-      await scheduleInterview({
+      const result = await scheduleInterview({
         applicantId: selectedApplicant.id,
-        ...interviewForm,
+        interviewerName: interviewForm.interviewerName.trim(),
+        roundName: interviewForm.roundName.trim(),
+        interviewDate: scheduledAt.toISOString(),
+        interviewMode: interviewForm.interviewMode,
+        meetingLink: interviewForm.meetingLink.trim(),
+        location: interviewForm.location.trim(),
+        instructions: interviewForm.instructions.trim(),
       });
       setShowScheduleInterview(false);
       setSubmitted(false);
-      setInterviewForm({ interviewerName: '', interviewDate: '', roundName: 'Technical Round 1' });
-      loadData();
-    } catch (err) {
+      setInterviewDateError('');
+      setInterviewForm({ interviewerName: '', interviewDate: '', roundName: 'Technical Round 1', interviewMode: 'ONLINE', meetingLink: '', location: '', instructions: '' });
+      await loadData();
+      showToast(
+        result?.emailStatus === 'SENT'
+          ? 'Interview scheduled and candidate notified by email.'
+          : 'Interview scheduled, but the candidate email could not be sent.',
+        result?.emailStatus === 'SENT' ? 'success' : 'error'
+      );
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to schedule interview round');
+      setFormError(err?.response?.data?.message || err?.response?.data?.error || 'Failed to schedule interview round.');
     } finally {
       setSavingInterview(false);
+    }
+  };
+
+  const handleResendInterviewEmail = async (interviewId: string) => {
+    if (resendingInterviewId) return;
+    setResendingInterviewId(interviewId);
+    try {
+      const result = await resendInterviewEmail(interviewId);
+      await loadData();
+      showToast(
+        result?.emailStatus === 'SENT'
+          ? 'Interview email resent successfully.'
+          : 'Interview email could not be resent.',
+        result?.emailStatus === 'SENT' ? 'success' : 'error'
+      );
+    } catch (err: any) {
+      console.error(err);
+      showToast(err?.response?.data?.error || 'Interview email could not be resent.', 'error');
+    } finally {
+      setResendingInterviewId(null);
     }
   };
 
@@ -376,11 +628,25 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   };
 
   if (authLoading || !user) {
-    return <LoadingBlock label="Loading…" />;
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/recruitment" />
+        <main className="main-content">
+          <LoadingBlock label="Loading job board..." />
+        </main>
+      </div>
+    );
   }
 
   if (loading || !job) {
-    return <LoadingBlock label="Loading pipeline details…" />;
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/recruitment" />
+        <main className="main-content">
+          <LoadingBlock label="Loading pipeline details..." />
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -430,7 +696,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                     </div>
                   ) : (
                     applicantsInStage.map(app => (
-                      <div key={app.id} onClick={() => setSelectedApplicant(app)} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.35rem', boxShadow: 'var(--shadow-1)', transition: 'transform var(--motion-fast) var(--ease-out)' }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}>
+                      <div key={app.id} onClick={() => handleSelectApplicant(app)} style={{ background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.35rem', boxShadow: 'var(--shadow-1)', transition: 'transform var(--motion-fast) var(--ease-out)' }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}>
                         <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{app.fullName}</div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.email}</div>
 
@@ -532,7 +798,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
         {/* Candidate Detail Drawer */}
         <Drawer
           open={!!selectedApplicant}
-          onClose={() => setSelectedApplicant(null)}
+          onClose={handleCandidateDrawerClose}
           title={selectedApplicant?.fullName || 'Candidate'}
           width={480}
         >
@@ -543,13 +809,21 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <Badge tone={STAGE_TONE[selectedApplicant.stage] || 'neutral'} dot>
                   {STAGE_LABELS[selectedApplicant.stage]}
                 </Badge>
-                <div style={{ minWidth: '160px' }}>
-                  <Select
-                    value={selectedApplicant.stage}
-                    onChange={v => handleStageChange(selectedApplicant.id, v)}
-                    options={STAGES.map(s => ({ value: s, label: STAGE_LABELS[s] }))}
-                  />
-                </div>
+                {getAllowedForwardStages(selectedApplicant.stage).length > 0 ? (
+                  <div style={{ minWidth: '180px' }}>
+                    <Select
+                      value=""
+                      onChange={v => handleStageChange(selectedApplicant.id, v)}
+                      placeholder="Move candidate to..."
+                      disabled={stageUpdatingId === selectedApplicant.id}
+                      options={getAllowedForwardStages(selectedApplicant.stage).map(s => ({ value: s, label: STAGE_LABELS[s] }))}
+                    />
+                  </div>
+                ) : (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    {selectedApplicant.stage === 'ONBOARDING' ? 'Recruitment process completed' : 'Stage movement disabled'}
+                  </span>
+                )}
               </div>
 
               {/* Contact Information */}
@@ -565,12 +839,20 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 )}
               </div>
 
+              <div style={{ padding: '0.75rem', background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem' }}>
+                <div style={{ color: 'var(--text-secondary)' }}>Experience: {selectedApplicant.experience || 'Not provided'}</div>
+                <div style={{ color: 'var(--text-secondary)' }}>Skills: {selectedApplicant.skills || 'Not provided'}</div>
+                <div style={{ color: 'var(--text-secondary)' }}>Current CTC: {selectedApplicant.currentCtc || 'Not provided'}</div>
+                <div style={{ color: 'var(--text-secondary)' }}>Expected CTC: {selectedApplicant.expectedCtc || 'Not provided'}</div>
+                <div style={{ color: 'var(--text-secondary)' }}>Notice Period: {selectedApplicant.noticePeriod || 'Not provided'}</div>
+              </div>
+
               {/* Interactive Rating */}
               <div>
                 <label className="form-label">Candidate Evaluation Rating</label>
-                <div style={{ display: 'flex', gap: '0.5rem', fontSize: '1.2rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', fontSize: '1.2rem' }} aria-label="Candidate evaluation rating">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <button key={i} onClick={() => handleRatingChange(selectedApplicant.id, i + 1)} aria-label={`Rate ${i + 1} star`} style={{ background: 'none', border: 'none', color: i < (selectedApplicant.rating || 0) ? 'var(--warning-fg)' : 'var(--border-strong)', cursor: 'pointer', padding: 0 }}>
+                    <button key={i} type="button" onClick={() => { setDraftRating(i + 1); setReviewSuccess(''); }} aria-label={`Rate ${i + 1} star`} style={{ background: 'none', border: 'none', color: i < draftRating ? 'var(--warning-fg)' : 'var(--border-strong)', cursor: 'pointer', padding: 0 }}>
                       ★
                     </button>
                   ))}
@@ -588,48 +870,150 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               {/* Notes Area */}
               <div>
                 <label className="form-label">Evaluation & Review Notes</label>
-                <textarea placeholder="Log applicant strong points, gaps, technical scores…" value={selectedApplicant.notes || ''} onChange={e => handleNotesChange(selectedApplicant.id, e.target.value)} className="textarea-field" style={{ minHeight: '80px', fontSize: '0.75rem' }} />
+                <textarea
+                  placeholder="Log applicant strong points, gaps, technical scores..."
+                  value={draftReview}
+                  maxLength={5000}
+                  onChange={e => { setDraftReview(e.target.value); setReviewSuccess(''); }}
+                  onKeyDown={e => {
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                      e.preventDefault();
+                      handleSaveReview();
+                    }
+                  }}
+                  className="textarea-field"
+                  aria-busy={savingReview}
+                  style={{ minHeight: '96px', fontSize: '0.75rem' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.72rem', color: draftReview.length > 5000 ? 'var(--danger-fg)' : 'var(--text-muted)' }}>
+                    {draftReview.length} / 5000
+                  </span>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                    <Button type="button" size="sm" variant="ghost" onClick={resetReviewDraft} disabled={!isReviewDirty || savingReview}>
+                      Cancel
+                    </Button>
+                    <Button type="button" size="sm" onClick={handleSaveReview} loading={savingReview} disabled={!isReviewDirty || savingReview}>
+                      {savingReview ? 'Saving...' : 'Add Review'}
+                    </Button>
+                  </div>
+                </div>
+                {reviewSuccess && <div role="status" style={{ marginTop: '0.5rem', color: 'var(--success-fg)', fontSize: '0.75rem' }}>{reviewSuccess}</div>}
+                {reviewError && <div role="alert" style={{ marginTop: '0.5rem', color: 'var(--danger-fg)', fontSize: '0.75rem' }}>{reviewError}</div>}
               </div>
 
-              {/* Interviews Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" style={{ margin: 0 }}>Interview Status</label>
-                  <Button variant="ghost" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setShowScheduleInterview(true); }}>
-                    Schedule Round
-                  </Button>
-                </div>
-
-                {selectedApplicant.interviews.length === 0 ? (
+              {/* Candidate Review History */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <label className="form-label" style={{ margin: 0 }}>Candidate Review History</label>
+                {reviewHistoryLoading ? (
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--surface-sunken)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-subtle)', textAlign: 'center' }}>
-                    No interview rounds scheduled yet.
+                    Loading reviews...
+                  </div>
+                ) : reviewHistory.length === 0 ? (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--surface-sunken)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-subtle)', textAlign: 'center' }}>
+                    No reviews have been added yet.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {selectedApplicant.interviews.map(interview => (
-                      <div key={interview.id} style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--text-primary)' }}>{interview.roundName}</span>
-                          <Badge tone={interview.status === 'SCHEDULED' ? 'info' : 'success'}>{interview.status}</Badge>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: '340px', overflowY: 'auto', paddingRight: '0.2rem' }}>
+                    {reviewHistory.map(review => (
+                      <div key={review.id} style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem', flexShrink: 0 }}>
+                            {(review.reviewerName || 'U').charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>{review.reviewerName}</div>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.15rem' }}>
+                              {review.reviewerRole && <Badge tone="neutral">{review.reviewerRole.replace(/_/g, ' ')}</Badge>}
+                              <Badge tone="info">{STAGE_LABELS[review.candidateStage] || review.candidateStage}</Badge>
+                              {review.interviewRoundName && <Badge tone="warning">{review.interviewRoundName}</Badge>}
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Interviewer: {interview.interviewerName}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Date: {new Date(interview.interviewDate).toLocaleString()}</div>
-                        {interview.feedback ? (
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'var(--surface-raised)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', marginTop: '0.25rem' }}>
-                            <strong>Feedback:</strong> {interview.feedback} (Rating: {interview.rating}/5)
-                          </div>
-                        ) : (
-                          <div style={{ marginTop: '0.25rem' }}>
-                            <Button variant="ghost" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setShowFeedbackModal(interview); }}>
-                              Log Interview Feedback
-                            </Button>
-                          </div>
-                        )}
+                        <div style={{ color: 'var(--warning-fg)', fontSize: '0.8rem' }}>
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <span key={i}>{i < review.rating ? '★' : '☆'}</span>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                          {review.reviewText}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                          Submitted: {new Date(review.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date(review.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* Interviews Section */}
+              {(selectedApplicant.interviews.length > 0 || selectedApplicant.stage === 'INTERVIEW') && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="form-label" style={{ margin: 0 }}>Interview Status</label>
+                    {selectedApplicant.stage === 'INTERVIEW' && (
+                      <Button variant="ghost" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setInterviewDateError(''); setShowScheduleInterview(true); }}>
+                        Schedule Round
+                      </Button>
+                    )}
+                  </div>
+
+                  {selectedApplicant.interviews.length === 0 ? (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--surface-sunken)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-subtle)', textAlign: 'center' }}>
+                      No interview rounds scheduled yet.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {selectedApplicant.interviews.map(interview => (
+                        <div key={interview.id} style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--text-primary)' }}>{interview.roundName}</span>
+                            <Badge tone={interview.status === 'SCHEDULED' ? 'info' : 'success'}>{interview.status}</Badge>
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Interviewer: {interview.interviewerName}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Date: {new Date(interview.interviewDate).toLocaleString()}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Mode: {interview.interviewMode || 'ONLINE'}</div>
+                          {(interview.meetingLink || interview.location) && (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                              {interview.meetingLink ? `Meeting: ${interview.meetingLink}` : `Location: ${interview.location}`}
+                            </div>
+                          )}
+                          {interview.emailStatus && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <Badge tone={interview.emailStatus === 'SENT' ? 'success' : interview.emailStatus === 'FAILED' ? 'danger' : 'warning'}>
+                                Email: {interview.emailStatus}
+                              </Badge>
+                              {interview.emailStatus === 'FAILED' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  loading={resendingInterviewId === interview.id}
+                                  disabled={!!resendingInterviewId}
+                                  onClick={() => handleResendInterviewEmail(interview.id)}
+                                >
+                                  Resend Email
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                          {interview.feedback ? (
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'var(--surface-raised)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', marginTop: '0.25rem' }}>
+                              <strong>Feedback:</strong> {interview.feedback} (Rating: {interview.rating}/5)
+                            </div>
+                          ) : (
+                            <div style={{ marginTop: '0.25rem' }}>
+                              <Button variant="ghost" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setShowFeedbackModal(interview); }}>
+                                Log Interview Feedback
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Job Offer Section */}
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -691,14 +1075,61 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               forceError={submitted}
             />
 
+            <Select
+              label="Interview Mode"
+              value={interviewForm.interviewMode}
+              onChange={v => setInterviewForm({ ...interviewForm, interviewMode: v })}
+              options={INTERVIEW_MODE_OPTIONS}
+            />
+
+            {interviewForm.interviewMode === 'ONLINE' && (
+              <TextField
+                label="Meeting Link"
+                placeholder="https://meet.example.com/interview"
+                required
+                value={interviewForm.meetingLink}
+                onChange={v => setInterviewForm({ ...interviewForm, meetingLink: v })}
+                forceError={submitted}
+              />
+            )}
+
+            {interviewForm.interviewMode === 'IN_PERSON' && (
+              <TextField
+                label="Location"
+                placeholder="Office address or room"
+                required
+                value={interviewForm.location}
+                onChange={v => setInterviewForm({ ...interviewForm, location: v })}
+                forceError={submitted}
+              />
+            )}
+
             <div className="form-group">
               <label className="form-label">Interview Slot Date & Time</label>
-              <input type="datetime-local" required value={interviewForm.interviewDate} onChange={e => setInterviewForm({ ...interviewForm, interviewDate: e.target.value })} className="input-field" />
+              <input
+                type="datetime-local"
+                required
+                min={toDatetimeLocalValue(new Date())}
+                value={interviewForm.interviewDate}
+                onChange={e => {
+                  setInterviewDateError('');
+                  setInterviewForm({ ...interviewForm, interviewDate: e.target.value });
+                }}
+                className="input-field"
+              />
+              {interviewDateError && <span style={{ display: 'block', marginTop: 4, fontSize: '0.72rem', color: 'var(--danger-fg)' }}>{interviewDateError}</span>}
             </div>
 
+            <Textarea
+              label="Interview Instructions"
+              placeholder="Candidate preparation notes, documents to carry, or joining instructions"
+              value={interviewForm.instructions}
+              onChange={v => setInterviewForm({ ...interviewForm, instructions: v })}
+            />
+
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-              <Button type="button" variant="ghost" onClick={() => setShowScheduleInterview(false)}>Cancel</Button>
-              <Button type="submit" loading={savingInterview}>Confirm Schedule</Button>
+              <Button type="button" variant="ghost" disabled={savingInterview} onClick={() => setShowScheduleInterview(false)}>Cancel</Button>
+              <Button type="submit" loading={savingInterview} disabled={savingInterview}>Confirm Schedule</Button>
             </div>
           </form>
         </Modal>
@@ -790,6 +1221,17 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
             </div>
           </form>
         </Modal>
+
+        <ConfirmDialog
+          open={!!pendingApplicant || pendingDrawerClose}
+          title="You have unsaved changes"
+          message="Discard them?"
+          confirmLabel="Discard Changes"
+          cancelLabel="Keep Editing"
+          tone="danger"
+          onConfirm={discardReviewChanges}
+          onCancel={() => { setPendingApplicant(null); setPendingDrawerClose(false); }}
+        />
       </main>
     </div>
   );

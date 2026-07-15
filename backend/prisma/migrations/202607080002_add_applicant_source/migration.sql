@@ -1,0 +1,1 @@
+ALTER TABLE "job_applicants" ADD COLUMN "source" TEXT NOT NULL DEFAULT 'MANUAL';

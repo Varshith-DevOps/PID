@@ -83,7 +83,15 @@ export default function DashboardPage() {
   const availabilityData = useMemo(() => dashboard?.cards?.teamAvailability || [], [dashboard]);
 
   if (authLoading || !user) {
-    return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/dashboard" />
+        <main className="main-content dashboard-shell">
+          <Skeleton height={28} width="30%" />
+          <Skeleton height={14} width="55%" style={{ marginTop: '0.75rem' }} />
+        </main>
+      </div>
+    );
   }
 
   return (

@@ -187,7 +187,17 @@ export default function EmployeeDashboard() {
     setBreakActive(prev => !prev);
   };
 
-  if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
+  if (authLoading || !user) {
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/dashboard/employee" />
+        <main className="main-content">
+          <Skeleton height={28} width="30%" />
+          <Skeleton height={14} width="55%" style={{ marginTop: '0.75rem' }} />
+        </main>
+      </div>
+    );
+  }
 
   const timesheetData = dashboard?.recentTimesheets.map((t) => ({
     date: new Date(t.date).toLocaleDateString('en-US', { weekday: 'short' }),

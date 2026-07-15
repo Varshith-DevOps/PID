@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   EmptyState,
+  LoadingBlock,
   PageHeader,
   Select,
   TextField,
@@ -84,7 +85,16 @@ export default function NotificationsPage() {
     loadNotifications();
   };
 
-  if (!user) return null;
+  if (authLoading || !user) {
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/notifications" />
+        <main className="main-content">
+          <LoadingBlock label="Loading notifications..." />
+        </main>
+      </div>
+    );
+  }
 
   const canBroadcast = ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(user.role);
   const unreadCount = notifications.filter((n) => !n.isRead).length;

@@ -7,6 +7,7 @@ import {
   auditTdsProof,
   regularizeAttendanceWinston
 } from '@/lib/api';
+import Sidebar from '@/components/Sidebar';
 import {
   PageHeader, Card, Badge, Button, Banner, StatusChip,
   Field, Select, TextField, NumberField, FileDrop, EmptyState,
@@ -139,12 +140,14 @@ export default function AIAgentsPage() {
   };
 
   return (
-    <div style={{ padding: '2rem', minHeight: '100vh' }}>
-      <PageHeader
-        title="AI Command Center"
-        subtitle="Orchestrate and query PID HRMS's four master-level autonomous AI compliance agents."
-        actions={<Badge tone="info" dot>Intelligent Layer Active</Badge>}
-      />
+    <div className="app-layout">
+      <Sidebar activePath="/dashboard/ai-agents" />
+      <main className="main-content">
+        <PageHeader
+          title="AI Command Center"
+          subtitle="Orchestrate and query PID HRMS's four master-level autonomous AI compliance agents."
+          actions={<Badge tone="info" dot>Intelligent Layer Active</Badge>}
+        />
 
       {/* Agents Selection Grid */}
       <div
@@ -198,7 +201,7 @@ export default function AIAgentsPage() {
       </div>
 
       {/* Main Agent Interface Console */}
-      <Card>
+        <Card>
         {/* Tab 1: Athena */}
         {activeAgent === 'athena' && (
           <div>
@@ -563,7 +566,8 @@ export default function AIAgentsPage() {
             )}
           </div>
         )}
-      </Card>
+        </Card>
+      </main>
     </div>
   );
 }

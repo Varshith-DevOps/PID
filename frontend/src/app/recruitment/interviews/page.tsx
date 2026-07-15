@@ -134,7 +134,14 @@ export default function GlobalInterviewsPage() {
   };
 
   if (authLoading || !user) {
-    return <LoadingBlock label="Loading…" />;
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/recruitment" />
+        <main className="main-content">
+          <LoadingBlock label="Loading interviews..." />
+        </main>
+      </div>
+    );
   }
 
   const upcomingInterviews = interviews.filter(iv => iv.status === 'SCHEDULED');

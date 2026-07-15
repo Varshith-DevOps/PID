@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
-import { getEmployeeById, updateEmployee, changePassword, updateAccountStage, getTodayAttendance, resetPasswordForUser, addSalaryRevision } from '@/lib/api';
+import { getEmployeeById, updateEmployee, changePassword, updateAccountStage, getTodayAttendance, resetPasswordForUser, addSalaryRevision, deactivateEmployee, reactivateEmployee } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import PersonalTab from '@/components/employee-tabs/PersonalTab';
 import ProfessionalTab from '@/components/employee-tabs/ProfessionalTab';
@@ -12,7 +12,7 @@ import { DependentsTab, ExitTab, AddressTab, HistoryTab } from '@/components/emp
 import {
   PageHeader, Button, Card, StatCard, Avatar, Badge, StatusChip,
   Tabs, DataTable, Field, Select, DateField, TextField, NumberField,
-  LoadingBlock, ErrorState, ConfirmDialog,
+  LoadingBlock, ErrorState, ConfirmDialog, Modal, Textarea,
 } from '@/components/ui';
 import type { Column, TabItem } from '@/components/ui';
 
@@ -26,6 +26,15 @@ const TAB_LABELS: Record<string, string> = {
   documents: 'Documents', dependents: 'Dependents', exit: 'Exit Details', salary: 'Salary & CTC',
   address: 'Addresses', access: 'Access Control', history: 'Change History',
 };
+
+const DEACTIVATION_REASONS = [
+  { value: 'RESIGNED', label: 'Resigned' },
+  { value: 'TERMINATED', label: 'Terminated' },
+  { value: 'CONTRACT_ENDED', label: 'Contract Ended' },
+  { value: 'LONG_TERM_INACTIVE', label: 'Long-term Inactive' },
+  { value: 'DUPLICATE_TEST_RECORD', label: 'Duplicate/Test Record' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 export default function EmployeeDetailPage() {
   const params = useParams();
@@ -43,8 +52,20 @@ export default function EmployeeDetailPage() {
   const [showSalaryForm, setShowSalaryForm] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showReactivateModal, setShowReactivateModal] = useState(false);
+  const [lifecycleSaving, setLifecycleSaving] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState('');
+  const [lifecycleMsg, setLifecycleMsg] = useState('');
+  const [deactivationForm, setDeactivationForm] = useState({ reason: '', effectiveDate: new Date().toISOString().split('T')[0], remarks: '', confirmation: '' });
+  const [reactivationRemarks, setReactivationRemarks] = useState('');
+  const deactivationReasonRef = useRef<HTMLDivElement | null>(null);
+  const deactivationDateRef = useRef<HTMLDivElement | null>(null);
+  const deactivationRemarksRef = useRef<HTMLDivElement | null>(null);
+  const deactivationConfirmRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+  const canManageLifecycle = ['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR'].includes(user?.role || '');
   const canEdit = isAdmin;
   const shouldMask = !isAdmin;
 
@@ -100,7 +121,79 @@ export default function EmployeeDetailPage() {
     }
   };
 
-  if (authLoading || loading) return <LoadingBlock />;
+  const resetDeactivateForm = () => {
+    setDeactivationForm({ reason: '', effectiveDate: new Date().toISOString().split('T')[0], remarks: '', confirmation: '' });
+    setLifecycleError('');
+  };
+
+  const focusFirstInvalidDeactivationField = () => {
+    const normalizedConfirmation = deactivationForm.confirmation.trim().toUpperCase();
+    let target: HTMLDivElement | null = null;
+    if (!deactivationForm.reason) target = deactivationReasonRef.current;
+    else if (!deactivationForm.effectiveDate) target = deactivationDateRef.current;
+    else if (deactivationForm.reason === 'OTHER' && !deactivationForm.remarks.trim()) target = deactivationRemarksRef.current;
+    else if (normalizedConfirmation !== 'DEACTIVATE') target = deactivationConfirmRef.current;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target?.querySelector<HTMLElement>('input, select, textarea')?.focus();
+  };
+
+  const handleDeactivate = async () => {
+    if (!employee || lifecycleSaving) return;
+    const normalizedConfirmation = deactivationForm.confirmation.trim().toUpperCase();
+    const requiresRemarks = deactivationForm.reason === 'OTHER';
+    const canDeactivate = Boolean(deactivationForm.reason)
+      && Boolean(deactivationForm.effectiveDate)
+      && normalizedConfirmation === 'DEACTIVATE'
+      && (!requiresRemarks || Boolean(deactivationForm.remarks.trim()));
+    if (!canDeactivate) {
+      focusFirstInvalidDeactivationField();
+      return;
+    }
+    setLifecycleSaving(true);
+    setLifecycleError('');
+    try {
+      const result = await deactivateEmployee(employee.id, {
+        ...deactivationForm,
+        confirmation: normalizedConfirmation,
+      });
+      setEmployee(result.employee);
+      setLifecycleMsg('Employee deactivated successfully.');
+      setShowDeactivateModal(false);
+      resetDeactivateForm();
+    } catch (err: any) {
+      setLifecycleError(err?.response?.data?.error || 'Employee deactivation failed.');
+    } finally {
+      setLifecycleSaving(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!employee || lifecycleSaving) return;
+    setLifecycleSaving(true);
+    setLifecycleError('');
+    try {
+      const result = await reactivateEmployee(employee.id, { remarks: reactivationRemarks.trim() });
+      setEmployee(result.employee);
+      setLifecycleMsg('Employee reactivated successfully.');
+      setShowReactivateModal(false);
+      setReactivationRemarks('');
+    } catch (err: any) {
+      setLifecycleError(err?.response?.data?.error || 'Employee reactivation failed.');
+    } finally {
+      setLifecycleSaving(false);
+    }
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="app-layout">
+        <Sidebar activePath="/employees" />
+        <main className="main-content">
+          <LoadingBlock label="Loading employee profile..." />
+        </main>
+      </div>
+    );
+  }
   if (!employee) {
     return (
       <div className="app-layout">
@@ -120,6 +213,22 @@ export default function EmployeeDetailPage() {
 
   const fullName = `${employee.firstName} ${employee.lastName}`;
   const presence = empStatus === 'Logged In' ? 'online' : empStatus === 'Week Off' ? 'away' : 'offline';
+  const normalizedDeactivationConfirmation = deactivationForm.confirmation.trim().toUpperCase();
+  const deactivationRequiresRemarks = deactivationForm.reason === 'OTHER';
+  const canDeactivate = Boolean(deactivationForm.reason)
+    && Boolean(deactivationForm.effectiveDate)
+    && normalizedDeactivationConfirmation === 'DEACTIVATE'
+    && (!deactivationRequiresRemarks || Boolean(deactivationForm.remarks.trim()))
+    && !lifecycleSaving;
+  const deactivationMissingMessage = !deactivationForm.reason
+    ? 'Select a deactivation reason.'
+    : !deactivationForm.effectiveDate
+      ? 'Select an effective date.'
+      : deactivationRequiresRemarks && !deactivationForm.remarks.trim()
+        ? 'Remarks are required when reason is Other.'
+        : normalizedDeactivationConfirmation !== 'DEACTIVATE'
+          ? 'Type DEACTIVATE in the confirmation field.'
+          : '';
 
   const tabItems: TabItem[] = TABS.map((tab) => ({
     key: tab,
@@ -150,6 +259,17 @@ export default function EmployeeDetailPage() {
           }
           subtitle={employee.jobTitle}
           icon={<Avatar name={fullName} src={employee.photoUrl ? `http://localhost:5000/${employee.photoUrl}` : null} size={56} presence={presence} />}
+          actions={canManageLifecycle && (
+            employee.isActive ? (
+              <Button variant="danger" loading={lifecycleSaving} disabled={lifecycleSaving} onClick={() => { setLifecycleMsg(''); resetDeactivateForm(); setShowDeactivateModal(true); }}>
+                Deactivate Employee
+              </Button>
+            ) : (
+              <Button variant="success" loading={lifecycleSaving} disabled={lifecycleSaving} onClick={() => { setLifecycleMsg(''); setLifecycleError(''); setShowReactivateModal(true); }}>
+                Reactivate Employee
+              </Button>
+            )
+          )}
         />
 
         {/* Meta chips */}
@@ -158,8 +278,28 @@ export default function EmployeeDetailPage() {
           <Badge tone="neutral">🆔 {employee.employeeId}</Badge>
           <Badge tone="neutral">📅 {new Date(employee.joinDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Badge>
           <Badge tone={employee.accountStage === 'MANAGER' ? 'compliance' : 'info'}>{employee.accountStage || 'EMPLOYEE'}</Badge>
+          <Badge tone={employee.isActive ? 'success' : 'danger'}>{employee.isActive ? 'ACTIVE' : 'INACTIVE'}</Badge>
           {employee.maritalStatus && <Badge tone="neutral">{employee.maritalStatus}</Badge>}
         </div>
+
+        {lifecycleMsg && (
+          <div role="status" style={{ marginBottom: '1rem', padding: '0.75rem 1rem', border: '1px solid var(--success-border)', borderRadius: 'var(--radius-md)', background: 'var(--success-bg)', color: 'var(--success-fg)', fontSize: '0.85rem' }}>
+            {lifecycleMsg}
+          </div>
+        )}
+
+        {!employee.isActive && (
+          <Card style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+              <div className="info-field"><div className="info-field-label">Status</div><div className="info-field-value"><StatusChip status="INACTIVE" /></div></div>
+              <div className="info-field"><div className="info-field-label">Reason</div><div className="info-field-value">{employee.deactivationReason?.replace(/_/g, ' ') || '-'}</div></div>
+              <div className="info-field"><div className="info-field-label">Effective Date</div><div className="info-field-value">{employee.deactivationEffectiveDate ? new Date(employee.deactivationEffectiveDate).toLocaleDateString('en-IN') : '-'}</div></div>
+              <div className="info-field"><div className="info-field-label">Deactivated By</div><div className="info-field-value">{employee.deactivatedBy || '-'}</div></div>
+              <div className="info-field"><div className="info-field-label">Deactivated At</div><div className="info-field-value">{employee.deactivatedAt ? new Date(employee.deactivatedAt).toLocaleString('en-IN') : '-'}</div></div>
+              {employee.deactivationRemarks && <div className="info-field"><div className="info-field-label">Remarks</div><div className="info-field-value">{employee.deactivationRemarks}</div></div>}
+            </div>
+          </Card>
+        )}
 
         {/* Tab Navigation */}
         <Tabs items={tabItems} value={activeTab} onChange={setActiveTab} style={{ marginBottom: '1.5rem' }} />
@@ -286,6 +426,74 @@ export default function EmployeeDetailPage() {
             </div>
           )}
         </div>
+
+        <Modal
+          open={showDeactivateModal}
+          onClose={() => !lifecycleSaving && setShowDeactivateModal(false)}
+          title="Deactivate Employee"
+          width={560}
+          footer={
+            <>
+              <Button variant="ghost" disabled={lifecycleSaving} onClick={() => setShowDeactivateModal(false)}>Cancel</Button>
+              <Button variant="danger" loading={lifecycleSaving} disabled={!canDeactivate} onClick={handleDeactivate}>
+                Confirm Deactivation
+              </Button>
+            </>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', padding: '0.75rem', background: 'var(--surface-sunken)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+              <div className="info-field"><div className="info-field-label">Employee</div><div className="info-field-value">{fullName}</div></div>
+              <div className="info-field"><div className="info-field-label">Employee ID</div><div className="info-field-value">{employee.employeeId}</div></div>
+              <div className="info-field"><div className="info-field-label">Department</div><div className="info-field-value">{employee.department?.name || '-'}</div></div>
+              <div className="info-field"><div className="info-field-label">Current Status</div><div className="info-field-value">{employee.isActive ? 'ACTIVE' : 'INACTIVE'}</div></div>
+            </div>
+            <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--warning-border)', background: 'var(--warning-bg)', color: 'var(--warning-fg)', fontSize: '0.82rem', lineHeight: 1.5 }}>
+              This employee will lose system access and will be removed from active HR operations. Historical records will be preserved.
+            </div>
+            {lifecycleError && <div role="alert" style={{ color: 'var(--danger-fg)', fontSize: '0.8rem' }}>{lifecycleError}</div>}
+            {deactivationMissingMessage && (
+              <div role="status" style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', background: 'var(--surface-sunken)', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0.55rem 0.65rem' }}>
+                {deactivationMissingMessage}
+              </div>
+            )}
+            <div ref={deactivationReasonRef}>
+              <Select label="Deactivation Reason" required value={deactivationForm.reason} onChange={v => { setLifecycleError(''); setDeactivationForm({ ...deactivationForm, reason: v }); }} placeholder="Select reason..." options={DEACTIVATION_REASONS} />
+            </div>
+            <div ref={deactivationDateRef}>
+              <DateField label="Effective Date" required value={deactivationForm.effectiveDate} onChange={v => { setLifecycleError(''); setDeactivationForm({ ...deactivationForm, effectiveDate: v }); }} />
+            </div>
+            <div ref={deactivationRemarksRef}>
+              <Textarea label={deactivationForm.reason === 'OTHER' ? 'Remarks' : 'Remarks (optional)'} required={deactivationForm.reason === 'OTHER'} value={deactivationForm.remarks} onChange={v => { setLifecycleError(''); setDeactivationForm({ ...deactivationForm, remarks: v }); }} placeholder="Add handover notes or context" />
+            </div>
+            <div ref={deactivationConfirmRef}>
+              <TextField label="Type DEACTIVATE to confirm" required value={deactivationForm.confirmation} onChange={v => { setLifecycleError(''); setDeactivationForm({ ...deactivationForm, confirmation: v }); }} placeholder="DEACTIVATE" />
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          open={showReactivateModal}
+          onClose={() => !lifecycleSaving && setShowReactivateModal(false)}
+          title="Reactivate Employee"
+          width={480}
+          footer={
+            <>
+              <Button variant="ghost" disabled={lifecycleSaving} onClick={() => setShowReactivateModal(false)}>Cancel</Button>
+              <Button variant="success" loading={lifecycleSaving} disabled={lifecycleSaving} onClick={handleReactivate}>
+                Reactivate Employee
+              </Button>
+            </>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              Reactivating this employee will restore the employee profile to active HR operations and re-enable the linked login after the backend update succeeds.
+            </p>
+            {lifecycleError && <div role="alert" style={{ color: 'var(--danger-fg)', fontSize: '0.8rem' }}>{lifecycleError}</div>}
+            <Textarea label="Reactivation Remarks (optional)" value={reactivationRemarks} onChange={setReactivationRemarks} placeholder="Reason for reactivation" />
+          </div>
+        </Modal>
 
         <ConfirmDialog
           open={confirmReset}

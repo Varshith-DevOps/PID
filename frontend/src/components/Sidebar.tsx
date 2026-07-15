@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
@@ -43,28 +43,91 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Shift Roster', href: '/shifts', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v4"/><path d="M8 16h8"/></svg>, section: 'work', module: 'ATTENDANCE' },
 ];
 
-export default function Sidebar({ activePath }: { activePath?: string }) {
+function Sidebar({ activePath }: { activePath?: string }) {
   const { user, logout, hasPermission } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const active = activePath || pathname;
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     logout();
     router.push('/');
-  };
+  }, [logout, router]);
 
-  if (!user) return null;
-
-  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   // App-owner accounts (the platform / "Admin Portal") — NOT tenants.
-  const isOwner = isOwnerRole(user.role);
-  const sections = [
+  const isOwner = Boolean(user && isOwnerRole(user.role));
+  const sections = useMemo(() => [
     { key: 'main', label: 'Overview' },
     { key: 'hr', label: 'HR Management' },
     { key: 'finance', label: 'Finance' },
     { key: 'work', label: 'Work' },
-  ];
+  ], []);
+
+  const visibleSections = useMemo(() => {
+    if (!user || isOwner) return [];
+    return sections
+      .map((section) => {
+        const visibleItems = NAV_ITEMS
+          .filter((item) => item.section === section.key)
+          .filter((item) => {
+            if (item.adminOnly && !isAdmin) return false;
+            if (item.module && !hasPermission(item.module, 'VIEW')) return false;
+
+            // KYC gating for tenant users. A newly created tenant can immediately do
+            // employee data entry, attendance and leave (so they can start setting up);
+            // every other tool unlocks once KYC is APPROVED.
+            if (user.role !== 'SUPER_ADMIN' && user.role !== 'SALES' && user.role !== 'SUPPORT') {
+              if (user.companyKycStatus !== 'APPROVED') {
+                const PRE_KYC_MODULES = ['EMPLOYEES', 'ATTENDANCE', 'LEAVE', 'ONBOARDING'];
+                if (item.module && !PRE_KYC_MODULES.includes(item.module)) {
+                  return false;
+                }
+                // Hide AI agent hub until verified
+                if (item.href === '/dashboard/ai-agents') return false;
+              }
+            }
+
+            if (user.role !== 'SUPER_ADMIN' && user.subscriptionFeatures) {
+              const features = user.subscriptionFeatures;
+              if (item.module === 'ATTENDANCE' && !features.attendance) return false;
+              if (item.module === 'LEAVE' && !features.leave) return false;
+              if (item.module === 'PAYROLL' && !features.payroll) return false;
+              if (item.module === 'PERFORMANCE' && !features.performance) return false;
+              if (item.module === 'LEARNING' && !features.learning) return false;
+              if (item.module === 'HELPDESK' && !features.helpdesk) return false;
+              if (item.module === 'INTEGRATIONS' && !features.apiAccess) return false;
+              if (item.module === 'WORKFLOWS' && !features.customWorkflows) return false;
+            }
+            return true;
+          });
+        return { ...section, visibleItems };
+      })
+      .filter((section) => section.visibleItems.length > 0);
+  }, [hasPermission, isAdmin, isOwner, sections, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const hrefs = isOwner
+      ? ['/platform-admin']
+      : visibleSections.flatMap((section) => section.visibleItems.map((item) => item.href));
+
+    const prefetch = () => {
+      hrefs.forEach((href) => router.prefetch(href));
+      if (isAdmin) {
+        ['/permissions', '/platform', '/dashboard/admin', '/dashboard/admin/reports', '/dashboard/billing'].forEach((href) => router.prefetch(href));
+      }
+    };
+
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(prefetch, { timeout: 2000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(prefetch, 250);
+    return () => clearTimeout(id);
+  }, [isAdmin, isOwner, router, user, visibleSections]);
+
+  if (!user) return null;
 
   // ── App-owner portal: a platform-only nav, fully separate from the tenant app,
   //    further filtered per platform role (separation of duties) ──
@@ -102,7 +165,7 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
             </Link>
           ))}
         </nav>
-        <div style={{ padding: '0.5rem 1rem 0' }}>
+        <div className="sidebar-footer-actions">
           <ThemeToggle />
         </div>
         <div className="sidebar-user">
@@ -149,44 +212,11 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
       )}
 
       <nav className="sidebar-nav" style={{ flex: 1 }}>
-        {sections.map(section => {
-          const items = NAV_ITEMS.filter(item => item.section === section.key);
-          const visibleItems = items.filter(item => {
-            if (item.adminOnly && !isAdmin) return false;
-            if (item.module && !hasPermission(item.module, 'VIEW')) return false;
-
-            // KYC gating for tenant users. A newly created tenant can immediately do
-            // employee data entry, attendance and leave (so they can start setting up);
-            // every other tool unlocks once KYC is APPROVED.
-            if (user.role !== 'SUPER_ADMIN' && user.role !== 'SALES' && user.role !== 'SUPPORT') {
-              if (user.companyKycStatus !== 'APPROVED') {
-                const PRE_KYC_MODULES = ['EMPLOYEES', 'ATTENDANCE', 'LEAVE', 'ONBOARDING'];
-                if (item.module && !PRE_KYC_MODULES.includes(item.module)) {
-                  return false;
-                }
-                // Hide AI agent hub until verified
-                if (item.href === '/dashboard/ai-agents') return false;
-              }
-            }
-
-            if (user.role !== 'SUPER_ADMIN' && user.subscriptionFeatures) {
-              const features = user.subscriptionFeatures;
-              if (item.module === 'ATTENDANCE' && !features.attendance) return false;
-              if (item.module === 'LEAVE' && !features.leave) return false;
-              if (item.module === 'PAYROLL' && !features.payroll) return false;
-              if (item.module === 'PERFORMANCE' && !features.performance) return false;
-              if (item.module === 'LEARNING' && !features.learning) return false;
-              if (item.module === 'HELPDESK' && !features.helpdesk) return false;
-              if (item.module === 'INTEGRATIONS' && !features.apiAccess) return false;
-              if (item.module === 'WORKFLOWS' && !features.customWorkflows) return false;
-            }
-            return true;
-          });
-          if (visibleItems.length === 0) return null;
+        {visibleSections.map(section => {
           return (
             <div key={section.key}>
               <div className="sidebar-section">{section.label}</div>
-              {visibleItems.map(item => (
+              {section.visibleItems.map(item => (
                 <Link key={item.href} href={item.href} className={active === item.href || (item.href !== '/dashboard' && active.startsWith(item.href)) ? 'active' : ''}>
                   <span className="nav-icon">{item.icon}</span>
                   {item.label}
@@ -283,7 +313,7 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
         )}
       </nav>
 
-      <div style={{ padding: '0.5rem 1rem 0' }}>
+      <div className="sidebar-footer-actions">
         <ThemeToggle />
       </div>
 
@@ -300,3 +330,5 @@ export default function Sidebar({ activePath }: { activePath?: string }) {
     </aside>
   );
 }
+
+export default memo(Sidebar);

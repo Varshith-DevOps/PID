@@ -69,6 +69,7 @@ const createLeaveRequest = async (req, res) => {
 
     const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!employee.isActive) return res.status(403).json({ error: 'Inactive employees cannot create new leave requests.' });
     if (!(await canAccessEmployee(req.user, employeeId))) {
       return res.status(403).json({ error: 'Access denied. You can only request leave for authorized employees.' });
     }

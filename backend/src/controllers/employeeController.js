@@ -15,6 +15,16 @@ const { canAccessEmployee, getLinkedEmployeeId, isHr, isPayroll } = require('../
 const { assertPayrollRangeOpen, assertPayrollPeriodOpen } = require('../services/payrollPeriodGuard');
 const { getUploadRoot } = require('../config/storage');
 
+const EMPLOYEE_LIFECYCLE_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR']);
+const DEACTIVATION_REASONS = new Set(['RESIGNED', 'TERMINATED', 'CONTRACT_ENDED', 'LONG_TERM_INACTIVE', 'DUPLICATE_TEST_RECORD', 'OTHER']);
+
+const canManageEmployeeLifecycle = (user) => Boolean(user?.role && EMPLOYEE_LIFECYCLE_ROLES.has(user.role));
+const normalizeReason = (value) => String(value || '').trim().toUpperCase();
+const cleanOptionalText = (value) => {
+  const trimmed = String(value || '').trim();
+  return trimmed || null;
+};
+
 /**
  * Log a field-level change to the ChangeHistory audit trail.
  * Skips logging if old and new values are identical.
@@ -60,7 +70,7 @@ const employeeFullIncludes = {
   experience: { orderBy: { fromDate: 'desc' } },
   salaryRevisions: { orderBy: { effectiveDate: 'desc' } },
   salaryStructure: true,
-  user: { select: { id: true, email: true, role: true } },
+  user: { select: { id: true, email: true, role: true, isActive: true } },
   bankDetails: true,
   pfDetails: true,
   exitDetails: true,
@@ -92,8 +102,19 @@ const getChangeHistory = async (req, res) => {
 
 const getAllEmployees = async (req, res) => {
   try {
-    const { departmentId, search, gender, location, page = 1, limit = 250 } = req.query;
-    const where = { isActive: true };
+    const { departmentId, search, gender, location, status = 'active', page = 1, limit = 250 } = req.query;
+    const where = {};
+    const normalizedStatus = String(status || 'active').toLowerCase();
+    const canViewInactive = isHr(req.user) || isPayroll(req.user);
+
+    if (normalizedStatus === 'inactive') {
+      if (!canViewInactive) return res.status(403).json({ error: 'Access denied. You cannot view inactive employee records.' });
+      where.isActive = false;
+    } else if (normalizedStatus === 'all') {
+      if (!canViewInactive) return res.status(403).json({ error: 'Access denied. You cannot view inactive employee records.' });
+    } else {
+      where.isActive = true;
+    }
 
     if (departmentId) where.departmentId = departmentId;
     if (gender) where.gender = gender;
@@ -383,22 +404,179 @@ const updateEmployee = async (req, res) => {
   }
 };
 
-const deleteEmployee = async (req, res) => {
+const auditEmployeeLifecycle = async (tx, req, action, employeeId, details) => {
+  await tx.auditLog.create({
+    data: {
+      userId: req.user?.id || null,
+      userEmail: req.user?.email || null,
+      actorRole: req.user?.role || null,
+      category: 'TENANT',
+      action,
+      entity: 'EMPLOYEE',
+      entityId: employeeId,
+      ipAddress: req.ip || req.socket?.remoteAddress || null,
+      newDetails: JSON.stringify(details),
+    },
+  });
+};
+
+const deactivateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
+    const { reason, effectiveDate, remarks, confirmation } = req.body;
 
-    const employee = await prisma.employee.findUnique({ where: { id } });
+    if (!canManageEmployeeLifecycle(req.user)) {
+      return res.status(403).json({ error: 'Only authorized HR or admin users can deactivate employees.' });
+    }
+    const normalizedConfirmation = String(confirmation || '').trim().toUpperCase();
+    if (normalizedConfirmation !== 'DEACTIVATE') {
+      return res.status(400).json({ error: 'Type DEACTIVATE to confirm employee deactivation.' });
+    }
+
+    const normalizedReason = normalizeReason(reason);
+    if (!DEACTIVATION_REASONS.has(normalizedReason)) {
+      return res.status(400).json({ error: 'Select a valid deactivation reason.' });
+    }
+    const cleanRemarks = cleanOptionalText(remarks);
+    if (normalizedReason === 'OTHER' && !cleanRemarks) {
+      return res.status(400).json({ error: 'Remarks are required when reason is Other.' });
+    }
+    const parsedEffectiveDate = new Date(effectiveDate);
+    if (!effectiveDate || Number.isNaN(parsedEffectiveDate.getTime())) {
+      return res.status(400).json({ error: 'Effective date is required.' });
+    }
+
+    const employee = await prisma.employee.findUnique({ where: { id }, include: { user: true, department: true, subordinates: { select: { id: true } } } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
     if (!(await assertEmployeeAccess(req, res, id, 'deactivate'))) return;
     await assertPayrollPeriodOpen(new Date(), 'Employee deactivation');
 
-    await prisma.employee.update({
-      where: { id },
-      data: { isActive: false },
+    if (employee.userId && employee.userId === req.user?.id) {
+      return res.status(400).json({ error: 'You cannot deactivate your own account.' });
+    }
+    if (!employee.isActive) {
+      return res.status(400).json({ error: 'Employee is already inactive.' });
+    }
+    if (employee.user?.role === 'SUPER_ADMIN') {
+      const activeSuperAdmins = await prisma.user.count({ where: { role: 'SUPER_ADMIN', isActive: true } });
+      if (activeSuperAdmins <= 1) {
+        return res.status(400).json({ error: 'Cannot deactivate the last active Super Admin.' });
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.employee.updateMany({
+        where: { managerId: id, isActive: true },
+        data: { managerId: null },
+      });
+
+      const nextEmployee = await tx.employee.update({
+        where: { id },
+        data: {
+          isActive: false,
+          accountStage: 'INACTIVE',
+          deactivatedAt: new Date(),
+          deactivatedBy: req.user?.email || req.user?.id || 'system',
+          deactivationReason: normalizedReason,
+          deactivationRemarks: cleanRemarks,
+          deactivationEffectiveDate: parsedEffectiveDate,
+        },
+        include: employeeFullIncludes,
+      });
+
+      if (employee.userId) {
+        await tx.user.update({
+          where: { id: employee.userId },
+          data: { isActive: false, tokenVersion: { increment: 1 } },
+        });
+      }
+
+      await auditEmployeeLifecycle(tx, req, 'EMPLOYEE_DEACTIVATED', id, {
+        employeeId: employee.employeeId,
+        reason: normalizedReason,
+        effectiveDate: parsedEffectiveDate.toISOString(),
+        directReportsUnassigned: employee.subordinates.length,
+      });
+      await tx.changeHistory.create({
+        data: {
+          employeeId: id,
+          changedBy: req.user?.email || req.user?.id || 'system',
+          entity: 'Lifecycle',
+          field: 'isActive',
+          oldValue: 'true',
+          newValue: 'false',
+          reason: cleanRemarks || normalizedReason,
+        },
+      });
+
+      return nextEmployee;
     });
 
-    res.json({ message: 'Employee deactivated' });
+    res.json({ success: true, message: 'Employee deactivated successfully.', employee: updated });
   } catch (error) {
+    console.error('[DEACTIVATE EMPLOYEE ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const reactivateEmployee = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cleanRemarks = cleanOptionalText(req.body?.remarks);
+
+    if (!canManageEmployeeLifecycle(req.user)) {
+      return res.status(403).json({ error: 'Only authorized HR or admin users can reactivate employees.' });
+    }
+
+    const employee = await prisma.employee.findUnique({ where: { id }, include: { user: true } });
+    if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    if (!(await assertEmployeeAccess(req, res, id, 'reactivate'))) return;
+    if (employee.isActive) {
+      return res.status(400).json({ error: 'Employee is already active.' });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const nextEmployee = await tx.employee.update({
+        where: { id },
+        data: {
+          isActive: true,
+          accountStage: employee.accountStage === 'INACTIVE' ? 'EMPLOYEE' : employee.accountStage,
+          reactivatedAt: new Date(),
+          reactivatedBy: req.user?.email || req.user?.id || 'system',
+          reactivationRemarks: cleanRemarks,
+        },
+        include: employeeFullIncludes,
+      });
+
+      if (employee.userId) {
+        await tx.user.update({
+          where: { id: employee.userId },
+          data: { isActive: true, tokenVersion: { increment: 1 } },
+        });
+      }
+
+      await auditEmployeeLifecycle(tx, req, 'EMPLOYEE_REACTIVATED', id, {
+        employeeId: employee.employeeId,
+        remarks: cleanRemarks,
+      });
+      await tx.changeHistory.create({
+        data: {
+          employeeId: id,
+          changedBy: req.user?.email || req.user?.id || 'system',
+          entity: 'Lifecycle',
+          field: 'isActive',
+          oldValue: 'false',
+          newValue: 'true',
+          reason: cleanRemarks || 'Reactivated',
+        },
+      });
+
+      return nextEmployee;
+    });
+
+    res.json({ success: true, message: 'Employee reactivated successfully.', employee: updated });
+  } catch (error) {
+    console.error('[REACTIVATE EMPLOYEE ERROR]:', error.message);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -1001,7 +1179,9 @@ module.exports = {
   getEmployeeById,
   createEmployee,
   updateEmployee,
-  deleteEmployee,
+  deactivateEmployee,
+  reactivateEmployee,
+  deleteEmployee: deactivateEmployee,
   getDepartments,
   updateDepartment,
   createDepartment,

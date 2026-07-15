@@ -7,8 +7,8 @@
  * @module lib/authContext
  */
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getProfile, logout as apiLogout } from './api';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { clearApiCache, getProfile, logout as apiLogout } from './api';
 
 interface Permission {
   module: string;
@@ -73,34 +73,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = (_token: string | undefined, userData: User, userPermissions?: Permission[]) => {
+  const login = useCallback((_token: string | undefined, userData: User, userPermissions?: Permission[]) => {
+    clearApiCache();
     setUser(userData);
     setPermissions(userPermissions || []);
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     // Revoke server-side (bumps tokenVersion) before clearing local state.
     void apiLogout();
+    clearApiCache();
     document.cookie = 'csrfToken=; path=/; max-age=0';
     setUser(null);
     setPermissions([]);
-  };
+  }, []);
 
-  const markPasswordChanged = () => {
+  const markPasswordChanged = useCallback(() => {
     setUser((prev) => (prev ? { ...prev, mustChangePassword: false } : prev));
-  };
+  }, []);
 
-  const hasPermission = (module: string, action: string): boolean => {
+  const hasPermission = useCallback((module: string, action: string): boolean => {
     if (!user) return false;
     if (isSuperAdmin(user.role)) return true;
     return permissions.some((p) => p.module === module && p.action === action && p.isGranted);
-  };
+  }, [permissions, user]);
 
-  const canEdit = (module: string): boolean => hasPermission(module, 'EDIT');
-  const canDelete = (module: string): boolean => hasPermission(module, 'DELETE');
+  const canEdit = useCallback((module: string): boolean => hasPermission(module, 'EDIT'), [hasPermission]);
+  const canDelete = useCallback((module: string): boolean => hasPermission(module, 'DELETE'), [hasPermission]);
+
+  const value = useMemo(
+    () => ({ user, permissions, loading, login, logout, markPasswordChanged, hasPermission, canEdit, canDelete }),
+    [user, permissions, loading, login, logout, markPasswordChanged, hasPermission, canEdit, canDelete]
+  );
 
   return (
-    <AuthContext.Provider value={{ user, permissions, loading, login, logout, markPasswordChanged, hasPermission, canEdit, canDelete }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

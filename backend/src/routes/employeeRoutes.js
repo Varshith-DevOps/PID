@@ -17,6 +17,8 @@ const {
   getEmployeeById,
   createEmployee,
   updateEmployee,
+  deactivateEmployee,
+  reactivateEmployee,
   deleteEmployee,
   getDepartments,
   updateDepartment,
@@ -122,7 +124,13 @@ router.post('/', authenticate, rbacMiddleware('EMPLOYEES', 'CREATE'), validate(e
 /** PUT /api/employees/:id — Update employee details */
 router.put('/:id', authenticate, rbacMiddleware('EMPLOYEES', 'EDIT'), updateEmployee);
 
-/** DELETE /api/employees/:id — Soft-delete (deactivate) an employee */
+/** PATCH /api/employees/:id/deactivate — Safely deactivate an employee without deleting history */
+router.patch('/:id/deactivate', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR'), deactivateEmployee);
+
+/** PATCH /api/employees/:id/reactivate — Restore an inactive employee and login */
+router.patch('/:id/reactivate', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR'), reactivateEmployee);
+
+/** DELETE /api/employees/:id — Compatibility alias for safe deactivation */
 router.delete('/:id', authenticate, rbacMiddleware('EMPLOYEES', 'DELETE'), deleteEmployee);
 
 // ──── Address Sub-resource ─────────────────────────────────────────────────

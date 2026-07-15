@@ -17,6 +17,8 @@ const { publicApplicationLimiter } = require('../middleware/rateLimit');
 
 const {
   getJobOpenings,
+  getCareerConnectJobs,
+  getCareerPortalJobById,
   getJobOpeningById,
   createJobOpening,
   updateJobOpening,
@@ -24,7 +26,11 @@ const {
   getApplicants,
   applyForJob,
   updateApplicantStage,
+  updateApplicantEvaluation,
+  getApplicantReviews,
+  createApplicantReview,
   scheduleInterview,
+  resendInterviewEmail,
   submitInterviewFeedback,
   createJobOffer,
   downloadOfferLetter,
@@ -104,6 +110,8 @@ const validateResumeSafety = (req, res, next) => {
 // ──── Routes ───────────────────────────────────────────────────────────────
 
 // Job Openings
+  router.get('/career-connect/jobs', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getCareerConnectJobs);
+  router.get('/career-portal/jobs/:id', getCareerPortalJobById);
   router.get('/jobs', authenticate, getJobOpenings);
   router.get('/jobs/:id', authenticate, getJobOpeningById);
   router.post('/jobs', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOpening);
@@ -125,10 +133,14 @@ router.post('/applicants', publicApplicationLimiter, (req, res, next) => {
     next();
   });
 }, validateResumeSignature, validateResumeSafety, applyForJob); // Allow public/employee submission
+router.patch('/applicants/:id/evaluation', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateApplicantEvaluation);
+router.get('/applicants/:applicantId/reviews', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getApplicantReviews);
+router.post('/applicants/:applicantId/reviews', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), createApplicantReview);
 router.put('/applicants/:id/stage', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateApplicantStage);
 
 // Interviews
 router.post('/interviews', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), scheduleInterview);
+router.post('/interviews/:id/resend-email', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), resendInterviewEmail);
 router.put('/interviews/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), submitInterviewFeedback);
 
 // Offers

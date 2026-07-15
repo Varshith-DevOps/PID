@@ -78,6 +78,129 @@ describe('Security Patches & Access Control Tests', () => {
     });
   });
 
+  describe('Employee deactivation safety', () => {
+    let lifecycleEmail;
+    let lifecycleEmployeeId;
+    let lifecycleTempPassword;
+
+    afterAll(async () => {
+      if (!lifecycleEmail) return;
+      const emp = await prisma.employee.findUnique({ where: { email: lifecycleEmail }, include: { user: true } }).catch(() => null);
+      if (emp) {
+        await prisma.auditLog.deleteMany({ where: { entity: 'EMPLOYEE', entityId: emp.id } }).catch(() => {});
+        await prisma.changeHistory.deleteMany({ where: { employeeId: emp.id } }).catch(() => {});
+        await prisma.leave.deleteMany({ where: { employeeId: emp.id } }).catch(() => {});
+        await prisma.employee.delete({ where: { id: emp.id } }).catch(() => {});
+      }
+      if (emp?.userId) {
+        await prisma.permission.deleteMany({ where: { userId: emp.userId } }).catch(() => {});
+        await prisma.auditLog.deleteMany({ where: { userId: emp.userId } }).catch(() => {});
+        await prisma.user.delete({ where: { id: emp.userId } }).catch(() => {});
+      }
+    });
+
+    it('deactivates without deleting history, blocks login, and supports reactivation', async () => {
+      const dept = await prisma.department.findFirst();
+      lifecycleEmail = `deactivate_${Date.now()}@company.com`;
+      const created = await request(app)
+        .post('/api/employees')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          firstName: 'Deactivate',
+          lastName: 'Safety',
+          email: lifecycleEmail,
+          jobTitle: 'QA Analyst',
+          departmentId: dept?.id,
+          salary: 50000,
+        });
+      expect(created.status).toBe(201);
+      lifecycleEmployeeId = created.body.id;
+      lifecycleTempPassword = created.body.temporaryPassword;
+
+      const leave = await prisma.leave.create({
+        data: {
+          employeeId: lifecycleEmployeeId,
+          leaveType: 'ANNUAL',
+          startDate: new Date('2099-04-01'),
+          endDate: new Date('2099-04-01'),
+          days: 1,
+          reason: 'Historical record',
+          status: 'APPROVED',
+        },
+      });
+
+      const missingReason = await request(app)
+        .patch(`/api/employees/${lifecycleEmployeeId}/deactivate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ effectiveDate: '2099-04-30', confirmation: 'DEACTIVATE' });
+      expect(missingReason.status).toBe(400);
+
+      const deactivated = await request(app)
+        .patch(`/api/employees/${lifecycleEmployeeId}/deactivate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          reason: 'RESIGNED',
+          effectiveDate: '2099-04-30',
+          remarks: 'Completed handover.',
+          confirmation: 'DEACTIVATE',
+        });
+      expect(deactivated.status).toBe(200);
+      expect(deactivated.body.message).toBe('Employee deactivated successfully.');
+      expect(deactivated.body.employee.isActive).toBe(false);
+      expect(deactivated.body.employee.deactivationReason).toBe('RESIGNED');
+
+      const stored = await prisma.employee.findUnique({ where: { id: lifecycleEmployeeId }, include: { user: true, leaves: true } });
+      expect(stored.isActive).toBe(false);
+      expect(stored.user.isActive).toBe(false);
+      expect(stored.leaves.some((item) => item.id === leave.id)).toBe(true);
+
+      const activeList = await request(app)
+        .get('/api/employees')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(activeList.body.employees.some((emp) => emp.id === lifecycleEmployeeId)).toBe(false);
+
+      const inactiveList = await request(app)
+        .get('/api/employees?status=inactive')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(inactiveList.body.employees.some((emp) => emp.id === lifecycleEmployeeId)).toBe(true);
+
+      const blockedLogin = await request(app)
+        .post('/api/auth/login')
+        .send({ email: lifecycleEmail, password: lifecycleTempPassword });
+      expect(blockedLogin.status).toBe(403);
+      expect(blockedLogin.body.error).toBe('Your account has been deactivated. Contact HR.');
+
+      const blockedLeave = await request(app)
+        .post('/api/leave')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          employeeId: lifecycleEmployeeId,
+          leaveType: 'ANNUAL',
+          startDate: '2099-05-01',
+          endDate: '2099-05-01',
+          reason: 'Should fail',
+        });
+      expect(blockedLeave.status).toBe(403);
+
+      const audit = await prisma.auditLog.findFirst({
+        where: { action: 'EMPLOYEE_DEACTIVATED', entity: 'EMPLOYEE', entityId: lifecycleEmployeeId },
+      });
+      expect(audit).toBeTruthy();
+
+      const reactivated = await request(app)
+        .patch(`/api/employees/${lifecycleEmployeeId}/reactivate`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ remarks: 'Employee rejoined.' });
+      expect(reactivated.status).toBe(200);
+      expect(reactivated.body.message).toBe('Employee reactivated successfully.');
+      expect(reactivated.body.employee.isActive).toBe(true);
+
+      const restored = await prisma.employee.findUnique({ where: { id: lifecycleEmployeeId }, include: { user: true } });
+      expect(restored.isActive).toBe(true);
+      expect(restored.user.isActive).toBe(true);
+    });
+  });
+
   describe('Phase 1: Password Reset IDOR', () => {
     it('should reject password reset if caller is not admin', async () => {
       const res = await request(app)
