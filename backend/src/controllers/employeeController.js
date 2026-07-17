@@ -1140,10 +1140,36 @@ const createDepartment = async (req, res) => {
   }
 };
 
+const ORG_ROOT_TITLES = new Set(['ceo', 'chief executive officer', 'managing director', 'founder']);
+
+const isOrgRootTitle = (title) => ORG_ROOT_TITLES.has(String(title || '').trim().toLowerCase());
+
+const toOrgChartNode = (employee) => ({
+  id: employee.id,
+  employeeId: employee.employeeId,
+  name: `${employee.firstName} ${employee.lastName}`.trim(),
+  designation: employee.jobTitle,
+  title: employee.jobTitle,
+  managerId: employee.managerId,
+  email: employee.email,
+  profileImage: employee.photoUrl,
+  photoUrl: employee.photoUrl,
+  department: employee.department?.name || '',
+  status: employee.isActive ? 'ACTIVE' : 'INACTIVE',
+  directReportCount: 0,
+  children: [],
+});
+
 const getOrgChart = async (req, res) => {
   try {
+    const includeInactive = String(req.query.includeInactive || '').toLowerCase() === 'true';
+    const canViewInactive = isHr(req.user) || isPayroll(req.user);
+    if (includeInactive && !canViewInactive) {
+      return res.status(403).json({ error: 'Access denied. You cannot view inactive employee records.' });
+    }
+
     const employees = await prisma.employee.findMany({
-      where: { isActive: true },
+      where: includeInactive ? {} : { isActive: true },
       select: {
         id: true,
         employeeId: true,
@@ -1153,23 +1179,81 @@ const getOrgChart = async (req, res) => {
         managerId: true,
         email: true,
         photoUrl: true,
+        isActive: true,
         department: { select: { name: true } },
       },
-      orderBy: { firstName: 'asc' },
+      orderBy: [{ jobTitle: 'asc' }, { firstName: 'asc' }, { lastName: 'asc' }],
     });
 
-    const chart = employees.map((e) => ({
-      id: e.id,
-      name: `${e.firstName} ${e.lastName}`,
-      title: e.jobTitle,
-      managerId: e.managerId,
-      email: e.email,
-      photoUrl: e.photoUrl,
-      department: e.department?.name || '',
-    }));
+    const nodeMap = new Map(employees.map((employee) => [employee.id, toOrgChartNode(employee)]));
+    const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
+    const circularIds = new Set();
+    const assignedIds = new Set();
 
-    res.json(chart);
+    for (const employee of employees) {
+      const path = new Set();
+      let current = employee;
+      while (current?.managerId) {
+        if (current.managerId === current.id || path.has(current.managerId)) {
+          path.add(current.id);
+          for (const id of path) circularIds.add(id);
+          break;
+        }
+        path.add(current.id);
+        current = employeeMap.get(current.managerId);
+        if (!current) break;
+      }
+    }
+
+    for (const employee of employees) {
+      const node = nodeMap.get(employee.id);
+      if (!node || circularIds.has(employee.id)) continue;
+      if (employee.managerId && nodeMap.has(employee.managerId) && !circularIds.has(employee.managerId)) {
+        const manager = nodeMap.get(employee.managerId);
+        manager.children.push(node);
+        manager.directReportCount += 1;
+        assignedIds.add(employee.id);
+      }
+    }
+
+    const sortTree = (nodes) => {
+      nodes.sort((a, b) => a.name.localeCompare(b.name));
+      nodes.forEach((node) => sortTree(node.children));
+      return nodes;
+    };
+
+    const roots = sortTree(employees
+      .filter((employee) => isOrgRootTitle(employee.jobTitle) && !assignedIds.has(employee.id) && !circularIds.has(employee.id))
+      .map((employee) => nodeMap.get(employee.id))
+      .filter(Boolean));
+
+    const unassigned = sortTree(employees
+      .filter((employee) => !isOrgRootTitle(employee.jobTitle) && !assignedIds.has(employee.id) && !circularIds.has(employee.id))
+      .map((employee) => nodeMap.get(employee.id))
+      .filter(Boolean));
+
+    const circular = sortTree([...circularIds].map((id) => nodeMap.get(id)).filter(Boolean));
+
+    if (circular.length > 0) {
+      console.warn('ORG_CHART_CIRCULAR_REPORTING', { affectedEmployeeCount: circular.length });
+    }
+
+    res.json({
+      success: true,
+      roots,
+      unassigned,
+      circular,
+      warnings: circular.length ? ['Circular reporting relationships were isolated from the main chart.'] : [],
+      meta: {
+        reportingField: 'managerId',
+        employeeCount: employees.length,
+        rootCount: roots.length,
+        unassignedCount: unassigned.length,
+        circularCount: circular.length,
+      },
+    });
   } catch (error) {
+    console.error('GET ORG CHART ERROR:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

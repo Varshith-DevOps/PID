@@ -8,6 +8,7 @@
 const request = require('supertest');
 const app = require('../src/index');
 const prisma = require('../src/config/database');
+const { writeOfferPdf } = require('../src/services/offerLetterStorageService');
 
 const stamp = `${Date.now()}`.slice(-9);
 const JOB_TITLE = `QA ATS Role ${stamp}`;
@@ -32,8 +33,8 @@ describe('Recruitment / ATS pipeline', () => {
       await prisma.permission.deleteMany({ where: { userId: user.id } }).catch(() => {});
       await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
     }
-    // Deleting the job cascades applicants -> interviews/offers.
-    await prisma.jobOpening.deleteMany({ where: { title: { in: [JOB_TITLE, CLOSED_TITLE] } } }).catch(() => {});
+    // Test cleanup can cascade. Runtime delete endpoints must not.
+    await prisma.jobOpening.deleteMany({ where: { title: { contains: stamp } } }).catch(() => {});
   };
 
   beforeAll(async () => {
@@ -74,6 +75,37 @@ describe('Recruitment / ATS pipeline', () => {
     const one = await request(app).get(`/api/recruitment/jobs/${jobId}`).set('Authorization', `Bearer ${adminToken}`);
     expect(one.status).toBe(200);
     expect(Array.isArray(one.body.applicants)).toBe(true);
+  });
+
+  it('allows deleting only an empty job requisition with DELETE confirmation', async () => {
+    const empty = await request(app)
+      .post('/api/recruitment/jobs')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(jobBody({ title: `QA ATS Empty Delete ${stamp}` }));
+    expect(empty.status).toBe(201);
+
+    const forbidden = await request(app)
+      .post(`/api/recruitment/jobs/${empty.body.id}/delete`)
+      .set('Authorization', `Bearer ${empToken}`)
+      .send({ confirmation: 'DELETE' });
+    expect(forbidden.status).toBe(403);
+
+    const missingConfirmation = await request(app)
+      .post(`/api/recruitment/jobs/${empty.body.id}/delete`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ confirmation: 'delete' });
+    expect(missingConfirmation.status).toBe(400);
+    expect(missingConfirmation.body.error).toBe('Type DELETE to confirm.');
+
+    const deleted = await request(app)
+      .post(`/api/recruitment/jobs/${empty.body.id}/delete`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ confirmation: 'DELETE' });
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.message).toBe('Job requisition deleted successfully.');
+
+    const job = await prisma.jobOpening.findUnique({ where: { id: empty.body.id } });
+    expect(job).toBeNull();
   });
 
   // ── Public application + guards ───────────────────────────────────────────────
@@ -350,6 +382,35 @@ describe('Recruitment / ATS pipeline', () => {
     expect(res.body.rating).toBe(5);
   });
 
+  it('moves an INTERVIEW candidate to HIRED without provisioning onboarding yet', async () => {
+    const res = await request(app).put(`/api/recruitment/applicants/${applicantId}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'HIRED' });
+    expect(res.status).toBe(200);
+    expect(res.body.stage).toBe('HIRED');
+
+    const emp = await prisma.employee.findUnique({ where: { email: CAND_EMAIL } });
+    expect(emp).toBeFalsy();
+  });
+
+  it('blocks interview scheduling after the candidate has been hired', async () => {
+    const before = await prisma.interview.count({ where: { applicantId } });
+    const res = await request(app).post('/api/recruitment/interviews').set('Authorization', `Bearer ${adminToken}`)
+      .send({ applicantId, interviewerName: 'Late Interviewer', interviewDate: '2099-07-04T10:00:00.000Z', roundName: 'HR & Culture Round', interviewMode: 'PHONE' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'Interview rounds can only be scheduled when the candidate is in the Interviews stage.',
+    });
+
+    const after = await prisma.interview.count({ where: { applicantId } });
+    expect(after).toBe(before);
+  });
+
+  it('moves a HIRED candidate to OFFER', async () => {
+    const res = await request(app).put(`/api/recruitment/applicants/${applicantId}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'OFFER' });
+    expect(res.status).toBe(200);
+    expect(res.body.stage).toBe('OFFER');
+  });
+
   it('creates a job offer, rejects a past joining date, and downloads the PDF', async () => {
     const past = await request(app).post('/api/recruitment/offers').set('Authorization', `Bearer ${adminToken}`)
       .send({ applicantId, offeredSalary: 900000, joiningDate: '2000-01-01' });
@@ -368,6 +429,86 @@ describe('Recruitment / ATS pipeline', () => {
     expect(pdf.headers['content-type']).toMatch(/application\/pdf/);
   });
 
+  it('creates and shares a generated offer without an expiry date safely', async () => {
+    const candidate = await request(app).post('/api/recruitment/applicants')
+      .field('jobOpeningId', jobId).field('fullName', 'Optional Expiry Candidate').field('email', `optional-expiry-${stamp}@example.com`).field('phone', '9000000011')
+      .field('currentCtc', '8 LPA').field('expectedCtc', '12 LPA').field('noticePeriod', '30 Days');
+    expect(candidate.status).toBe(201);
+
+    const moved = await request(app).put(`/api/recruitment/applicants/${candidate.body.id}/stage`)
+      .set('Authorization', `Bearer ${adminToken}`).send({ stage: 'OFFER' });
+    expect(moved.status).toBe(200);
+
+    const offerPayload = {
+      offeredCtc: 1200000,
+      basicSalary: 600000,
+      hra: 240000,
+      specialAllowance: 360000,
+      workLocation: 'Bengaluru',
+      employmentType: 'FULL_TIME',
+      joiningDate: '2099-08-01',
+      offerExpiryDate: null,
+      reportingManager: 'Admin User',
+      signatoryName: 'Admin User',
+      signatoryDesignation: 'HR',
+    };
+
+    const created = await request(app).post(`/api/recruitment/applicants/${candidate.body.id}/offers`)
+      .set('Authorization', `Bearer ${adminToken}`).send(offerPayload);
+    expect(created.status).toBe(201);
+    expect(created.body.offerExpiryDate).toBeNull();
+
+    const invalidExpiry = await request(app).patch(`/api/recruitment/offers/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`).send({ ...offerPayload, offerExpiryDate: 'not-a-date', updatedAt: created.body.updatedAt });
+    expect(invalidExpiry.status).toBe(400);
+    expect(invalidExpiry.body.error).toBe('Offer expiry date is invalid.');
+
+    const lateExpiry = await request(app).patch(`/api/recruitment/offers/${created.body.id}`)
+      .set('Authorization', `Bearer ${adminToken}`).send({ ...offerPayload, offerExpiryDate: '2099-08-02', updatedAt: created.body.updatedAt });
+    expect(lateExpiry.status).toBe(400);
+    expect(lateExpiry.body.error).toBe('Offer expiry date must be before the joining date.');
+
+    const stored = await writeOfferPdf({
+      offerId: created.body.id,
+      fileName: 'Offer-Letter-Optional-Expiry-Candidate.pdf',
+      buffer: Buffer.from('%PDF-1.4\n% Test offer PDF\n'),
+    });
+    const generated = await prisma.jobOffer.update({
+      where: { id: created.body.id },
+      data: {
+        status: 'GENERATED',
+        pdfFileName: stored.fileName,
+        pdfStorageKey: stored.storageKey,
+        offerLetter: stored.storageKey,
+      },
+    });
+    expect(generated.pdfStorageKey).toBeTruthy();
+
+    const forbidden = await request(app).post(`/api/recruitment/offers/${created.body.id}/send`)
+      .set('Authorization', `Bearer ${empToken}`);
+    expect(forbidden.status).toBe(403);
+
+    const sent = await request(app).post(`/api/recruitment/offers/${created.body.id}/send`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(sent.status).toBe(200);
+    expect(sent.body.emailStatus).toBe('FAILED');
+    expect(sent.body.status).toBe('GENERATED');
+    expect(sent.body.pdfStorageKey).toBe(generated.pdfStorageKey);
+    expect(sent.body.publicTokenHash).toBeTruthy();
+
+    const resend = await request(app).post(`/api/recruitment/offers/${created.body.id}/resend`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(resend.status).toBe(200);
+    expect(resend.body.emailStatus).toBe('FAILED');
+    expect(resend.body.pdfStorageKey).toBe(generated.pdfStorageKey);
+
+    const offers = await prisma.jobOffer.findMany({ where: { applicantId: candidate.body.id } });
+    expect(offers).toHaveLength(1);
+
+    const applicant = await prisma.jobApplicant.findUnique({ where: { id: candidate.body.id } });
+    expect(applicant.stage).toBe('OFFER');
+  });
+
   it('resends a failed interview email without creating another interview round', async () => {
     const before = await prisma.interview.count({ where: { applicantId } });
     const res = await request(app).post(`/api/recruitment/interviews/${interviewId}/resend-email`).set('Authorization', `Bearer ${adminToken}`);
@@ -379,27 +520,10 @@ describe('Recruitment / ATS pipeline', () => {
     expect(after).toBe(before);
   });
 
-  it('blocks interview scheduling after an offer has been extended', async () => {
-    const before = await prisma.interview.count({ where: { applicantId } });
-    const res = await request(app).post('/api/recruitment/interviews').set('Authorization', `Bearer ${adminToken}`)
-      .send({ applicantId, interviewerName: 'Late Interviewer', interviewDate: '2099-07-04T10:00:00.000Z', roundName: 'HR & Culture Round', interviewMode: 'PHONE' });
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      message: 'Interview rounds can only be scheduled when the candidate is in the Interviews stage.',
-    });
-
-    const after = await prisma.interview.count({ where: { applicantId } });
-    expect(after).toBe(before);
-  });
-
-  it('moves an OFFER candidate to HIRED without provisioning onboarding yet', async () => {
+  it('rejects a direct backward transition from OFFER to HIRED', async () => {
     const res = await request(app).put(`/api/recruitment/applicants/${applicantId}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'HIRED' });
-    expect(res.status).toBe(200);
-    expect(res.body.stage).toBe('HIRED');
-
-    const emp = await prisma.employee.findUnique({ where: { email: CAND_EMAIL } });
-    expect(emp).toBeFalsy();
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Candidate can only move forward in the recruitment pipeline.');
   });
 
   // ── ONBOARDING -> auto-provision employee + onboarding ────────────────────────
@@ -416,9 +540,74 @@ describe('Recruitment / ATS pipeline', () => {
     expect(user.mustChangePassword).toBe(true);
   });
 
-  it('rejects any further stage movement after ONBOARDING', async () => {
+  it('allows an ONBOARDING candidate to move to Archived / Rejected', async () => {
     const res = await request(app).put(`/api/recruitment/applicants/${applicantId}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'REJECTED' });
+    expect(res.status).toBe(200);
+    expect(res.body.stage).toBe('REJECTED');
+  });
+
+  it('rejects movement after Archived / Rejected', async () => {
+    const res = await request(app).put(`/api/recruitment/applicants/${applicantId}/stage`).set('Authorization', `Bearer ${adminToken}`).send({ stage: 'ONBOARDING' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Candidate can only move forward in the recruitment pipeline.');
+  });
+
+  it('expires an open job safely and preserves recruitment history', async () => {
+    const beforeJobs = await request(app).get('/api/recruitment/jobs').set('Authorization', `Bearer ${adminToken}`);
+    const beforeActive = beforeJobs.body.filter((job) => job.status === 'OPEN').length;
+    const beforeClosed = beforeJobs.body.filter((job) => job.status === 'CLOSED').length;
+
+    const expired = await request(app)
+      .patch(`/api/recruitment/jobs/${jobId}/expire`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'POSITION_FILLED', remarks: 'Hiring completed.' });
+    expect(expired.status).toBe(200);
+    expect(expired.body.message).toBe('Job requisition expired successfully.');
+    expect(expired.body.job.status).toBe('CLOSED');
+    expect(expired.body.job._count.applicants).toBeGreaterThan(0);
+
+    const afterJobs = await request(app).get('/api/recruitment/jobs').set('Authorization', `Bearer ${adminToken}`);
+    expect(afterJobs.body.filter((job) => job.status === 'OPEN').length).toBe(beforeActive - 1);
+    expect(afterJobs.body.filter((job) => job.status === 'CLOSED').length).toBe(beforeClosed + 1);
+
+    const board = await request(app).get(`/api/recruitment/jobs/${jobId}`).set('Authorization', `Bearer ${adminToken}`);
+    expect(board.status).toBe(200);
+    expect(board.body.status).toBe('CLOSED');
+    expect(board.body.applicants.some((applicant) => applicant.id === applicantId)).toBe(true);
+    expect(board.body.applicants.some((applicant) => applicant.interviews.length > 0)).toBe(true);
+    expect(board.body.applicants.some((applicant) => applicant.jobOffer)).toBe(true);
+
+    const careerConnect = await request(app).get('/api/recruitment/career-connect/jobs').set('Authorization', `Bearer ${adminToken}`);
+    expect(careerConnect.status).toBe(200);
+    expect(careerConnect.body.some((job) => job.id === jobId)).toBe(false);
+
+    const publicJob = await request(app).get(`/api/recruitment/career-portal/jobs/${jobId}`);
+    expect(publicJob.status).toBe(410);
+    expect(publicJob.body.error).toBe('This job opening is no longer accepting applications.');
+
+    const lateApplication = await request(app).post('/api/recruitment/applicants')
+      .field('jobOpeningId', jobId).field('fullName', 'Late Closed').field('email', `late-closed-${stamp}@x.com`).field('phone', '9000000099')
+      .field('currentCtc', '6 LPA').field('expectedCtc', '9 LPA').field('noticePeriod', '30 Days');
+    expect(lateApplication.status).toBe(400);
+    expect(lateApplication.body.error).toBe('This job opening is no longer accepting applications.');
+
+    const duplicateExpire = await request(app)
+      .patch(`/api/recruitment/jobs/${jobId}/expire`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'EXPIRED' });
+    expect(duplicateExpire.status).toBe(400);
+    expect(duplicateExpire.body.error).toBe('Job is already closed.');
+
+    const blockedDelete = await request(app)
+      .post(`/api/recruitment/jobs/${jobId}/delete`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ confirmation: 'DELETE' });
+    expect(blockedDelete.status).toBe(400);
+    expect(blockedDelete.body.error).toBe('This job cannot be deleted because recruitment activity already exists. Expire the job instead.');
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { entity: 'JobOpening', entityId: jobId, action: 'JOB_REQUISITION_EXPIRED' },
+    });
+    expect(audit).toBeTruthy();
   });
 });

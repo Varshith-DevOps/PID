@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import {
   askAthenaPolicy,
+  askAtlasProject,
+  askNovaRecruitment,
   auditPayrollCompliance,
   auditTdsProof,
   regularizeAttendanceWinston
@@ -13,14 +15,102 @@ import {
   Field, Select, TextField, NumberField, FileDrop, EmptyState,
 } from '@/components/ui';
 
-type AgentKey = 'athena' | 'jarvis' | 'sherlock' | 'winston';
+type AgentKey = 'athena' | 'jarvis' | 'sherlock' | 'winston' | 'atlas' | 'nova';
+type SimpleChatMessage = { sender: 'user' | 'agent'; text: string };
 
 const AGENTS: { key: AgentKey; name: string; role: string; icon: string; accent: string }[] = [
   { key: 'athena', name: 'Athena', role: 'Policy & RAG Coordinator', icon: '💬', accent: 'var(--accent)' },
   { key: 'jarvis', name: 'Jarvis', role: 'Statutory Payroll Auditor', icon: '📊', accent: 'var(--success-fg)' },
   { key: 'sherlock', name: 'Sherlock', role: 'TDS Document Assessor', icon: '🔍', accent: 'var(--warning-fg)' },
   { key: 'winston', name: 'Winston', role: 'Roster & Attendance Arbiter', icon: '⚡', accent: 'var(--danger-fg)' },
+  { key: 'atlas', name: 'Atlas', role: 'Project Management Assistant', icon: '📋', accent: 'var(--accent)' },
+  { key: 'nova', name: 'Nova', role: 'Recruitment Intelligence Assistant', icon: '👥', accent: 'var(--accent)' },
 ];
+
+function SimpleAgentConsole({
+  title,
+  description,
+  messages,
+  question,
+  setQuestion,
+  loading,
+  placeholder,
+  onSubmit,
+}: {
+  title: string;
+  description: string;
+  messages: SimpleChatMessage[];
+  question: string;
+  setQuestion: (value: string) => void;
+  loading: boolean;
+  placeholder: string;
+  onSubmit: (event: React.FormEvent) => void;
+}) {
+  return (
+    <div>
+      <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.25rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
+        <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{description}</p>
+      </div>
+
+      <div
+        style={{
+          background: 'var(--surface-sunken)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-md)',
+          height: '360px',
+          overflowY: 'auto',
+          padding: '1.5rem',
+          marginBottom: '1.5rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          whiteSpace: 'pre-wrap',
+        }}
+      >
+        {messages.map((msg, index) => (
+          <div key={index} style={{ alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start', maxWidth: '82%' }}>
+            <div
+              style={{
+                padding: '0.85rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                background: msg.sender === 'user' ? 'var(--accent)' : 'var(--surface-raised)',
+                color: msg.sender === 'user' ? 'var(--text-on-accent)' : 'var(--text-primary)',
+                border: msg.sender === 'user' ? 'none' : '1px solid var(--border-subtle)',
+                fontSize: '0.9rem',
+                lineHeight: 1.5,
+              }}
+            >
+              {msg.text}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div
+            style={{
+              alignSelf: 'flex-start',
+              padding: '0.5rem 1rem',
+              background: 'var(--surface-raised)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--text-muted)',
+              fontSize: '0.85rem',
+            }}
+          >
+            Reading application data...
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={onSubmit} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          <TextField label="" value={question} onChange={setQuestion} placeholder={placeholder} />
+        </div>
+        <Button type="submit" loading={loading} disabled={loading}>Send</Button>
+      </form>
+    </div>
+  );
+}
 
 export default function AIAgentsPage() {
   // Athena state
@@ -51,6 +141,20 @@ export default function AIAgentsPage() {
   const [winstonReport, setWinstonReport] = useState<any>(null);
   const [winstonLoading, setWinstonLoading] = useState(false);
   const [winstonError, setWinstonError] = useState(false);
+
+  // Atlas state
+  const [atlasQuestion, setAtlasQuestion] = useState('');
+  const [atlasChat, setAtlasChat] = useState<SimpleChatMessage[]>([
+    { sender: 'agent', text: 'Hello! I am Atlas, your Project Management Assistant. Ask me about project progress, workload, deadlines, delayed tasks, milestones, or resource allocation.' }
+  ]);
+  const [atlasLoading, setAtlasLoading] = useState(false);
+
+  // Nova state
+  const [novaQuestion, setNovaQuestion] = useState('');
+  const [novaChat, setNovaChat] = useState<SimpleChatMessage[]>([
+    { sender: 'agent', text: 'Hello! I am Nova, your Recruitment Intelligence Assistant. Ask me about candidates, job openings, stages, interviews, offers, ratings, notice periods, or onboarding.' }
+  ]);
+  const [novaLoading, setNovaLoading] = useState(false);
 
   // Active Tab
   const [activeAgent, setActiveAgent] = useState<AgentKey>('athena');
@@ -107,6 +211,46 @@ export default function AIAgentsPage() {
     }
   };
 
+  const handleAtlasSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!atlasQuestion.trim()) return;
+
+    const userMsg = atlasQuestion;
+    setAtlasChat(prev => [...prev, { sender: 'user', text: userMsg }]);
+    setAtlasQuestion('');
+    setAtlasLoading(true);
+
+    try {
+      const res = await askAtlasProject(userMsg);
+      setAtlasChat(prev => [...prev, { sender: 'agent', text: res.answer || 'Atlas did not find a matching project answer.' }]);
+    } catch (err) {
+      console.error(err);
+      setAtlasChat(prev => [...prev, { sender: 'agent', text: 'Atlas could not read project data for this request.' }]);
+    } finally {
+      setAtlasLoading(false);
+    }
+  };
+
+  const handleNovaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novaQuestion.trim()) return;
+
+    const userMsg = novaQuestion;
+    setNovaChat(prev => [...prev, { sender: 'user', text: userMsg }]);
+    setNovaQuestion('');
+    setNovaLoading(true);
+
+    try {
+      const res = await askNovaRecruitment(userMsg);
+      setNovaChat(prev => [...prev, { sender: 'agent', text: res.answer || 'Nova did not find a matching recruitment answer.' }]);
+    } catch (err) {
+      console.error(err);
+      setNovaChat(prev => [...prev, { sender: 'agent', text: 'Nova could not read recruitment data for this request.' }]);
+    } finally {
+      setNovaLoading(false);
+    }
+  };
+
   // Handle Sherlock Run
   const handleSherlockRun = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,7 +289,7 @@ export default function AIAgentsPage() {
       <main className="main-content">
         <PageHeader
           title="AI Command Center"
-          subtitle="Orchestrate and query PID HRMS's four master-level autonomous AI compliance agents."
+          subtitle="Orchestrate and query PID HRMS's rule-based AI assistants across HR, compliance, projects, and recruitment."
           actions={<Badge tone="info" dot>Intelligent Layer Active</Badge>}
         />
 
@@ -565,6 +709,32 @@ export default function AIAgentsPage() {
               <EmptyState title="No validation yet" message="Enter a target date and run the validation to see Winston's verdict." />
             )}
           </div>
+        )}
+
+        {activeAgent === 'atlas' && (
+          <SimpleAgentConsole
+            title="Atlas: Project Management Assistant"
+            description="Ask Atlas read-only questions about projects, tasks, employees, milestones, resource allocation, risk, progress, and deadlines."
+            messages={atlasChat}
+            question={atlasQuestion}
+            setQuestion={setAtlasQuestion}
+            loading={atlasLoading}
+            placeholder="Ask Atlas about projects, tasks, employees, milestones or deadlines."
+            onSubmit={handleAtlasSubmit}
+          />
+        )}
+
+        {activeAgent === 'nova' && (
+          <SimpleAgentConsole
+            title="Nova: Recruitment Intelligence Assistant"
+            description="Ask Nova read-only questions about recruitment, candidates, interviews, offers, ratings, notice periods, and onboarding."
+            messages={novaChat}
+            question={novaQuestion}
+            setQuestion={setNovaQuestion}
+            loading={novaLoading}
+            placeholder="Ask Nova about recruitment, candidates, interviews, offers or onboarding."
+            onSubmit={handleNovaSubmit}
+          />
         )}
         </Card>
       </main>

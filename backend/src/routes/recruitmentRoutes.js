@@ -22,6 +22,7 @@ const {
   getJobOpeningById,
   createJobOpening,
   updateJobOpening,
+  expireJobOpening,
   deleteJobOpening,
   getApplicants,
   applyForJob,
@@ -117,12 +118,15 @@ const validateResumeSafety = (req, res, next) => {
 
 // Job Openings
   router.get('/career-connect/jobs', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getCareerConnectJobs);
+  router.get('/career-portal/jobs', getCareerConnectJobs);
   router.get('/career-portal/jobs/:id', getCareerPortalJobById);
   router.get('/jobs', authenticate, getJobOpenings);
   router.get('/jobs/:id', authenticate, getJobOpeningById);
   router.post('/jobs', authenticate, rbacMiddleware('RECRUITMENT', 'CREATE'), createJobOpening);
   router.put('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateJobOpening);
-  router.delete('/jobs/:id', authenticate, rbacMiddleware('RECRUITMENT', 'DELETE'), deleteJobOpening);
+  router.patch('/jobs/:id/expire', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), expireJobOpening);
+  router.delete('/jobs/:id', authenticate, deleteJobOpening);
+  router.post('/jobs/:id/delete', authenticate, deleteJobOpening);
 
 // Applicants
 router.get('/applicants', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getApplicants);

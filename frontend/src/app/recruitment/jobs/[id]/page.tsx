@@ -35,6 +35,7 @@ import {
   Textarea,
   type Tone,
 } from '@/components/ui';
+import recruitmentStages from '../../../../../../backend/src/config/recruitmentStages.json';
 
 interface Interview {
   id: string;
@@ -76,6 +77,7 @@ interface JobOffer {
   signatoryName?: string | null;
   signatoryDesignation?: string | null;
   status: string;
+  offerLetter?: string | null;
   pdfFileName?: string | null;
   pdfStorageKey?: string | null;
   sentAt?: string | null;
@@ -128,24 +130,19 @@ interface JobDetails {
   location: string;
   employmentType: string;
   salaryRange?: string;
+  status: string;
   description: string;
   requirements: string;
   applicants: Applicant[];
 }
 
-const ACTIVE_STAGE_ORDER = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'ONBOARDING'];
-const TERMINAL_STAGE = 'REJECTED';
+const ACTIVE_STAGE_ORDER = recruitmentStages.activeStageOrder;
+const TERMINAL_STAGE = recruitmentStages.terminalStage;
+const INTERVIEW_STAGE = recruitmentStages.interviewStage;
+const OFFER_EXTENDED_STAGE = recruitmentStages.offerExtendedStage;
 const STAGES = [...ACTIVE_STAGE_ORDER, TERMINAL_STAGE];
-
-const STAGE_LABELS: Record<string, string> = {
-  APPLIED: 'Applied',
-  SCREENING: 'Screening',
-  INTERVIEW: 'Interviews',
-  OFFER: 'Offer Extended',
-  REJECTED: 'Archived / Rejected',
-  ONBOARDING: 'Onboarding',
-  HIRED: 'Hired',
-};
+const STAGE_LABELS: Record<string, string> = recruitmentStages.labels;
+const STAGE_COLUMN_LABELS: Record<string, string> = recruitmentStages.columnLabels;
 
 // Tokenized stage accent colors (no hardcoded hex).
 const STAGE_COLORS: Record<string, string> = {
@@ -188,9 +185,16 @@ const INTERVIEW_MODE_OPTIONS = [
   { value: 'IN_PERSON', label: 'In person' },
   { value: 'PHONE', label: 'Phone' },
 ];
+const OFFER_EMAIL_ALLOWED_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR', 'RECRUITER']);
+
+const isValidEmailAddress = (value?: string | null) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+
+const hasGeneratedOfferPdf = (offer?: JobOffer | null) => Boolean(offer?.pdfStorageKey || offer?.pdfFileName || offer?.offerLetter);
+
+const canShareOfferStatus = (status?: string | null) => Boolean(status && !['DRAFT', 'CANCELLED', 'REJECTED', 'EXPIRED', 'ACCEPTED'].includes(status));
 
 const getAllowedForwardStages = (currentStage: string) => {
-  if (currentStage === 'ONBOARDING' || currentStage === TERMINAL_STAGE) return [];
+  if (currentStage === TERMINAL_STAGE) return [];
   const currentIndex = ACTIVE_STAGE_ORDER.indexOf(currentStage);
   if (currentIndex === -1) return [];
 
@@ -353,7 +357,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     reportingManager: offerForm.reportingManager.trim(),
     reportingManagerTitle: offerForm.reportingManagerTitle.trim(),
     workingHours: offerForm.workingHours.trim(),
-    offerExpiryDate: offerForm.offerExpiryDate,
+    offerExpiryDate: offerForm.offerExpiryDate || null,
     additionalTerms: offerForm.additionalTerms.trim(),
     signatoryName: offerForm.signatoryName.trim(),
     signatoryDesignation: offerForm.signatoryDesignation.trim(),
@@ -513,6 +517,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
   const handleStageChange = async (applicantId: string, newStage: string) => {
     if (stageUpdatingId) return;
+    if (job?.status !== 'OPEN') return;
     const currentApplicant = job?.applicants.find(app => app.id === applicantId);
     if (!currentApplicant || currentApplicant.stage === newStage) return;
     const allowedStages = getAllowedForwardStages(currentApplicant.stage);
@@ -534,6 +539,10 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
   const handleAddApplicant = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (job?.status !== 'OPEN') {
+      setFormError('This job is no longer accepting applications.');
+      return;
+    }
     setSubmitted(true);
     const { isValid, firstError } = validateForm(
       {
@@ -580,7 +589,11 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const handleScheduleInterview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedApplicant || savingInterview) return;
-    if (selectedApplicant.stage !== 'INTERVIEW') {
+    if (job?.status !== 'OPEN') {
+      setFormError('This job requisition is closed.');
+      return;
+    }
+    if (selectedApplicant.stage !== INTERVIEW_STAGE) {
       setFormError('Interview rounds can only be scheduled when the candidate is in the Interviews stage.');
       return;
     }
@@ -710,7 +723,6 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
         workLocation: offerForm.workLocation,
         employmentType: offerForm.employmentType,
         reportingManager: offerForm.reportingManager,
-        offerExpiryDate: offerForm.offerExpiryDate,
         signatoryName: offerForm.signatoryName,
         signatoryDesignation: offerForm.signatoryDesignation,
       },
@@ -720,7 +732,6 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
         workLocation: required('Work location'),
         employmentType: required('Employment type'),
         reportingManager: required('Reporting manager'),
-        offerExpiryDate: vDate('Offer expiry date'),
         signatoryName: personName('HR signatory name'),
         signatoryDesignation: required('HR signatory designation'),
       }
@@ -729,7 +740,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
       setFormError(firstError || 'Please correct the highlighted fields.');
       return;
     }
-    if (new Date(offerForm.offerExpiryDate) >= new Date(offerForm.joiningDate)) {
+    if (offerForm.offerExpiryDate && new Date(offerForm.offerExpiryDate) >= new Date(offerForm.joiningDate)) {
       setFormError('Offer expiry date must be before the joining date.');
       return;
     }
@@ -773,7 +784,12 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     try {
       const offer = await sendJobOffer(offerId);
       if (selectedApplicant) updateApplicantInState(selectedApplicant.id, { jobOffer: offer });
-      showToast(offer.emailStatus === 'SENT' ? 'Offer sent to candidate.' : 'Offer email failed. You can resend it.', offer.emailStatus === 'SENT' ? 'success' : 'error');
+      showToast(
+        offer.emailStatus === 'SENT'
+          ? `Offer letter sent successfully to ${selectedApplicant?.email}.`
+          : 'Offer letter was generated, but the email could not be sent.',
+        offer.emailStatus === 'SENT' ? 'success' : 'error'
+      );
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Could not send offer.', 'error');
     } finally {
@@ -803,6 +819,9 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     );
   }
 
+  const canCurrentUserSendOffers = Boolean(user?.role && OFFER_EMAIL_ALLOWED_ROLES.has(user.role));
+  const isJobClosed = job.status !== 'OPEN';
+
   return (
     <div className="app-layout">
       <Sidebar activePath="/recruitment" />
@@ -822,10 +841,20 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
             <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{job.location} · {job.employmentType.replace('_', ' ')} · {job.salaryRange || 'No disclosed package'}</p>
           </div>
 
-          <Button variant="success" leftIcon={AddCandidateIcon} onClick={() => { setSubmitted(false); setFormError(''); setShowAddApplicant(true); }}>
-            Add Candidate Profile
-          </Button>
+          {isJobClosed ? (
+            <Badge tone="neutral">Read-only board</Badge>
+          ) : (
+            <Button variant="success" leftIcon={AddCandidateIcon} onClick={() => { setSubmitted(false); setFormError(''); setShowAddApplicant(true); }}>
+              Add Candidate Profile
+            </Button>
+          )}
         </div>
+
+        {isJobClosed && (
+          <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border-subtle)' }}>
+            <Banner tone="warning">This job requisition is closed. Candidate history remains available in read-only mode.</Banner>
+          </div>
+        )}
 
         {/* Kanban Board Container */}
         <div style={{ flex: 1, display: 'flex', gap: '1rem', padding: '1.25rem', overflowX: 'auto', background: 'var(--surface-canvas)' }}>
@@ -837,7 +866,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: `2px solid ${STAGE_COLORS[stage]}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: STAGE_COLORS[stage] }}></span>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{STAGE_LABELS[stage]}</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>{STAGE_COLUMN_LABELS[stage]}</span>
                   </div>
                   <Badge tone="neutral">{applicantsInStage.length}</Badge>
                 </div>
@@ -963,7 +992,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <Badge tone={STAGE_TONE[selectedApplicant.stage] || 'neutral'} dot>
                   {STAGE_LABELS[selectedApplicant.stage]}
                 </Badge>
-                {getAllowedForwardStages(selectedApplicant.stage).length > 0 ? (
+                {!isJobClosed && getAllowedForwardStages(selectedApplicant.stage).length > 0 ? (
                   <div style={{ minWidth: '180px' }}>
                     <Select
                       value=""
@@ -975,7 +1004,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                   </div>
                 ) : (
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                    {selectedApplicant.stage === 'ONBOARDING' ? 'Recruitment process completed' : 'Stage movement disabled'}
+                    {isJobClosed ? 'Read-only stage' : selectedApplicant.stage === TERMINAL_STAGE ? 'Stage movement disabled' : 'Recruitment process completed'}
                   </span>
                 )}
               </div>
@@ -1102,11 +1131,11 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               </div>
 
               {/* Interviews Section */}
-              {(selectedApplicant.interviews.length > 0 || selectedApplicant.stage === 'INTERVIEW') && (
+              {(selectedApplicant.interviews.length > 0 || selectedApplicant.stage === INTERVIEW_STAGE) && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label className="form-label" style={{ margin: 0 }}>Interview Status</label>
-                    {selectedApplicant.stage === 'INTERVIEW' && (
+                    {!isJobClosed && selectedApplicant.stage === INTERVIEW_STAGE && (
                       <Button variant="ghost" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setInterviewDateError(''); setShowScheduleInterview(true); }}>
                         Schedule Round
                       </Button>
@@ -1176,33 +1205,63 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                   <div style={{ background: 'var(--success-bg)', border: '1px solid var(--success-border)', borderRadius: 'var(--radius-md)', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--success-fg)' }}>Offer Extended</span>
-                      <Button variant="success" size="sm" onClick={() => downloadOfferLetterPDF(selectedApplicant.jobOffer!.id, selectedApplicant.fullName)}>
-                        Download Letter
-                      </Button>
+                      {hasGeneratedOfferPdf(selectedApplicant.jobOffer) && (
+                        <Button variant="success" size="sm" onClick={() => downloadOfferLetterPDF(selectedApplicant.jobOffer!.id, selectedApplicant.fullName)}>
+                          Download PDF
+                        </Button>
+                      )}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Annual Salary: ₹{selectedApplicant.jobOffer.offeredSalary.toLocaleString()}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Target Joining Date: {new Date(selectedApplicant.jobOffer.joiningDate).toLocaleDateString()}</div>
-                    {selectedApplicant.jobOffer.emailStatus === 'FAILED' && (
-                      <Banner tone="danger">Email delivery failed safely. The generated offer is preserved.</Banner>
+                    {selectedApplicant.jobOffer.offerExpiryDate && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Offer Expiry: {new Date(selectedApplicant.jobOffer.offerExpiryDate).toLocaleDateString()}</div>
                     )}
+                    {selectedApplicant.jobOffer.emailStatus === 'SENT' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        <Badge tone="success">Email: SENT</Badge>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Sent to: {selectedApplicant.email}</div>
+                        {selectedApplicant.jobOffer.sentAt && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Sent on: {new Date(selectedApplicant.jobOffer.sentAt).toLocaleString()}</div>
+                        )}
+                      </div>
+                    )}
+                    {selectedApplicant.jobOffer.emailStatus === 'FAILED' && (
+                      <Banner tone="danger">Offer letter was generated, but the email could not be sent.</Banner>
+                    )}
+                    {!hasGeneratedOfferPdf(selectedApplicant.jobOffer) && selectedApplicant.jobOffer.status === 'DRAFT' && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Generate the offer PDF before sharing.</div>
+                    )}
+                    {hasGeneratedOfferPdf(selectedApplicant.jobOffer) && !isValidEmailAddress(selectedApplicant.email) && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--warning-fg)' }}>Candidate email is unavailable.</div>
+                    )}
+                    {selectedApplicant.jobOffer.status === 'ACCEPTED' && <Banner tone="success">Offer accepted.</Banner>}
+                    {selectedApplicant.jobOffer.status === 'REJECTED' && <Banner tone="danger">Offer rejected.</Banner>}
+                    {selectedApplicant.jobOffer.status === 'CANCELLED' && <Banner tone="warning">Offer cancelled.</Banner>}
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
                       <Button size="sm" variant="ghost" onClick={() => { resetOfferForm(selectedApplicant); setShowOfferPreview(true); }}>
-                        View
+                        View Offer
                       </Button>
                       {selectedApplicant.jobOffer.status === 'DRAFT' && (
                         <Button size="sm" loading={generatingOfferId === selectedApplicant.jobOffer.id} disabled={!!generatingOfferId} onClick={() => handleGenerateOfferPdf(selectedApplicant.jobOffer!.id)}>
                           Generate PDF
                         </Button>
                       )}
-                      {['GENERATED', 'SENT', 'VIEWED'].includes(selectedApplicant.jobOffer.status) && (
+                      {hasGeneratedOfferPdf(selectedApplicant.jobOffer)
+                        && canShareOfferStatus(selectedApplicant.jobOffer.status)
+                        && isValidEmailAddress(selectedApplicant.email)
+                        && canCurrentUserSendOffers && (
                         <Button size="sm" variant="warning" loading={sendingOfferId === selectedApplicant.jobOffer.id} disabled={!!sendingOfferId} onClick={() => handleSendOffer(selectedApplicant.jobOffer!.id)}>
-                          {selectedApplicant.jobOffer.status === 'GENERATED' ? 'Send Offer' : 'Resend'}
+                          {sendingOfferId === selectedApplicant.jobOffer.id
+                            ? 'Sending...'
+                            : selectedApplicant.jobOffer.emailStatus === 'SENT'
+                              ? 'Resend Email'
+                              : 'Share to Candidate Email'}
                         </Button>
                       )}
                     </div>
                   </div>
                 ) : (
-                  selectedApplicant.stage === 'OFFER' ? (
+                  selectedApplicant.stage === OFFER_EXTENDED_STAGE ? (
                     <Button variant="warning" fullWidth onClick={() => { resetOfferForm(selectedApplicant); setSubmitted(false); setFormError(''); setShowOfferModal(true); }}>
                       Generate Offer Letter
                     </Button>
@@ -1439,8 +1498,8 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
             </div>
 
             <div className="form-group">
-              <label className="form-label">Offer Expiry Date</label>
-              <input type="date" required value={offerForm.offerExpiryDate} onChange={e => setOfferForm({ ...offerForm, offerExpiryDate: e.target.value })} className="input-field" />
+              <label className="form-label">Offer Expiry Date (Optional)</label>
+              <input type="date" value={offerForm.offerExpiryDate} onChange={e => setOfferForm({ ...offerForm, offerExpiryDate: e.target.value })} className="input-field" />
             </div>
 
             <TextField
@@ -1518,7 +1577,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
               <div><strong>Employment Type:</strong> {offerForm.employmentType}</div>
               <div><strong>Joining Date:</strong> {offerForm.joiningDate || 'Not set'}</div>
               <div><strong>Reporting Manager:</strong> {offerForm.reportingManager || 'Not set'}</div>
-              <div><strong>Offer Expiry:</strong> {offerForm.offerExpiryDate || 'Not set'}</div>
+              {offerForm.offerExpiryDate && <div><strong>Offer Expiry:</strong> {offerForm.offerExpiryDate}</div>}
               <div><strong>Offered CTC:</strong> INR {Number(offerForm.offeredCtc || 0).toLocaleString()}</div>
             </div>
             <p>This offer is subject to successful background verification, company policies, confidentiality obligations, and completion of required joining documentation.</p>

@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/authContext';
 import {
   getJobOpenings,
   createJobOpening,
+  expireJobOpening,
+  deleteJobOpening,
   getDepartments,
   getCareerConnectJobs,
 } from '@/lib/api';
@@ -18,6 +20,7 @@ import {
   Card,
   EmptyState,
   ErrorState,
+  IconButton,
   LoadingBlock,
   Modal,
   PageHeader,
@@ -65,6 +68,21 @@ const ClosedIcon = (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
 );
 
+const MoreIcon = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+);
+
+const EXPIRE_REASONS = [
+  { value: 'POSITION_FILLED', label: 'Position Filled' },
+  { value: 'HIRING_PAUSED', label: 'Hiring Paused' },
+  { value: 'REQUIREMENT_CANCELLED', label: 'Requirement Cancelled' },
+  { value: 'BUDGET_HOLD', label: 'Budget Hold' },
+  { value: 'EXPIRED', label: 'Expired' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+const JOB_DELETE_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN']);
+
 export default function RecruitmentDashboard() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -81,6 +99,15 @@ export default function RecruitmentDashboard() {
   const [careerConnectJobs, setCareerConnectJobs] = useState<Job[]>([]);
   const [careerConnectLoading, setCareerConnectLoading] = useState(false);
   const [careerConnectError, setCareerConnectError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [jobActionError, setJobActionError] = useState('');
+  const [openActionJobId, setOpenActionJobId] = useState<string | null>(null);
+  const [expiringJob, setExpiringJob] = useState<Job | null>(null);
+  const [deletingJob, setDeletingJob] = useState<Job | null>(null);
+  const [expireReason, setExpireReason] = useState('POSITION_FILLED');
+  const [expireRemarks, setExpireRemarks] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [actionSubmitting, setActionSubmitting] = useState(false);
 
   // New Job Opening State
   const [newJob, setNewJob] = useState({
@@ -150,6 +177,7 @@ export default function RecruitmentDashboard() {
     try {
       await createJobOpening(newJob);
       setShowModal(false);
+      setSuccessMessage('Job requisition created successfully.');
       setSubmitted(false);
       setNewJob({
         title: '',
@@ -194,6 +222,62 @@ export default function RecruitmentDashboard() {
     return job.openings ?? job.numberOfOpenings ?? job.vacancies ?? 1;
   };
 
+  const activeJobList = jobs.filter(job => ['OPEN', 'DRAFT'].includes(job.status));
+  const canDeleteJob = (job: Job) => Boolean(user?.role && JOB_DELETE_ROLES.has(user.role) && (job._count?.applicants || 0) === 0);
+
+  const openExpireModal = (job: Job) => {
+    setOpenActionJobId(null);
+    setJobActionError('');
+    setSuccessMessage('');
+    setExpireReason('POSITION_FILLED');
+    setExpireRemarks('');
+    setExpiringJob(job);
+  };
+
+  const openDeleteModal = (job: Job) => {
+    setOpenActionJobId(null);
+    setJobActionError('');
+    setSuccessMessage('');
+    setDeleteConfirmation('');
+    setDeletingJob(job);
+  };
+
+  const handleExpireJob = async () => {
+    if (!expiringJob || actionSubmitting) return;
+    setActionSubmitting(true);
+    setJobActionError('');
+    try {
+      const result = await expireJobOpening(expiringJob.id, { reason: expireReason, remarks: expireRemarks.trim() || undefined });
+      setJobs(prev => prev.map(job => job.id === expiringJob.id ? { ...job, ...(result.job || {}), status: 'CLOSED' } : job));
+      setCareerConnectJobs(prev => prev.filter(job => job.id !== expiringJob.id));
+      setExpiringJob(null);
+      setSuccessMessage('Job requisition expired successfully.');
+    } catch (err: any) {
+      console.error(err);
+      setJobActionError(err?.response?.data?.error || 'Unable to expire job requisition.');
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  const handleDeleteJob = async () => {
+    if (!deletingJob || actionSubmitting) return;
+    setActionSubmitting(true);
+    setJobActionError('');
+    try {
+      await deleteJobOpening(deletingJob.id, deleteConfirmation);
+      setJobs(prev => prev.filter(job => job.id !== deletingJob.id));
+      setCareerConnectJobs(prev => prev.filter(job => job.id !== deletingJob.id));
+      setDeletingJob(null);
+      setSuccessMessage('Job requisition deleted successfully.');
+    } catch (err: any) {
+      console.error(err);
+      setJobActionError(err?.response?.data?.error || 'Unable to delete job requisition.');
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
   if (authLoading || !user) {
     return (
       <div className="app-layout">
@@ -230,6 +314,12 @@ export default function RecruitmentDashboard() {
           }
         />
 
+        {successMessage && (
+          <div style={{ marginBottom: '1rem' }}>
+            <Banner tone="success">{successMessage}</Banner>
+          </div>
+        )}
+
         {/* Aggregate Stats Cards */}
         <div className="stat-grid" style={{ marginBottom: '1.5rem' }}>
           <StatCard label="Active Job Positions" value={activeJobs} icon={JobIcon} />
@@ -245,7 +335,7 @@ export default function RecruitmentDashboard() {
           <LoadingBlock label="Loading Job Positions…" />
         ) : loadError ? (
           <ErrorState onRetry={loadData} />
-        ) : jobs.length === 0 ? (
+        ) : activeJobList.length === 0 ? (
           <EmptyState
             title="No active job openings"
             message="No active job openings found. Post your first requisition to start building a pipeline."
@@ -253,13 +343,64 @@ export default function RecruitmentDashboard() {
           />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-            {jobs.map(job => (
+            {activeJobList.map(job => (
               <Card key={job.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <StatusChip status={job.status} />
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    {new Date(job.createdAt).toLocaleDateString()}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', position: 'relative' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      {new Date(job.createdAt).toLocaleDateString()}
+                    </span>
+                    <IconButton
+                      label="Job actions"
+                      size={30}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpenActionJobId(prev => prev === job.id ? null : job.id);
+                      }}
+                    >
+                      {MoreIcon}
+                    </IconButton>
+                    {openActionJobId === job.id && (
+                      <div
+                        role="menu"
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: 34,
+                          zIndex: 20,
+                          minWidth: 176,
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 'var(--radius-sm)',
+                          boxShadow: 'var(--shadow-md)',
+                          padding: '0.35rem',
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={actionSubmitting}
+                          onClick={() => openExpireModal(job)}
+                          style={{ width: '100%', textAlign: 'left', padding: '0.55rem 0.65rem', border: 0, background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}
+                        >
+                          Expire Job
+                        </button>
+                        {canDeleteJob(job) && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={actionSubmitting}
+                            onClick={() => openDeleteModal(job)}
+                            style={{ width: '100%', textAlign: 'left', padding: '0.55rem 0.65rem', border: 0, background: 'transparent', color: 'var(--danger-fg)', cursor: 'pointer', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}
+                          >
+                            Delete Job
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -303,7 +444,7 @@ export default function RecruitmentDashboard() {
               <LoadingBlock label="Loading organization jobs..." />
             ) : careerConnectJobs.length === 0 ? (
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '2rem', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-                No open or draft organization jobs found.
+                No open organization jobs found.
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
@@ -351,6 +492,74 @@ export default function RecruitmentDashboard() {
               </div>
             )}
           </div>
+        </Modal>
+
+        <Modal
+          open={Boolean(expiringJob)}
+          onClose={() => !actionSubmitting && setExpiringJob(null)}
+          title="Expire Job Requisition"
+          width={560}
+        >
+          {expiringJob && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {jobActionError && <Banner tone="danger">{jobActionError}</Banner>}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8rem' }}>
+                <div><div style={{ color: 'var(--text-muted)' }}>Job title</div><strong>{expiringJob.title}</strong></div>
+                <div><div style={{ color: 'var(--text-muted)' }}>Department</div><strong>{expiringJob.department?.name || 'Unassigned'}</strong></div>
+                <div><div style={{ color: 'var(--text-muted)' }}>Location</div><strong>{expiringJob.location}</strong></div>
+                <div><div style={{ color: 'var(--text-muted)' }}>Current status</div><strong>{expiringJob.status}</strong></div>
+                <div><div style={{ color: 'var(--text-muted)' }}>Applicant count</div><strong>{expiringJob._count?.applicants || 0}</strong></div>
+              </div>
+              <Banner tone="warning">
+                This job will be removed from active recruitment and the public career portal. Existing candidate and recruitment history will be preserved.
+              </Banner>
+              <Select
+                label="Expiry reason"
+                value={expireReason}
+                onChange={setExpireReason}
+                options={EXPIRE_REASONS}
+              />
+              <Textarea
+                label="Remarks"
+                value={expireRemarks}
+                onChange={setExpireRemarks}
+                placeholder="Optional notes for the recruitment audit trail"
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <Button type="button" variant="ghost" disabled={actionSubmitting} onClick={() => setExpiringJob(null)}>Cancel</Button>
+                <Button type="button" variant="warning" loading={actionSubmitting} onClick={handleExpireJob}>Confirm Expiry</Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        <Modal
+          open={Boolean(deletingJob)}
+          onClose={() => !actionSubmitting && setDeletingJob(null)}
+          title="Delete Job Requisition"
+          width={520}
+        >
+          {deletingJob && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {jobActionError && <Banner tone="danger">{jobActionError}</Banner>}
+              <Banner tone="danger">
+                This permanently deletes only this empty job requisition. Jobs with recruitment activity must be expired instead.
+              </Banner>
+              <div style={{ fontSize: '0.8rem' }}>
+                <div style={{ color: 'var(--text-muted)' }}>Job title</div>
+                <strong>{deletingJob.title}</strong>
+              </div>
+              <TextField
+                label="Type DELETE to confirm"
+                value={deleteConfirmation}
+                onChange={setDeleteConfirmation}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <Button type="button" variant="ghost" disabled={actionSubmitting} onClick={() => setDeletingJob(null)}>Cancel</Button>
+                <Button type="button" variant="danger" loading={actionSubmitting} disabled={deleteConfirmation !== 'DELETE'} onClick={handleDeleteJob}>Delete Job</Button>
+              </div>
+            </div>
+          )}
         </Modal>
 
         {/* Create Requisition Modal */}

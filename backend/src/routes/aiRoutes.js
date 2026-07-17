@@ -30,5 +30,7 @@ router.post('/sherlock/audit-proof', upload.single('document'), aiController.aud
 router.post('/jarvis/audit-payroll', aiController.auditPayroll);
 router.post('/winston/regularize', aiController.regularizeAttendance);
 router.post('/athena/ask', aiController.askQuestion);
+router.post('/project', aiController.askProject);
+router.post('/recruitment', aiController.askRecruitment);
 
 module.exports = router;

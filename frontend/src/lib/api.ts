@@ -86,7 +86,7 @@ api.interceptors.response.use(
   (response) => {
     apiEvents.emit('request-end', response.config.url || '');
     const method = response.config.method?.toLowerCase() || '';
-    const successMsg = getActionSuccessMessage(method, response.config.url || '');
+    const successMsg = (response.config as any).successMessage ?? getActionSuccessMessage(method, response.config.url || '');
     if (successMsg) {
       apiEvents.emit('toast-success', successMsg);
     }
@@ -849,8 +849,13 @@ export const updateJobOpening = async (id: string, job: any) => {
   return data;
 };
 
-export const deleteJobOpening = async (id: string) => {
-  const { data } = await api.delete(`/recruitment/jobs/${id}`);
+export const expireJobOpening = async (id: string, payload: { reason: string; remarks?: string }) => {
+  const { data } = await api.patch(`/recruitment/jobs/${id}/expire`, payload);
+  return data;
+};
+
+export const deleteJobOpening = async (id: string, confirmation = 'DELETE') => {
+  const { data } = await api.post(`/recruitment/jobs/${id}/delete`, { confirmation });
   return data;
 };
 
@@ -864,6 +869,11 @@ export const getCareerConnectJobs = async () => {
   return data;
 };
 
+export const getCareerPortalJobs = async () => {
+  const { data } = await api.get('/recruitment/career-portal/jobs');
+  return data;
+};
+
 export const getCareerPortalJobById = async (id: string) => {
   const { data } = await api.get(`/recruitment/career-portal/jobs/${id}`);
   return data;
@@ -872,7 +882,8 @@ export const getCareerPortalJobById = async (id: string) => {
 export const applyForJob = async (formData: FormData) => {
   const { data } = await api.post('/recruitment/applicants', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-  });
+    successMessage: 'Application submitted successfully.',
+  } as any);
   return data;
 };
 
@@ -937,7 +948,7 @@ export interface JobOfferPayload {
   reportingManager: string;
   reportingManagerTitle?: string;
   workingHours?: string;
-  offerExpiryDate: string;
+  offerExpiryDate?: string | null;
   additionalTerms?: string;
   signatoryName: string;
   signatoryDesignation: string;
@@ -1616,6 +1627,16 @@ export const regularizeAttendanceWinston = async (payload: { dateStr: string; ti
 
 export const askAthenaPolicy = async (question: string) => {
   const { data } = await api.post('/ai/athena/ask', { question });
+  return data;
+};
+
+export const askAtlasProject = async (question: string) => {
+  const { data } = await api.post('/ai/project', { question });
+  return data;
+};
+
+export const askNovaRecruitment = async (question: string) => {
+  const { data } = await api.post('/ai/recruitment', { question });
   return data;
 };
 

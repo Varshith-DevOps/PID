@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { applyForJob, getCareerPortalJobById } from '@/lib/api';
 import { email as vEmail, mobile as vMobile, personName, validateForm } from '@/lib/validators';
@@ -28,6 +28,13 @@ interface JobDetails {
   status: string;
 }
 
+interface SubmittedApplication {
+  applicantName: string;
+  jobTitle: string;
+  applicationId: string | null;
+  submittedAt: string;
+}
+
 const BackIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
 );
@@ -52,14 +59,16 @@ const ctc = (label: string) => (value: string) => {
 export default function CareerPortalApplyPage({ params }: { params: Promise<{ jobId: string }> }) {
   const { jobId } = use(params);
   const router = useRouter();
+  const successHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const [job, setJob] = useState<JobDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submittedApplication, setSubmittedApplication] = useState<SubmittedApplication | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const [success, setSuccess] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     fullName: '',
@@ -91,11 +100,16 @@ export default function CareerPortalApplyPage({ params }: { params: Promise<{ jo
     loadJob();
   }, [jobId]);
 
+  useEffect(() => {
+    if (isSubmitted) {
+      successHeadingRef.current?.focus();
+    }
+  }, [isSubmitted]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saving) return;
+    if (saving || isSubmitted) return;
     setSubmitted(true);
-    setSuccess('');
 
     const { isValid, firstError } = validateForm(
       {
@@ -125,8 +139,9 @@ export default function CareerPortalApplyPage({ params }: { params: Promise<{ jo
     setSaving(true);
     try {
       const formData = new FormData();
+      const applicantName = form.fullName.trim();
       formData.append('jobOpeningId', jobId);
-      formData.append('fullName', form.fullName.trim());
+      formData.append('fullName', applicantName);
       formData.append('email', form.email.trim());
       formData.append('phone', form.phone.trim());
       formData.append('experience', form.experience.trim());
@@ -138,11 +153,16 @@ export default function CareerPortalApplyPage({ params }: { params: Promise<{ jo
       formData.append('source', 'CAREER_PORTAL');
       if (resumeFile) formData.append('resume', resumeFile);
 
-      await applyForJob(formData);
-      setSuccess('Application submitted successfully.');
-      setSubmitted(false);
-      setForm({ fullName: '', email: '', phone: '', experience: '', skills: '', currentCtc: '', expectedCtc: '', noticePeriod: '', coverLetter: '' });
-      setResumeFile(null);
+      const response = await applyForJob(formData);
+      const application = response?.application || response;
+      setFormError('');
+      setSubmittedApplication({
+        applicantName: application?.candidateName || application?.fullName || applicantName,
+        jobTitle: application?.jobTitle || job?.title || 'this role',
+        applicationId: application?.id || response?.applicationId || null,
+        submittedAt: application?.createdAt || new Date().toISOString(),
+      });
+      setIsSubmitted(true);
     } catch (err: any) {
       console.error(err);
       setFormError(err?.response?.data?.error || 'Unable to submit application.');
@@ -172,7 +192,7 @@ export default function CareerPortalApplyPage({ params }: { params: Promise<{ jo
     <main className="main-content" style={{ minHeight: '100vh', marginLeft: 0 }}>
       <div style={{ maxWidth: 1040, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 0.9fr) minmax(320px, 1.1fr)', gap: '1.25rem', alignItems: 'start' }}>
         <Card style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <Button variant="link" size="sm" leftIcon={BackIcon} onClick={() => router.push('/recruitment')} style={{ alignSelf: 'flex-start', padding: 0 }}>
+          <Button variant="link" size="sm" leftIcon={BackIcon} onClick={() => router.push('/career-portal')} style={{ alignSelf: 'flex-start', padding: 0 }}>
             Back to Career Portal
           </Button>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
@@ -198,10 +218,72 @@ export default function CareerPortalApplyPage({ params }: { params: Promise<{ jo
           </section>
         </Card>
 
+        {isSubmitted && submittedApplication ? (
+          <Card role="status" aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div
+              aria-hidden="true"
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: '50%',
+                display: 'grid',
+                placeItems: 'center',
+                background: 'var(--success-bg)',
+                border: '1px solid var(--success-border)',
+                color: 'var(--success-fg)',
+              }}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <div>
+              <h2
+                ref={successHeadingRef}
+                tabIndex={-1}
+                style={{ margin: 0, fontSize: '1.45rem', color: 'var(--text-primary)', outline: 'none' }}
+              >
+                Application Submitted Successfully
+              </h2>
+              <p style={{ margin: '0.75rem 0 0', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Thank you, <strong style={{ color: 'var(--text-primary)' }}>{submittedApplication.applicantName}</strong>.
+                {' '}Your application for the position of <strong style={{ color: 'var(--text-primary)' }}>{submittedApplication.jobTitle}</strong> has been registered successfully.
+              </p>
+              <p style={{ margin: '0.75rem 0 0', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Our recruitment team will review your profile and contact you if your qualifications match the role.
+              </p>
+            </div>
+
+            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '1rem', display: 'grid', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Candidate name</span>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>{submittedApplication.applicantName}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Job title</span>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>{submittedApplication.jobTitle}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Application date</span>
+                <strong style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>{new Date(submittedApplication.submittedAt).toLocaleString()}</strong>
+              </div>
+              {submittedApplication.applicationId && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Application reference</span>
+                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>{submittedApplication.applicationId}</strong>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <Button type="button" onClick={() => router.push('/career-portal')}>View Other Open Jobs</Button>
+              <Button type="button" variant="ghost" onClick={() => router.push('/career-portal')}>Back to Career Portal</Button>
+            </div>
+          </Card>
+        ) : (
         <Card>
           <h2 style={{ marginTop: 0, fontSize: '1.05rem', color: 'var(--text-primary)' }}>Apply for this job</h2>
           {formError && <div style={{ marginBottom: '1rem' }}><Banner tone="danger">{formError}</Banner></div>}
-          {success && <div style={{ marginBottom: '1rem' }}><Banner tone="success">{success}</Banner></div>}
 
           <form onSubmit={handleSubmit}>
             <TextField
@@ -300,6 +382,7 @@ export default function CareerPortalApplyPage({ params }: { params: Promise<{ jo
             </div>
           </form>
         </Card>
+        )}
       </div>
     </main>
   );

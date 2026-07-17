@@ -12,6 +12,13 @@ const {
   WinstonAgent,
   AthenaAgent
 } = require('../services/aiAgentService');
+const { askProjectQuestion } = require('../services/ai/projectAgent');
+const { askRecruitmentQuestion } = require('../services/ai/recruitmentAgent');
+
+const PROJECT_AI_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'MANAGER']);
+const RECRUITMENT_AI_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR', 'RECRUITER']);
+
+const hasRole = (user, roles) => Boolean(user?.role && roles.has(user.role));
 
 /**
  * Invokes Sherlock to scan an investment receipt.
@@ -84,5 +91,49 @@ exports.askQuestion = async (req, res) => {
     return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({ error: 'Athena failed to fetch policy answer.' });
+  }
+};
+
+/**
+ * Invokes Atlas to answer read-only project questions.
+ */
+exports.askProject = async (req, res) => {
+  try {
+    if (!hasRole(req.user, PROJECT_AI_ROLES)) {
+      return res.status(403).json({ error: 'Atlas is available to managers and admins only.' });
+    }
+
+    const { question } = req.body;
+    if (!question || question.trim() === '') {
+      return res.status(400).json({ error: 'Question parameter is required.' });
+    }
+
+    const result = await askProjectQuestion(question, req.user);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('ATLAS PROJECT AI ERROR:', error);
+    return res.status(500).json({ error: 'Atlas failed to fetch project answer.' });
+  }
+};
+
+/**
+ * Invokes Nova to answer read-only recruitment questions.
+ */
+exports.askRecruitment = async (req, res) => {
+  try {
+    if (!hasRole(req.user, RECRUITMENT_AI_ROLES)) {
+      return res.status(403).json({ error: 'Nova is available to HR, recruiters, and admins only.' });
+    }
+
+    const { question } = req.body;
+    if (!question || question.trim() === '') {
+      return res.status(400).json({ error: 'Question parameter is required.' });
+    }
+
+    const result = await askRecruitmentQuestion(question);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('NOVA RECRUITMENT AI ERROR:', error);
+    return res.status(500).json({ error: 'Nova failed to fetch recruitment answer.' });
   }
 };

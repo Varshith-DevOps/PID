@@ -1,0 +1,32 @@
+{
+  "activeStageOrder": [
+    "APPLIED",
+    "SCREENING",
+    "INTERVIEW",
+    "HIRED",
+    "OFFER",
+    "ONBOARDING"
+  ],
+  "terminalStage": "REJECTED",
+  "interviewStage": "INTERVIEW",
+  "offerExtendedStage": "OFFER",
+  "onboardingStage": "ONBOARDING",
+  "labels": {
+    "APPLIED": "Applied",
+    "SCREENING": "Screening",
+    "INTERVIEW": "Interviews",
+    "HIRED": "Hired",
+    "OFFER": "Offer Extended",
+    "ONBOARDING": "Onboarding",
+    "REJECTED": "Archived / Rejected"
+  },
+  "columnLabels": {
+    "APPLIED": "Applied",
+    "SCREENING": "Screening",
+    "INTERVIEW": "Interviews",
+    "HIRED": "Hired",
+    "OFFER": "Offer Extended",
+    "ONBOARDING": "Onboarding",
+    "REJECTED": "Archived"
+  }
+}

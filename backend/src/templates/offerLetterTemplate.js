@@ -114,7 +114,7 @@ const renderOfferLetterHtml = ({ offer, applicant, job, company }) => {
     <h2>Terms</h2>
     <p>Your working hours will be ${escapeHtml(offer.workingHours || 'as per company policy')}. This offer is subject to successful background verification, submission of required documents, and adherence to all company policies including confidentiality, information security, and code of conduct obligations.</p>
     ${offer.additionalTerms ? `<p>${escapeHtml(offer.additionalTerms)}</p>` : ''}
-    <p>This offer remains valid until <strong>${formatDate(offer.offerExpiryDate)}</strong>.</p>
+    ${offer.offerExpiryDate ? `<p>This offer is valid until <strong>${formatDate(offer.offerExpiryDate)}</strong>.</p>` : ''}
 
     <section class="signature">
       <div>

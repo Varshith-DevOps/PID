@@ -108,7 +108,7 @@ export default function CandidateOfferPage({ params }: { params: Promise<{ token
           <div><strong>Position:</strong> {offer.jobTitle}</div>
           <div><strong>Department:</strong> {offer.department || 'Not specified'}</div>
           <div><strong>Joining Date:</strong> {new Date(offer.joiningDate).toLocaleDateString()}</div>
-          <div><strong>Offer Expiry:</strong> {offer.offerExpiryDate ? new Date(offer.offerExpiryDate).toLocaleDateString() : 'Not specified'}</div>
+          {offer.offerExpiryDate && <div><strong>Offer Expiry:</strong> {new Date(offer.offerExpiryDate).toLocaleDateString()}</div>}
           <div><strong>Status:</strong> {offer.status}</div>
         </div>
 

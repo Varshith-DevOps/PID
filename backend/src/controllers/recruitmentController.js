@@ -12,6 +12,7 @@ const PDFDocument = require('pdfkit');
 const { generateOfferLetterPdf } = require('../services/offerLetterPdfService');
 const { buildOfferFileName, writeOfferPdf, readOfferPdf } = require('../services/offerLetterStorageService');
 const { deliverOfferLetterEmail } = require('../services/offerLetterEmailService');
+const recruitmentStages = require('../config/recruitmentStages.json');
 
 const APPLICANT_SOURCES = new Set(['MANUAL', 'SOCIAL_MEDIA', 'CAREER_PORTAL']);
 const NOTICE_PERIODS = new Set([
@@ -23,8 +24,11 @@ const NOTICE_PERIODS = new Set([
   '90 Days',
   'More than 90 Days',
 ]);
-const ACTIVE_APPLICANT_STAGE_ORDER = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'HIRED', 'ONBOARDING'];
-const TERMINAL_APPLICANT_STAGE = 'REJECTED';
+const ACTIVE_APPLICANT_STAGE_ORDER = recruitmentStages.activeStageOrder;
+const TERMINAL_APPLICANT_STAGE = recruitmentStages.terminalStage;
+const INTERVIEW_APPLICANT_STAGE = recruitmentStages.interviewStage;
+const OFFER_EXTENDED_APPLICANT_STAGE = recruitmentStages.offerExtendedStage;
+const ONBOARDING_APPLICANT_STAGE = recruitmentStages.onboardingStage;
 
 const cleanText = (value) => {
   const trimmed = String(value ?? '').trim();
@@ -32,6 +36,7 @@ const cleanText = (value) => {
 };
 
 const hasNegativeAmount = (value) => /^\s*-/.test(String(value ?? '')) || /-\s*\d/.test(String(value ?? ''));
+const isValidEmailAddress = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
 const validateCareerPortalCompensation = ({ currentCtc, expectedCtc, noticePeriod }) => {
   if (!currentCtc) return 'Current CTC is required.';
@@ -44,7 +49,7 @@ const validateCareerPortalCompensation = ({ currentCtc, expectedCtc, noticePerio
 };
 
 const getAllowedApplicantStageTransitions = (currentStage) => {
-  if (currentStage === 'ONBOARDING' || currentStage === TERMINAL_APPLICANT_STAGE) return [];
+  if (currentStage === TERMINAL_APPLICANT_STAGE) return [];
   const currentIndex = ACTIVE_APPLICANT_STAGE_ORDER.indexOf(currentStage);
   if (currentIndex === -1) return [];
 
@@ -60,7 +65,7 @@ const validateApplicantStageTransition = (currentStage, requestedStage) => {
 };
 
 const validateInterviewSchedulingStage = (stage) => {
-  if (stage !== 'INTERVIEW') return 'Interview rounds can only be scheduled when the candidate is in the Interviews stage.';
+  if (stage !== INTERVIEW_APPLICANT_STAGE) return 'Interview rounds can only be scheduled when the candidate is in the Interviews stage.';
   return null;
 };
 
@@ -72,9 +77,12 @@ const parseFutureDate = (value) => {
 
 const INTERVIEW_MODES = new Set(['ONLINE', 'IN_PERSON', 'PHONE']);
 const ACTIVE_OFFER_STATUSES = ['DRAFT', 'GENERATED', 'SENT', 'VIEWED', 'ACCEPTED'];
-const OFFER_CREATABLE_STAGES = ['OFFER'];
-const OFFER_READONLY_STAGES = ['HIRED', 'ONBOARDING'];
+const OFFER_CREATABLE_STAGES = [OFFER_EXTENDED_APPLICANT_STAGE];
+const OFFER_READONLY_STAGES = [ONBOARDING_APPLICANT_STAGE];
 const OFFER_MANAGE_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR', 'RECRUITER']);
+const JOB_MANAGE_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR', 'RECRUITER']);
+const JOB_DELETE_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN']);
+const JOB_CLOSE_REASONS = new Set(['POSITION_FILLED', 'HIRING_PAUSED', 'REQUIREMENT_CANCELLED', 'BUDGET_HOLD', 'EXPIRED', 'OTHER']);
 
 const normalizeOfferStatus = (status) => status === 'DECLINED' ? 'REJECTED' : status;
 
@@ -119,6 +127,33 @@ const logOfferAudit = async (req, action, offer, extra = {}) => {
 };
 
 const canManageOffers = (user) => Boolean(user?.role && OFFER_MANAGE_ROLES.has(user.role));
+const canManageJobRequisitions = (user) => Boolean(user?.role && JOB_MANAGE_ROLES.has(user.role));
+const canDeleteJobRequisitions = (user) => Boolean(user?.role && JOB_DELETE_ROLES.has(user.role));
+
+const logJobAudit = async (req, action, job, extra = {}, tx = prisma) => {
+  try {
+    await tx.auditLog.create({
+      data: {
+        userId: req.user?.id || null,
+        userEmail: req.user?.email || null,
+        actorRole: req.user?.role || null,
+        category: 'TENANT',
+        action,
+        entity: 'JobOpening',
+        entityId: job?.id || null,
+        newDetails: JSON.stringify({
+          jobId: job?.id || null,
+          title: job?.title || null,
+          reason: extra.reason || undefined,
+          remarks: extra.remarks || undefined,
+        }),
+        ipAddress: req.ip || null,
+      },
+    });
+  } catch (error) {
+    console.error('[JOB AUDIT ERROR]:', error.message);
+  }
+};
 
 const validateOfferInput = (body, { requireAll = true } = {}) => {
   const requiredFields = [
@@ -127,7 +162,6 @@ const validateOfferInput = (body, { requireAll = true } = {}) => {
     'employmentType',
     'joiningDate',
     'reportingManager',
-    'offerExpiryDate',
     'signatoryName',
     'signatoryDesignation',
   ];
@@ -148,9 +182,13 @@ const validateOfferInput = (body, { requireAll = true } = {}) => {
 
   const joiningDate = new Date(body.joiningDate);
   if (Number.isNaN(joiningDate.getTime())) return { error: 'Joining date must be valid.' };
-  const offerExpiryDate = new Date(body.offerExpiryDate);
-  if (Number.isNaN(offerExpiryDate.getTime())) return { error: 'Offer expiry date must be valid.' };
-  if (offerExpiryDate >= joiningDate) return { error: 'Offer expiry date must be before joining date.' };
+  const rawOfferExpiryDate = cleanText(body.offerExpiryDate);
+  let offerExpiryDate = null;
+  if (rawOfferExpiryDate) {
+    offerExpiryDate = new Date(rawOfferExpiryDate);
+    if (Number.isNaN(offerExpiryDate.getTime())) return { error: 'Offer expiry date is invalid.' };
+    if (offerExpiryDate >= joiningDate) return { error: 'Offer expiry date must be before the joining date.' };
+  }
 
   return {
     values: {
@@ -220,7 +258,7 @@ const formatInterviewFeedbackReview = (interview) => ({
   reviewerRole: 'Interviewer',
   rating: interview.rating,
   reviewText: interview.feedback,
-  candidateStage: 'INTERVIEW',
+  candidateStage: INTERVIEW_APPLICANT_STAGE,
   reviewType: 'INTERVIEW_FEEDBACK',
   interviewRoundId: interview.id,
   interviewRoundName: interview.roundName,
@@ -273,7 +311,7 @@ const getCareerConnectJobs = async (req, res) => {
   try {
     const jobs = await prisma.jobOpening.findMany({
       where: {
-        status: { in: ['OPEN', 'DRAFT'] },
+        status: 'OPEN',
         ...(req.user?.companyId ? { companyId: req.user.companyId } : {}),
       },
       select: careerConnectJobSelect,
@@ -299,7 +337,6 @@ const getCareerPortalJobById = async (req, res) => {
     const job = await prisma.jobOpening.findFirst({
       where: {
         id,
-        status: { in: ['OPEN', 'DRAFT'] },
       },
       select: {
         ...careerConnectJobSelect,
@@ -310,6 +347,9 @@ const getCareerPortalJobById = async (req, res) => {
 
     if (!job) {
       return res.status(404).json({ error: 'Job opening not found' });
+    }
+    if (job.status !== 'OPEN') {
+      return res.status(410).json({ error: 'This job opening is no longer accepting applications.' });
     }
 
     res.json(job);
@@ -422,18 +462,94 @@ const updateJobOpening = async (req, res) => {
 };
 
 /**
- * Delete a job opening (Cascade deletes applicants and relations).
+ * Expire a job requisition while preserving recruitment history.
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+const expireJobOpening = async (req, res) => {
+  try {
+    if (!canManageJobRequisitions(req.user)) {
+      return res.status(403).json({ error: 'You are not authorized to manage job requisitions.' });
+    }
+
+    const { id } = req.params;
+    const reason = cleanText(req.body?.reason) || 'EXPIRED';
+    const remarks = cleanText(req.body?.remarks);
+    if (!JOB_CLOSE_REASONS.has(reason)) {
+      return res.status(400).json({ error: 'Invalid expiry reason.' });
+    }
+
+    const existing = await prisma.jobOpening.findUnique({
+      where: { id },
+      include: {
+        department: { select: { id: true, name: true } },
+        _count: { select: { applicants: true } },
+      },
+    });
+    if (!existing) return res.status(404).json({ error: 'Job requisition not found.' });
+    if (existing.status === 'CLOSED') return res.status(400).json({ error: 'Job is already closed.' });
+
+    const job = await prisma.jobOpening.update({
+      where: { id },
+      data: { status: 'CLOSED' },
+      include: {
+        department: { select: { id: true, name: true } },
+        _count: { select: { applicants: true } },
+      },
+    });
+
+    await logJobAudit(req, 'JOB_REQUISITION_EXPIRED', job, { reason, remarks });
+    res.json({ message: 'Job requisition expired successfully.', job });
+  } catch (error) {
+    console.error('[EXPIRE JOB ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Delete an empty job opening only. Jobs with recruitment history are preserved.
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
  */
 const deleteJobOpening = async (req, res) => {
   try {
+    if (!canDeleteJobRequisitions(req.user)) {
+      return res.status(403).json({ error: 'You are not authorized to manage job requisitions.' });
+    }
     const { id } = req.params;
-    await prisma.jobOpening.delete({ where: { id } });
-    res.json({ message: 'Job opening deleted successfully' });
+    if (req.body?.confirmation !== 'DELETE') {
+      return res.status(400).json({ error: 'Type DELETE to confirm.' });
+    }
+
+    const job = await prisma.jobOpening.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { applicants: true } },
+      },
+    });
+    if (!job) return res.status(404).json({ error: 'Job requisition not found.' });
+
+    const auditCount = await prisma.auditLog.count({
+      where: {
+        entity: 'JobOpening',
+        entityId: id,
+        action: { not: 'JOB_REQUISITION_DELETED' },
+      },
+    });
+    if (job._count.applicants > 0 || auditCount > 0) {
+      return res.status(400).json({ error: 'This job cannot be deleted because recruitment activity already exists. Expire the job instead.' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.jobOpening.delete({ where: { id } });
+      await logJobAudit(req, 'JOB_REQUISITION_DELETED', job, { reason: 'DELETE_CONFIRMED' }, tx);
+    });
+    res.json({ message: 'Job requisition deleted successfully.' });
   } catch (error) {
     console.error('[DELETE JOB ERROR]:', error.message);
+    if (error?.code === 'P2025') return res.status(404).json({ error: 'Job requisition not found.' });
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -515,11 +631,11 @@ const applyForJob = async (req, res) => {
 
     const job = await prisma.jobOpening.findUnique({
       where: { id: normalized.jobOpeningId },
-      select: { id: true, status: true },
+      select: { id: true, title: true, status: true },
     });
     if (!job) return res.status(404).json({ error: 'Job opening not found' });
-    if (!['OPEN', 'DRAFT'].includes(job.status)) {
-      return res.status(400).json({ error: 'This job opening is not accepting applications.' });
+    if (job.status !== 'OPEN') {
+      return res.status(400).json({ error: 'This job opening is no longer accepting applications.' });
     }
 
     // Check for duplicate applicant for this specific job opening by email or phone number
@@ -560,7 +676,17 @@ const applyForJob = async (req, res) => {
       },
     });
 
-    res.status(201).json(applicant);
+    res.status(201).json({
+      success: true,
+      message: 'Application submitted successfully.',
+      application: {
+        id: applicant.id,
+        candidateName: applicant.fullName,
+        jobId: job.id,
+        jobTitle: job.title,
+        createdAt: applicant.createdAt,
+      },
+    });
   } catch (error) {
     console.error('[SUBMIT APPLICATION ERROR]:', error.message);
     res.status(500).json({ error: 'Server error' });
@@ -604,7 +730,7 @@ const updateApplicantStage = async (req, res) => {
     //   1. Create an Employee record with accountStage = 'ONBOARDING'
     //   2. Create a linked User account  
     //   3. Auto-instantiate the first matching ONBOARDING checklist template
-    if (existingApplicant.stage !== 'ONBOARDING' && requestedStage === 'ONBOARDING') {
+    if (existingApplicant.stage !== ONBOARDING_APPLICANT_STAGE && requestedStage === ONBOARDING_APPLICANT_STAGE) {
       const fullApplicant = await prisma.jobApplicant.findUnique({
         where: { id },
         include: {
@@ -659,7 +785,7 @@ const updateApplicantStage = async (req, res) => {
               employmentType: fullApplicant.jobOpening.employmentType || 'FULL_TIME',
               joinDate: fullApplicant.jobOffer?.joiningDate || new Date(),
               location: fullApplicant.jobOpening.location || null,
-              accountStage: 'ONBOARDING',
+              accountStage: ONBOARDING_APPLICANT_STAGE,
               isActive: true,
             },
           });
@@ -1046,8 +1172,9 @@ const legacyCreateJobOffer = async (req, res) => {
       select: { id: true, stage: true },
     });
     if (!applicant) return res.status(404).json({ error: 'Candidate not found' });
-    const transitionError = validateApplicantStageTransition(applicant.stage, 'OFFER');
-    if (transitionError) return res.status(400).json({ error: transitionError });
+    if (!OFFER_CREATABLE_STAGES.includes(applicant.stage)) {
+      return res.status(400).json({ error: 'Offer letters can only be created once the candidate is in Offer Extended.' });
+    }
 
     const joinDateTime = new Date(joiningDate);
     const today = new Date();
@@ -1063,12 +1190,6 @@ const legacyCreateJobOffer = async (req, res) => {
         joiningDate: joinDateTime,
         status: 'SENT',
       },
-    });
-
-    // Update applicant stage
-    await prisma.jobApplicant.update({
-      where: { id: applicantId },
-      data: { stage: 'OFFER' },
     });
 
     res.status(201).json(offer);
@@ -1318,28 +1439,43 @@ const downloadOfferLetter = async (req, res) => {
 
 const sendJobOffer = async (req, res) => {
   try {
-    if (!canManageOffers(req.user)) return res.status(403).json({ error: 'Not authorized to manage job offers.' });
+    if (!canManageOffers(req.user)) return res.status(403).json({ error: 'You are not authorized to send offer letters.' });
     const data = await loadOfferRenderData(req.params.id);
-    if (!data) return res.status(404).json({ error: 'Job offer not found' });
+    if (!data) return res.status(404).json({ error: 'Offer not found.' });
     const status = normalizeOfferStatus(data.offer.status);
-    if (!['GENERATED', 'SENT', 'VIEWED'].includes(status)) {
-      return res.status(409).json({ error: 'Generate the PDF before sending the offer.' });
+    if (['ACCEPTED', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(status)) {
+      return res.status(400).json({ error: 'This offer cannot be sent in its current status.' });
     }
+    if (!data.offer.pdfStorageKey && !data.offer.offerLetter) {
+      return res.status(400).json({ error: 'Generate the offer PDF before sharing.' });
+    }
+    if (!isValidEmailAddress(data.applicant.email)) {
+      return res.status(400).json({ error: 'Candidate email address is missing or invalid.' });
+    }
+    await readOfferPdf(data.offer.pdfStorageKey || data.offer.offerLetter);
     const token = crypto.randomBytes(32).toString('hex');
     const tokenExpiresAt = addDays(new Date(), Number(process.env.OFFER_TOKEN_EXPIRY_DAYS || 7));
     const delivery = await deliverOfferLetterEmail({ ...data, token });
+    const sentAt = delivery.status === 'SENT' ? new Date() : data.offer.sentAt;
     const offer = await prisma.jobOffer.update({
       where: { id: data.offer.id },
       data: {
         status: delivery.status === 'SENT' ? 'SENT' : status,
         publicTokenHash: hashOfferToken(token),
         tokenExpiresAt,
-        sentAt: delivery.status === 'SENT' ? new Date() : data.offer.sentAt,
+        sentAt,
         emailStatus: delivery.status,
         emailFailureReason: delivery.failureReason,
       },
     });
-    await logOfferAudit(req, status === 'SENT' ? 'OFFER_RESENT' : 'OFFER_SENT', offer, { emailStatus: delivery.status });
+    const action = delivery.status === 'SENT'
+      ? (status === 'SENT' || status === 'VIEWED' ? 'OFFER_RESENT' : 'OFFER_SENT')
+      : 'OFFER_EMAIL_FAILED';
+    await logOfferAudit(req, action, offer, {
+      emailStatus: delivery.status,
+      recipient: data.applicant.email,
+      failureReason: delivery.failureReason || undefined,
+    });
     res.json(offer);
   } catch (error) {
     console.error('[SEND OFFER ERROR]:', error.message);
@@ -1491,6 +1627,7 @@ module.exports = {
   getJobOpeningById,
   createJobOpening,
   updateJobOpening,
+  expireJobOpening,
   deleteJobOpening,
   getApplicants,
   applyForJob,
