@@ -214,9 +214,33 @@ if (require.main === module) {
   // worker). Defaults on for single-instance deployments.
   if (process.env.RUN_SCHEDULER !== 'false') {
     const { runDunningSweep } = require('./services/dunningService');
-    const runSweepSafely = () => runDunningSweep(null)
-      .then((s) => logger.info('Dunning sweep', s))
-      .catch((e) => logger.error('Dunning sweep failed', { error: e.message }));
+    let dunningSweepRunning = false;
+    const safePrismaError = (error) => ({
+      service: 'dunning',
+      timestamp: new Date().toISOString(),
+      code: error?.code,
+      modelName: error?.meta?.modelName,
+      table: error?.meta?.table,
+      message: error?.message,
+    });
+    const runSweepSafely = async () => {
+      if (dunningSweepRunning) {
+        logger.warn('Dunning sweep skipped because a previous run is still active', {
+          service: 'dunning',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+      dunningSweepRunning = true;
+      try {
+        const summary = await runDunningSweep(null);
+        logger.info('Dunning sweep', summary);
+      } catch (e) {
+        logger.error('Dunning sweep failed', safePrismaError(e));
+      } finally {
+        dunningSweepRunning = false;
+      }
+    };
     setTimeout(runSweepSafely, 10_000);
     setInterval(runSweepSafely, 24 * 60 * 60 * 1000).unref();
   } else {

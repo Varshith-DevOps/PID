@@ -18,6 +18,8 @@ type NavItem = {
   adminOnly?: boolean;
 };
 
+const isFeatureEnabled = (features: Record<string, boolean>, key: string) => features[key] !== false;
+
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>, section: 'main' },
   { label: 'AI Command Center', href: '/dashboard/ai-agents', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1 0-3.12 3 3 0 0 1 0-3.88 2.5 2.5 0 0 1 0-3.12A2.5 2.5 0 0 1 9.5 2zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 0-3.12 3 3 0 0 0 0-3.88 2.5 2.5 0 0 0 0-3.12A2.5 2.5 0 0 0 14.5 2z"/></svg>, section: 'main' },
@@ -88,16 +90,16 @@ function Sidebar({ activePath }: { activePath?: string }) {
               }
             }
 
-            if (user.role !== 'SUPER_ADMIN' && user.subscriptionFeatures) {
+            if (!isAdmin && user.role !== 'SUPER_ADMIN' && user.subscriptionFeatures) {
               const features = user.subscriptionFeatures;
-              if (item.module === 'ATTENDANCE' && !features.attendance) return false;
-              if (item.module === 'LEAVE' && !features.leave) return false;
-              if (item.module === 'PAYROLL' && !features.payroll) return false;
-              if (item.module === 'PERFORMANCE' && !features.performance) return false;
-              if (item.module === 'LEARNING' && !features.learning) return false;
-              if (item.module === 'HELPDESK' && !features.helpdesk) return false;
-              if (item.module === 'INTEGRATIONS' && !features.apiAccess) return false;
-              if (item.module === 'WORKFLOWS' && !features.customWorkflows) return false;
+              if (item.module === 'ATTENDANCE' && !isFeatureEnabled(features, 'attendance')) return false;
+              if (item.module === 'LEAVE' && !isFeatureEnabled(features, 'leave')) return false;
+              if (item.module === 'PAYROLL' && !isFeatureEnabled(features, 'payroll')) return false;
+              if (item.module === 'PERFORMANCE' && !isFeatureEnabled(features, 'performance')) return false;
+              if (item.module === 'LEARNING' && !isFeatureEnabled(features, 'learning')) return false;
+              if (item.module === 'HELPDESK' && !isFeatureEnabled(features, 'helpdesk')) return false;
+              if (item.module === 'INTEGRATIONS' && !isFeatureEnabled(features, 'apiAccess')) return false;
+              if (item.module === 'WORKFLOWS' && !isFeatureEnabled(features, 'customWorkflows')) return false;
             }
             return true;
           });
