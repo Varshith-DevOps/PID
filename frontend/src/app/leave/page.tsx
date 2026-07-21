@@ -100,9 +100,30 @@ export default function LeavePage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [rejectSubmitted, setRejectSubmitted] = useState(false);
+  const [processingLeaveId, setProcessingLeaveId] = useState<string | null>(null);
 
   const isAdminView = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const canCreateTab = !!user && hasPermission('LEAVE', 'CREATE');
+
+  const getApiMessage = (err: unknown, fallback: string) => {
+    const response = (err as { response?: { data?: { error?: string; message?: string } } })?.response;
+    return response?.data?.error || response?.data?.message || fallback;
+  };
+
+  const replaceLeave = (updated: LeaveRec) => {
+    setLeaves((current) => current.map((leave) => (leave.id === updated.id ? { ...leave, ...updated } : leave)));
+    setEmployeeLeaves((current) => current.map((leave) => (leave.id === updated.id ? { ...leave, ...updated } : leave)));
+    setCalendarLeaves((current) => current.map((leave) => (leave.id === updated.id ? { ...leave, ...updated } : leave)));
+  };
+
+  const logLeaveAction = (action: 'APPROVE' | 'REJECT', leave: LeaveRec | undefined) => {
+    if (process.env.NODE_ENV === 'production') return;
+    console.debug('[leave-action]', {
+      action,
+      leaveRequestId: leave?.id,
+      status: leave?.status,
+    });
+  };
 
   useEffect(() => { if (!authLoading && !user) router.push('/'); }, [user, authLoading, router]);
   useEffect(() => { loadEmployees(); }, []);
@@ -224,7 +245,20 @@ export default function LeavePage() {
     }
   };
 
-  const handleApprove = async (id: string) => { try { await approveLeave(id); loadLeaves(); alert('Leave approved'); } catch (err) { alert('Failed to approve'); } };
+  const handleApprove = async (id: string) => {
+    const selected = leaves.find((leave) => leave.id === id);
+    logLeaveAction('APPROVE', selected);
+    setProcessingLeaveId(id);
+    try {
+      const result = await approveLeave(id);
+      if (result.leaveRequest) replaceLeave(result.leaveRequest);
+      alert(result.message || 'Leave request approved successfully.');
+    } catch (err) {
+      alert(getApiMessage(err, 'Could not update the leave request. Please try again.'));
+    } finally {
+      setProcessingLeaveId(null);
+    }
+  };
   const handleReject = async (id: string) => {
     setRejectSubmitted(true);
     const { isValid, firstError } = validateForm({ rejectReason }, { rejectReason: required('Reason') });
@@ -232,7 +266,21 @@ export default function LeavePage() {
       alert(firstError || 'Please correct the highlighted fields.');
       return;
     }
-    try { await rejectLeave(id, rejectReason); setShowRejectModal(null); setRejectReason(''); setRejectSubmitted(false); loadLeaves(); alert('Leave rejected'); } catch (err) { alert('Failed to reject'); }
+    const selected = leaves.find((leave) => leave.id === id);
+    logLeaveAction('REJECT', selected);
+    setProcessingLeaveId(id);
+    try {
+      const result = await rejectLeave(id, rejectReason);
+      if (result.leaveRequest) replaceLeave(result.leaveRequest);
+      setShowRejectModal(null);
+      setRejectReason('');
+      setRejectSubmitted(false);
+      alert(result.message || 'Leave request rejected successfully.');
+    } catch (err) {
+      alert(getApiMessage(err, 'Could not update the leave request. Please try again.'));
+    } finally {
+      setProcessingLeaveId(null);
+    }
   };
   const handleCancel = async (id: string) => { try { await cancelLeaveRequest(id); loadLeaves(); } catch (err) { alert('Failed to cancel'); } };
   const getStatusCount = (status: string) => leaves.filter((leave) => leave.status === status).length;
@@ -304,10 +352,10 @@ export default function LeavePage() {
           {row.status === 'PENDING' && (
             <>
               <CanEdit module="LEAVE">
-                <Button variant="success" size="sm" onClick={() => handleApprove(row.id)}>Approve</Button>
-                <Button variant="danger" size="sm" onClick={() => setShowRejectModal(row.id)}>Reject</Button>
+                <Button variant="success" size="sm" loading={processingLeaveId === row.id} onClick={() => handleApprove(row.id)}>Approve</Button>
+                <Button variant="danger" size="sm" disabled={processingLeaveId === row.id} onClick={() => setShowRejectModal(row.id)}>Reject</Button>
               </CanEdit>
-              <Button variant="ghost" size="sm" onClick={() => setShowCancelDialog(row.id)}>Cancel</Button>
+              <Button variant="ghost" size="sm" disabled={processingLeaveId === row.id} onClick={() => setShowCancelDialog(row.id)}>Cancel</Button>
             </>
           )}
         </div>
@@ -364,7 +412,7 @@ export default function LeavePage() {
           footer={
             <>
               <Button variant="ghost" onClick={closeRejectModal}>Cancel</Button>
-              <Button variant="danger" onClick={() => showRejectModal && handleReject(showRejectModal)}>Reject</Button>
+              <Button variant="danger" loading={processingLeaveId === showRejectModal} onClick={() => showRejectModal && handleReject(showRejectModal)}>Reject</Button>
             </>
           }
         >

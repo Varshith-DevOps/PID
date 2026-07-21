@@ -27,5 +27,42 @@ services:
       timeout: 5s
       retries: 5
 
+  ai-recruitment-service:
+    build:
+      context: ./ai-recruitment-service
+    container_name: hrms_ai_recruitment_service
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      PORT: 8001
+      HRMS_API_URL: http://backend:5000/api
+      HRMS_SERVICE_TOKEN: ${HRMS_SERVICE_TOKEN:-}
+      AI_DATABASE_URL: ${AI_DATABASE_URL:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
+      LLM_MODEL: ${LLM_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      MAX_RESUME_SIZE_MB: 10
+      HRMS_REQUEST_TIMEOUT_SECONDS: 30
+      LLM_REQUEST_TIMEOUT_SECONDS: 60
+      PII_LOGGING_ENABLED: "false"
+    expose:
+      - "8001"
+    tmpfs:
+      - /tmp/ai-recruitment
+    read_only: true
+    profiles:
+      - ai
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   hrms_pgdata:

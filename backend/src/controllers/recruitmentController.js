@@ -13,6 +13,7 @@ const { generateOfferLetterPdf } = require('../services/offerLetterPdfService');
 const { buildOfferFileName, writeOfferPdf, readOfferPdf } = require('../services/offerLetterStorageService');
 const { deliverOfferLetterEmail } = require('../services/offerLetterEmailService');
 const recruitmentStages = require('../config/recruitmentStages.json');
+const { callAiService, formatAssessment } = require('../services/aiRecruitmentService');
 
 const APPLICANT_SOURCES = new Set(['MANUAL', 'SOCIAL_MEDIA', 'CAREER_PORTAL']);
 const NOTICE_PERIODS = new Set([
@@ -129,6 +130,7 @@ const logOfferAudit = async (req, action, offer, extra = {}) => {
 const canManageOffers = (user) => Boolean(user?.role && OFFER_MANAGE_ROLES.has(user.role));
 const canManageJobRequisitions = (user) => Boolean(user?.role && JOB_MANAGE_ROLES.has(user.role));
 const canDeleteJobRequisitions = (user) => Boolean(user?.role && JOB_DELETE_ROLES.has(user.role));
+const canRunAiScreening = (user) => Boolean(user?.role && JOB_MANAGE_ROLES.has(user.role));
 
 const logJobAudit = async (req, action, job, extra = {}, tx = prisma) => {
   try {
@@ -956,6 +958,84 @@ const getApplicantReviews = async (req, res) => {
   }
 };
 
+const getApplicantAiAssessments = async (req, res) => {
+  try {
+    const assessments = await prisma.aiCandidateAssessment.findMany({
+      where: { applicationId: req.params.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ assessments: assessments.map(formatAssessment), currentAssessment: formatAssessment(assessments[0]) });
+  } catch (error) {
+    console.error('[GET AI ASSESSMENTS ERROR]:', error.message);
+    res.status(500).json({ error: 'Unable to load AI assessments.' });
+  }
+};
+
+const runApplicantAiScreening = async (req, res) => {
+  try {
+    if (!canRunAiScreening(req.user)) {
+      return res.status(403).json({ code: 'RECRUITER_ACCESS_DENIED', error: 'You are not authorized to run AI screening.' });
+    }
+    const applicant = await prisma.jobApplicant.findUnique({
+      where: { id: req.params.id },
+      include: { jobOpening: true },
+    });
+    if (!applicant) return res.status(404).json({ code: 'APPLICATION_NOT_FOUND', error: 'Candidate application not found.' });
+    if (!applicant.resumeUrl && !applicant.skills && !applicant.experience && !applicant.coverLetter) {
+      return res.status(400).json({ code: 'RESUME_NOT_FOUND', error: 'Candidate resume or screening profile evidence is required.' });
+    }
+    const organizationId = applicant.jobOpening.companyId || req.user.companyId;
+    if (req.user.companyId && organizationId !== req.user.companyId) {
+      return res.status(403).json({ code: 'ORGANIZATION_ACCESS_DENIED', error: 'Organization access denied.' });
+    }
+    const body = {
+      tenantId: organizationId,
+      organizationId,
+      jobId: applicant.jobOpeningId,
+      applicationId: applicant.id,
+      candidateId: applicant.id,
+      requestedBy: req.user.id,
+    };
+    const result = await callAiService('/api/v1/screenings', { method: 'POST', body });
+    res.status(202).json(result);
+  } catch (error) {
+    console.error('[RUN AI SCREENING ERROR]:', error.message);
+    res.status(error.status || 500).json({ code: error.code || 'AI_SCREENING_FAILED', error: 'Unable to run AI screening.' });
+  }
+};
+
+const approveApplicantAiAssessment = async (req, res) => {
+  try {
+    if (!canRunAiScreening(req.user)) {
+      return res.status(403).json({ code: 'RECRUITER_ACCESS_DENIED', error: 'You are not authorized to approve AI screening.' });
+    }
+    const decision = String(req.body?.decision || '').toUpperCase();
+    if (!['APPROVED', 'REJECTED', 'NEEDS_REVIEW'].includes(decision)) {
+      return res.status(400).json({ code: 'INVALID_APPROVAL_DECISION', error: 'Invalid approval decision.' });
+    }
+    const assessment = await prisma.aiCandidateAssessment.findUnique({ where: { workflowId: req.params.workflowId } });
+    if (!assessment || assessment.applicationId !== req.params.id) {
+      return res.status(404).json({ code: 'WORKFLOW_NOT_FOUND', error: 'Workflow not found.' });
+    }
+    if (req.user.companyId && assessment.organizationId !== req.user.companyId) {
+      return res.status(403).json({ code: 'ORGANIZATION_ACCESS_DENIED', error: 'Organization access denied.' });
+    }
+    const result = await callAiService(`/api/v1/screenings/${req.params.workflowId}/approval`, {
+      method: 'POST',
+      body: {
+        workflowId: req.params.workflowId,
+        decision,
+        approvedBy: req.user.id,
+        comments: req.body?.comments || null,
+      },
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('[APPROVE AI SCREENING ERROR]:', error.message);
+    res.status(error.status || 500).json({ code: error.code || 'AI_SCREENING_FAILED', error: 'Unable to record AI screening approval.' });
+  }
+};
+
 const createApplicantReview = async (req, res) => {
   try {
     const { applicantId } = req.params;
@@ -1635,6 +1715,9 @@ module.exports = {
   updateApplicantEvaluation,
   getApplicantReviews,
   createApplicantReview,
+  getApplicantAiAssessments,
+  runApplicantAiScreening,
+  approveApplicantAiAssessment,
   scheduleInterview,
   resendInterviewEmail,
   submitInterviewFeedback,

@@ -30,6 +30,9 @@ const {
   updateApplicantEvaluation,
   getApplicantReviews,
   createApplicantReview,
+  getApplicantAiAssessments,
+  runApplicantAiScreening,
+  approveApplicantAiAssessment,
   scheduleInterview,
   resendInterviewEmail,
   submitInterviewFeedback,
@@ -146,6 +149,9 @@ router.post('/applicants', publicApplicationLimiter, (req, res, next) => {
 router.patch('/applicants/:id/evaluation', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateApplicantEvaluation);
 router.get('/applicants/:applicantId/reviews', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getApplicantReviews);
 router.post('/applicants/:applicantId/reviews', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), createApplicantReview);
+router.get('/applicants/:id/ai-assessments', authenticate, rbacMiddleware('RECRUITMENT', 'VIEW'), getApplicantAiAssessments);
+router.post('/applicants/:id/ai-screenings', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), runApplicantAiScreening);
+router.post('/applicants/:id/ai-assessments/:workflowId/approval', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), approveApplicantAiAssessment);
 router.put('/applicants/:id/stage', authenticate, rbacMiddleware('RECRUITMENT', 'EDIT'), updateApplicantStage);
 
 // Interviews

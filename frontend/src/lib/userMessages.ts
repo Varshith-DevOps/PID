@@ -96,6 +96,7 @@ const silentSuccessUrls: (string | RegExp)[] = [
   '/auth/logout',
   '/auth/csrf',
   '/notifications/read',
+  /\/leave\/[^/]+\/(approve|reject)/,
 ];
 
 /**
@@ -112,6 +113,7 @@ const silentErrorUrls: (string | RegExp)[] = [
   '/auth/login',
   '/auth/mfa/verify-login',
   '/public/tenant',
+  /\/leave\/[^/]+\/(approve|reject)/,
 ];
 
 const errorRules: MessageRule[] = [

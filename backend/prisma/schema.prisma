@@ -765,6 +765,7 @@ model JobOpening {
   salaryRange    String?
   status         String         @default("OPEN") // DRAFT, OPEN, CLOSED
   applicants     JobApplicant[]
+  aiAssessments  AiCandidateAssessment[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -793,10 +794,62 @@ model JobApplicant {
   interviews   Interview[]
   reviews      CandidateReview[]
   jobOffer     JobOffer?
+  aiAssessments AiCandidateAssessment[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
   @@map("job_applicants")
+}
+
+model AiCandidateAssessment {
+  id                     String       @id @default(uuid())
+  tenantId               String
+  companyId              String?
+  organizationId         String
+  job                    JobOpening   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobId                  String
+  application            JobApplicant @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  applicationId          String
+  candidateId            String
+  workflowId             String       @unique
+  status                 String       @default("PENDING_APPROVAL")
+  skillsScore            Float        @default(0)
+  experienceScore        Float        @default(0)
+  educationScore         Float        @default(0)
+  projectScore           Float        @default(0)
+  certificationScore     Float        @default(0)
+  domainScore            Float        @default(0)
+  overallScore           Float        @default(0)
+  confidence             Float        @default(0)
+  matchedSkills          String       @default("[]")
+  missingRequiredSkills  String       @default("[]")
+  missingPreferredSkills String       @default("[]")
+  evidence               String       @default("{}")
+  recruiterNotes         String       @default("")
+  recommendation         String
+  approvalStatus         String       @default("PENDING")
+  approvedBy             String?
+  approvedAt             DateTime?
+  approvalComments       String?
+  approvalHistory        String       @default("[]")
+  modelProvider          String?
+  modelName              String?
+  promptVersion          String?
+  scoringVersion         String?
+  createdBy              String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@index([tenantId])
+  @@index([companyId])
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([applicationId])
+  @@index([candidateId])
+  @@index([workflowId])
+  @@index([approvalStatus])
+  @@index([createdAt])
+  @@map("ai_candidate_assessments")
 }
 
 model CandidateReview {

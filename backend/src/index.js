@@ -48,6 +48,7 @@ const publicRoutes = require('./routes/publicRoutes');
 const careerOfferRoutes = require('./routes/careerOfferRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const appUpdateRoutes = require('./routes/appUpdateRoutes');
+const internalRecruitmentAiRoutes = require('./routes/internalRecruitmentAiRoutes');
 const { auditPayrollMiddleware } = require('./middleware/auditMiddleware');
 const { globalLimiter } = require('./middleware/rateLimit');
 const { securityHeaders } = require('./middleware/securityHeaders');
@@ -149,6 +150,7 @@ app.use('/api/public', publicRoutes);
 app.use('/api/career', careerOfferRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/app', appUpdateRoutes);
+app.use('/api/internal/recruitment/ai', internalRecruitmentAiRoutes);
 
 /** Liveness probe: process is up (no dependency checks). */
 app.get('/health/live', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));

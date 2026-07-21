@@ -15,6 +15,48 @@ const DEFAULT_LEAVE_QUOTAS = [
   { leaveType: 'CASUAL', quota: 5 },
 ];
 
+const sendControllerError = (res, error, fallback = 'Could not update the leave request. Please try again.') => {
+  const status = error.status || error.statusCode || 500;
+  if (status >= 500) {
+    console.error('[LEAVE ACTION ERROR]:', error.message);
+  }
+  return res.status(status).json({ error: error.message || fallback });
+};
+
+const leaveActionResponse = (res, message, leaveRequest) => res.json({
+  success: true,
+  message,
+  leaveRequest,
+});
+
+const getApprovalAvailability = async (leave) => {
+  const year = new Date(leave.startDate).getFullYear();
+  const quota = await prisma.leaveQuota.findFirst({
+    where: {
+      employeeId: leave.employeeId,
+      year,
+      leaveType: leave.leaveType,
+    },
+  });
+
+  if (!quota) return null;
+
+  const approved = await prisma.leave.aggregate({
+    where: {
+      employeeId: leave.employeeId,
+      leaveType: leave.leaveType,
+      status: 'APPROVED',
+      startDate: { gte: new Date(year, 0, 1) },
+      endDate: { lte: new Date(year, 11, 31, 23, 59, 59, 999) },
+      id: { not: leave.id },
+    },
+    _sum: { days: true },
+  });
+
+  const used = approved._sum.days || 0;
+  return { quota, used, remaining: quota.quota - used };
+};
+
 const ensureLeaveQuotas = async (employeeId, year) => {
   let quotas = await prisma.leaveQuota.findMany({
     where: { employeeId, year },
@@ -136,51 +178,77 @@ const getLeaveRequests = async (req, res) => {
 const approveLeave = async (req, res) => {
   try {
     const { id } = req.params;
-    const leave = await prisma.leave.findUnique({ where: { id } });
+    const leave = await prisma.leave.findUnique({ where: { id }, include: { employee: true } });
     if (!leave) return res.status(404).json({ error: 'Leave not found' });
-    if (!(await canApproveEmployeeWorkflow(req.user, leave.employeeId))) return res.status(403).json({ error: 'Access denied. You can only approve leave for your authorized team.' });
-    if (leave.status !== 'PENDING') return res.status(400).json({ error: 'Leave request is already processed' });
+    if (!leave.employee) return res.status(404).json({ error: 'Employee not found for this leave request.' });
+    if (!(await canApproveEmployeeWorkflow(req.user, leave.employeeId))) {
+      return res.status(403).json({ error: 'You are not authorized to approve or reject this leave request.' });
+    }
+    if (leave.status !== 'PENDING') return res.status(409).json({ error: 'This leave request has already been processed.' });
+    if (new Date(leave.endDate) < new Date(leave.startDate)) {
+      return res.status(400).json({ error: 'Leave request date range is invalid.' });
+    }
     await assertPayrollRangeOpen(leave.startDate, leave.endDate, 'Leave approval');
 
+    const overlappingLeave = await prisma.leave.findFirst({
+      where: {
+        employeeId: leave.employeeId,
+        id: { not: id },
+        status: 'APPROVED',
+        startDate: { lte: leave.endDate },
+        endDate: { gte: leave.startDate },
+      },
+      select: { id: true },
+    });
+    if (overlappingLeave) {
+      return res.status(409).json({ error: 'This leave request overlaps an already approved leave.' });
+    }
+
     if (leave.leaveType !== 'UNPAID') {
-      const year = new Date(leave.startDate).getFullYear();
-      const balances = await buildLeaveBalance(leave.employeeId, year);
-      const quota = balances.find(b => b.leaveType === leave.leaveType);
-      if (quota && quota.remaining < leave.days) {
-        return res.status(400).json({ error: `Insufficient leave balance. Remaining: ${quota.remaining} days, Requested: ${leave.days} days.` });
+      const availability = await getApprovalAvailability(leave);
+      if (!availability) {
+        return res.status(400).json({ error: 'Leave balance is not configured for this employee.' });
+      }
+      if (availability.remaining < leave.days) {
+        return res.status(400).json({ error: `Insufficient leave balance. Remaining: ${availability.remaining} days, Requested: ${leave.days} days.` });
       }
     }
 
-    const updated = await prisma.leave.update({
+    const updated = await prisma.$transaction(async (tx) => tx.leave.update({
       where: { id },
-      data: { status: 'APPROVED', approvedBy: req.user?.id, approvedAt: new Date() },
-      include: { employee: true },
-    });
+      data: { status: 'APPROVED', approvedBy: req.user?.id, approvedAt: new Date(), rejectReason: null },
+      include: { employee: { select: { id: true, firstName: true, lastName: true, department: true } } },
+    }));
 
-    res.json(updated);
+    return leaveActionResponse(res, 'Leave request approved successfully.', updated);
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    return sendControllerError(res, error);
   }
 };
 
 const rejectLeave = async (req, res) => {
   try {
     const { id } = req.params;
-    const { rejectReason } = req.body;
-    const leave = await prisma.leave.findUnique({ where: { id } });
-    if (!leave) return res.status(404).json({ error: 'Leave not found' });
-    if (!(await canApproveEmployeeWorkflow(req.user, leave.employeeId))) return res.status(403).json({ error: 'Access denied. You can only reject leave for your authorized team.' });
-    await assertPayrollRangeOpen(leave.startDate, leave.endDate, 'Leave rejection');
+    const rejectReason = String(req.body?.rejectReason || req.body?.reason || '').trim();
+    if (!rejectReason) return res.status(400).json({ error: 'Rejection reason is required.' });
 
-    const updated = await prisma.leave.update({
+    const leave = await prisma.leave.findUnique({ where: { id }, include: { employee: true } });
+    if (!leave) return res.status(404).json({ error: 'Leave not found' });
+    if (!leave.employee) return res.status(404).json({ error: 'Employee not found for this leave request.' });
+    if (!(await canApproveEmployeeWorkflow(req.user, leave.employeeId))) {
+      return res.status(403).json({ error: 'You are not authorized to approve or reject this leave request.' });
+    }
+    if (leave.status !== 'PENDING') return res.status(409).json({ error: 'This leave request has already been processed.' });
+
+    const updated = await prisma.$transaction(async (tx) => tx.leave.update({
       where: { id },
       data: { status: 'REJECTED', approvedBy: req.user?.id, rejectReason },
-      include: { employee: true },
-    });
+      include: { employee: { select: { id: true, firstName: true, lastName: true, department: true } } },
+    }));
 
-    res.json(updated);
+    return leaveActionResponse(res, 'Leave request rejected successfully.', updated);
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    return sendControllerError(res, error);
   }
 };
 
@@ -205,7 +273,7 @@ const cancelLeave = async (req, res) => {
 
     res.json(updated);
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    return sendControllerError(res, error);
   }
 };
 

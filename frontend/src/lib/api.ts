@@ -907,6 +907,25 @@ export const createApplicantReview = async (applicantId: string, payload: { rati
   return data;
 };
 
+export const getApplicantAiAssessments = async (applicantId: string) => {
+  const { data } = await api.get(`/recruitment/applicants/${applicantId}/ai-assessments`);
+  return data;
+};
+
+export const runAiCandidateScreening = async (applicantId: string) => {
+  const { data } = await api.post(`/recruitment/applicants/${applicantId}/ai-screenings`);
+  return data;
+};
+
+export const approveAiCandidateAssessment = async (
+  applicantId: string,
+  workflowId: string,
+  payload: { decision: 'APPROVED' | 'REJECTED' | 'NEEDS_REVIEW'; comments?: string }
+) => {
+  const { data } = await api.post(`/recruitment/applicants/${applicantId}/ai-assessments/${workflowId}/approval`, payload);
+  return data;
+};
+
 export const scheduleInterview = async (interview: {
   applicantId: string;
   interviewerName: string;

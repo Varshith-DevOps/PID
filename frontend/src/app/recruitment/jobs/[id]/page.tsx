@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import { useToast } from '@/lib/toastContext';
@@ -9,6 +9,9 @@ import {
   updateApplicantStage,
   getApplicantReviews,
   createApplicantReview,
+  getApplicantAiAssessments,
+  runAiCandidateScreening,
+  approveAiCandidateAssessment,
   applyForJob,
   scheduleInterview,
   resendInterviewEmail,
@@ -121,6 +124,29 @@ interface CandidateReview {
   interviewRoundName?: string | null;
   createdAt: string;
   updatedAt?: string;
+}
+
+interface AiAssessment {
+  id: string;
+  workflowId: string;
+  status: string;
+  skillsScore: number;
+  experienceScore: number;
+  educationScore: number;
+  projectScore: number;
+  certificationScore: number;
+  domainScore: number;
+  overallScore: number;
+  confidence: number;
+  matchedSkills: string[];
+  missingRequiredSkills: string[];
+  missingPreferredSkills: string[];
+  evidence: Record<string, any>;
+  recruiterNotes: string;
+  recommendation: string;
+  approvalStatus: string;
+  approvalHistory?: Array<{ decision: string; approvedBy?: string; comments?: string; timestamp?: string }>;
+  createdAt: string;
 }
 
 interface JobDetails {
@@ -252,6 +278,11 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
   const [reviewSuccess, setReviewSuccess] = useState('');
   const [reviewHistory, setReviewHistory] = useState<CandidateReview[]>([]);
   const [reviewHistoryLoading, setReviewHistoryLoading] = useState(false);
+  const [aiAssessments, setAiAssessments] = useState<AiAssessment[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiActionLoading, setAiActionLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [showAiAssessment, setShowAiAssessment] = useState(false);
 
   // Form states
   const [applicantForm, setApplicantForm] = useState({
@@ -381,6 +412,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
     setReviewError('');
     setReviewSuccess('');
     loadReviewHistory(selectedApplicant.id);
+    loadAiAssessments(selectedApplicant.id);
   }, [selectedApplicant?.id]);
 
   const loadData = async () => {
@@ -417,6 +449,20 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
       setReviewHistory([]);
     } finally {
       setReviewHistoryLoading(false);
+    }
+  };
+
+  const loadAiAssessments = async (applicantId: string) => {
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const data = await getApplicantAiAssessments(applicantId);
+      setAiAssessments(Array.isArray(data?.assessments) ? data.assessments : []);
+    } catch (err: any) {
+      setAiError(err?.response?.data?.error || 'Unable to load AI assessments.');
+      setAiAssessments([]);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -512,6 +558,49 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
       showToast('Could not save the review. Please try again.', 'error');
     } finally {
       setSavingReview(false);
+    }
+  };
+
+  const aiErrorMessage = (err: any, fallback: string) => {
+    const data = err?.response?.data;
+    const message = data?.error || data?.detail?.message || fallback;
+    return data?.code ? `${message} (${data.code})` : message;
+  };
+
+  const handleRunAiScreening = async (event?: MouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (!selectedApplicant || aiActionLoading) return;
+    setAiActionLoading(true);
+    setAiError('');
+    try {
+      await runAiCandidateScreening(selectedApplicant.id);
+      await loadAiAssessments(selectedApplicant.id);
+      showToast('AI screening completed. Review the recommendation before taking action.', 'success');
+    } catch (err: any) {
+      const message = aiErrorMessage(err, 'Unable to run AI screening.');
+      setAiError(message);
+      showToast(message, 'error');
+    } finally {
+      setAiActionLoading(false);
+    }
+  };
+
+  const handleAiApproval = async (decision: 'APPROVED' | 'REJECTED' | 'NEEDS_REVIEW') => {
+    const current = aiAssessments[0];
+    if (!selectedApplicant || !current || aiActionLoading) return;
+    setAiActionLoading(true);
+    setAiError('');
+    try {
+      await approveAiCandidateAssessment(selectedApplicant.id, current.workflowId, { decision });
+      await loadAiAssessments(selectedApplicant.id);
+      showToast('AI assessment decision recorded.', 'success');
+    } catch (err: any) {
+      const message = err?.response?.data?.error || 'Unable to record AI decision.';
+      setAiError(message);
+      showToast(message, 'error');
+    } finally {
+      setAiActionLoading(false);
     }
   };
 
@@ -821,6 +910,7 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
 
   const canCurrentUserSendOffers = Boolean(user?.role && OFFER_EMAIL_ALLOWED_ROLES.has(user.role));
   const isJobClosed = job.status !== 'OPEN';
+  const currentAiAssessment = aiAssessments[0];
 
   return (
     <div className="app-layout">
@@ -1028,6 +1118,68 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                 <div style={{ color: 'var(--text-secondary)' }}>Current CTC: {selectedApplicant.currentCtc || 'Not provided'}</div>
                 <div style={{ color: 'var(--text-secondary)' }}>Expected CTC: {selectedApplicant.expectedCtc || 'Not provided'}</div>
                 <div style={{ color: 'var(--text-secondary)' }}>Notice Period: {selectedApplicant.noticePeriod || 'Not provided'}</div>
+              </div>
+
+              {/* AI Candidate Assessment */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.75rem', background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <label className="form-label" style={{ margin: 0 }}>AI Candidate Assessment</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {currentAiAssessment && (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setShowAiAssessment(true)}>
+                        View Full Assessment
+                      </Button>
+                    )}
+                    {!isJobClosed && (
+                      <Button type="button" size="sm" loading={aiActionLoading} disabled={aiActionLoading} onClick={handleRunAiScreening}>
+                        {currentAiAssessment ? 'Re-run Screening' : 'Run AI Screening'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {aiError && <Banner tone="danger">{aiError}</Banner>}
+                {aiLoading ? (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.75rem' }}>Loading AI assessment...</div>
+                ) : !currentAiAssessment ? (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem', textAlign: 'center' }}>
+                    No AI assessment has been run for this candidate.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.5rem', fontSize: '0.72rem' }}>
+                      <div><div style={{ color: 'var(--text-muted)' }}>Match score</div><strong>{currentAiAssessment.overallScore}%</strong></div>
+                      <div><div style={{ color: 'var(--text-muted)' }}>Recommendation</div><strong>{currentAiAssessment.recommendation.replace(/_/g, ' ')}</strong></div>
+                      <div><div style={{ color: 'var(--text-muted)' }}>Confidence</div><strong>{currentAiAssessment.confidence}%</strong></div>
+                      <div><div style={{ color: 'var(--text-muted)' }}>Approval</div><strong>{currentAiAssessment.approvalStatus}</strong></div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))', gap: '0.4rem', fontSize: '0.7rem' }}>
+                      <div>Skills: {currentAiAssessment.skillsScore}%</div>
+                      <div>Experience: {currentAiAssessment.experienceScore}%</div>
+                      <div>Education: {currentAiAssessment.educationScore}%</div>
+                      <div>Projects: {currentAiAssessment.projectScore}%</div>
+                      <div>Certifications: {currentAiAssessment.certificationScore}%</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      {currentAiAssessment.matchedSkills.slice(0, 8).map(skill => <Badge key={skill} tone="success">{skill}</Badge>)}
+                      {currentAiAssessment.missingRequiredSkills.slice(0, 6).map(skill => <Badge key={skill} tone="danger">{skill}</Badge>)}
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: 150, overflowY: 'auto' }}>
+                      {currentAiAssessment.recruiterNotes}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <Button type="button" size="sm" variant="success" disabled={aiActionLoading} onClick={() => handleAiApproval('APPROVED')}>
+                        Approve Recommendation
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" disabled={aiActionLoading} onClick={() => handleAiApproval('NEEDS_REVIEW')}>
+                        Request Manual Review
+                      </Button>
+                      <Button type="button" size="sm" variant="danger" disabled={aiActionLoading} onClick={() => handleAiApproval('REJECTED')}>
+                        Reject Recommendation
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Interactive Rating */}
@@ -1275,6 +1427,77 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
             </div>
           )}
         </Drawer>
+
+        <Modal
+          open={showAiAssessment}
+          onClose={() => setShowAiAssessment(false)}
+          title="AI Candidate Assessment"
+          width={760}
+        >
+          {currentAiAssessment && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', fontSize: '0.78rem' }}>
+                <div><div style={{ color: 'var(--text-muted)' }}>Overall score</div><strong>{currentAiAssessment.overallScore}%</strong></div>
+                <div><div style={{ color: 'var(--text-muted)' }}>Recommendation</div><strong>{currentAiAssessment.recommendation.replace(/_/g, ' ')}</strong></div>
+                <div><div style={{ color: 'var(--text-muted)' }}>Confidence</div><strong>{currentAiAssessment.confidence}%</strong></div>
+                <div><div style={{ color: 'var(--text-muted)' }}>Approval status</div><strong>{currentAiAssessment.approvalStatus}</strong></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', fontSize: '0.75rem' }}>
+                <div>Skills: {currentAiAssessment.skillsScore}%</div>
+                <div>Experience: {currentAiAssessment.experienceScore}%</div>
+                <div>Education: {currentAiAssessment.educationScore}%</div>
+                <div>Projects: {currentAiAssessment.projectScore}%</div>
+                <div>Certifications: {currentAiAssessment.certificationScore}%</div>
+                <div>Domain: {currentAiAssessment.domainScore}%</div>
+              </div>
+              <div>
+                <label className="form-label">Matched Skills</label>
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  {currentAiAssessment.matchedSkills.length ? currentAiAssessment.matchedSkills.map(skill => <Badge key={skill} tone="success">{skill}</Badge>) : <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>None identified</span>}
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Missing Required Skills</label>
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  {currentAiAssessment.missingRequiredSkills.length ? currentAiAssessment.missingRequiredSkills.map(skill => <Badge key={skill} tone="danger">{skill}</Badge>) : <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>None identified</span>}
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Missing Preferred Skills</label>
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  {currentAiAssessment.missingPreferredSkills.length ? currentAiAssessment.missingPreferredSkills.map(skill => <Badge key={skill} tone="warning">{skill}</Badge>) : <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>None identified</span>}
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Recruiter Notes</label>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55, background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem' }}>
+                  {currentAiAssessment.recruiterNotes}
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Evidence</label>
+                <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.75rem', maxHeight: 220, overflowY: 'auto' }}>
+                  {JSON.stringify(currentAiAssessment.evidence, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <label className="form-label">Approval History</label>
+                {currentAiAssessment.approvalHistory?.length ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {currentAiAssessment.approvalHistory.map((item, index) => (
+                      <div key={`${item.timestamp || index}`} style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', background: 'var(--surface-sunken)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0.65rem' }}>
+                        <strong>{item.decision}</strong> {item.timestamp ? `on ${new Date(item.timestamp).toLocaleString()}` : ''}
+                        {item.comments && <div>{item.comments}</div>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No approval action recorded yet.</div>
+                )}
+              </div>
+            </div>
+          )}
+        </Modal>
 
         {/* Schedule Interview Modal */}
         <Modal

@@ -53,6 +53,7 @@ const tenantModels = [
   'Task',
   'Sprint',
   'JobOpening',
+  'AiCandidateAssessment',
   'ShiftType',
   'ChecklistTemplate',
   'Holiday',
