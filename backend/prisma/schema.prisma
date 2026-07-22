@@ -193,6 +193,12 @@ model Employee {
   learningBookmarks       LearningBookmark[]
   learningCertificates    Certificate[]
   learningNotifications   LearningNotification[]
+  learningLessonProgress  LearningLessonProgress[]
+  learningNotes           LearningNote[]
+  learningFavorites       LearningFavorite[]
+  employeeLearningSkills  EmployeeLearningSkill[]
+  learningFeedback        LearningFeedback[]
+  learningAssessmentSubmissions LearningAssessmentSubmission[]
   helpdeskTickets         HelpdeskTicket[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
@@ -1606,20 +1612,41 @@ model LearningCourse {
   courseCode           String?
   description          String?
   category             String               @default("GENERAL")
+  categoryId           String?
+  learningCategory     LearningCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   department           String?
   difficulty           String               @default("BEGINNER")
   durationMinutes      Int                  @default(0)
+  estimatedHours       Float?
+  language             String               @default("en")
   instructor           String?
   thumbnailUrl         String?
   bannerUrl            String?
   tags                 String?
   prerequisites        String?
+  learningObjectives   String?
+  visibility           String               @default("EMPLOYEES")
   passingScore         Int                  @default(70)
   certificateAvailable Boolean              @default(false)
   status               String               @default("DRAFT")
   isMandatory          Boolean              @default(false)
   isActive             Boolean              @default(true)
   materials            CourseMaterial[]
+  chapters             LearningChapter[]
+  lessons              LearningLesson[]
+  versions             LearningCourseVersion[]
+  approvals            LearningCourseApproval[]
+  mappings             LearningCourseMapping[]
+  prerequisiteLinks    LearningCoursePrerequisite[] @relation("CoursePrerequisites")
+  prerequisiteFor      LearningCoursePrerequisite[] @relation("PrerequisiteCourse")
+  pathCourses          LearningPathCourse[]
+  questionBank         LearningQuestionBank[]
+  assessments          LearningAssessment[]
+  courseSkills         LearningCourseSkill[]
+  aiGenerations        LearningAiGeneration[]
+  feedback             LearningFeedback[]
+  notes                LearningNote[]
+  favorites            LearningFavorite[]
   assignments          CourseAssignment[]
   enrollments          LearningEnrollment[]
   quizzes              Quiz[]
@@ -1631,6 +1658,7 @@ model LearningCourse {
 
   @@index([companyId])
   @@index([companyId, status])
+  @@index([categoryId])
   @@unique([companyId, courseCode])
   @@map("learning_courses")
 }
@@ -1651,6 +1679,8 @@ model LearningEnrollment {
   completedAt    DateTime?
   quizAttempts   QuizAttempt[]
   certificate    Certificate?
+  lessonProgress LearningLessonProgress[]
+  assessmentSubmissions LearningAssessmentSubmission[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -1664,12 +1694,19 @@ model LearningCategory {
   companyId   String?
   name        String
   description String?
+  parentId    String?
+  parent      LearningCategory?  @relation("LearningCategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    LearningCategory[] @relation("LearningCategoryTree")
+  icon        String?
+  color       String?
   isActive    Boolean  @default(true)
+  courses     LearningCourse[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@unique([companyId, name])
   @@index([companyId])
+  @@index([parentId])
   @@map("learning_categories")
 }
 
@@ -1713,6 +1750,246 @@ model CourseAssignment {
   @@index([companyId])
   @@index([courseId])
   @@map("course_assignments")
+}
+
+model LearningCourseVersion {
+  id            String         @id @default(uuid())
+  companyId     String?
+  course        LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId      String
+  versionNumber Int
+  title         String
+  status        String
+  snapshotJson  String         @default("{}")
+  changeSummary String?
+  createdBy     String?
+  createdAt     DateTime       @default(now())
+
+  @@unique([courseId, versionNumber])
+  @@index([companyId, courseId])
+  @@map("learning_course_versions")
+}
+
+model LearningCourseApproval {
+  id              String         @id @default(uuid())
+  companyId       String?
+  course          LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId        String
+  status          String         @default("PENDING")
+  requestedBy     String?
+  reviewedBy      String?
+  reviewerComment String?
+  requestedAt     DateTime       @default(now())
+  reviewedAt      DateTime?
+
+  @@index([companyId, status])
+  @@index([courseId, status])
+  @@map("learning_course_approvals")
+}
+
+model LearningCourseMapping {
+  id           String         @id @default(uuid())
+  companyId    String?
+  course       LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId     String
+  mappingType  String
+  mappingValue String
+  createdAt    DateTime       @default(now())
+
+  @@unique([courseId, mappingType, mappingValue])
+  @@index([companyId, mappingType])
+  @@map("learning_course_mappings")
+}
+
+model LearningCoursePrerequisite {
+  id                   String         @id @default(uuid())
+  companyId            String?
+  course               LearningCourse @relation("CoursePrerequisites", fields: [courseId], references: [id], onDelete: Cascade)
+  courseId             String
+  prerequisiteCourse   LearningCourse @relation("PrerequisiteCourse", fields: [prerequisiteCourseId], references: [id], onDelete: Cascade)
+  prerequisiteCourseId String
+  createdAt            DateTime       @default(now())
+
+  @@unique([courseId, prerequisiteCourseId])
+  @@index([companyId])
+  @@index([prerequisiteCourseId])
+  @@map("learning_course_prerequisites")
+}
+
+model LearningChapter {
+  id                 String         @id @default(uuid())
+  companyId          String?
+  course             LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId           String
+  title              String
+  description        String?
+  sortOrder          Int            @default(0)
+  isPreview          Boolean        @default(false)
+  prerequisiteJson   String         @default("[]")
+  completionRuleJson String         @default("{}")
+  minimumTimeMinutes Int            @default(0)
+  status             String         @default("DRAFT")
+  isActive           Boolean        @default(true)
+  lessons            LearningLesson[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([companyId, courseId])
+  @@index([courseId, sortOrder])
+  @@map("learning_chapters")
+}
+
+model LearningLesson {
+  id             String         @id @default(uuid())
+  companyId      String?
+  course         LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId       String
+  chapter        LearningChapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  chapterId      String?
+  title          String
+  lessonType     String         @default("VIDEO")
+  contentUrl     String?
+  embedUrl       String?
+  fileName       String?
+  filePath       String?
+  mimeType       String?
+  durationMinutes Int           @default(0)
+  richText       String?
+  notes          String?
+  resourcesJson  String         @default("[]")
+  isPreview      Boolean        @default(false)
+  isMandatory    Boolean        @default(false)
+  isDownloadable Boolean        @default(true)
+  sortOrder      Int            @default(0)
+  status         String         @default("DRAFT")
+  isActive       Boolean        @default(true)
+  progress       LearningLessonProgress[]
+  notesList      LearningNote[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([companyId, courseId])
+  @@index([chapterId])
+  @@index([courseId, sortOrder])
+  @@map("learning_lessons")
+}
+
+model LearningPath {
+  id          String   @id @default(uuid())
+  companyId   String?
+  name        String
+  description String?
+  pathType    String   @default("OPTIONAL")
+  targetType  String   @default("COMPANY")
+  targetValue String?
+  status      String   @default("ACTIVE")
+  createdBy   String?
+  courses     LearningPathCourse[]
+  assignments LearningPathAssignment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@map("learning_paths")
+}
+
+model LearningPathCourse {
+  id        String         @id @default(uuid())
+  companyId String?
+  path      LearningPath   @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  pathId    String
+  course    LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId  String
+  sortOrder Int            @default(0)
+  required  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+
+  @@unique([pathId, courseId])
+  @@index([companyId])
+  @@index([courseId])
+  @@map("learning_path_courses")
+}
+
+model LearningPathAssignment {
+  id          String       @id @default(uuid())
+  companyId   String?
+  path        LearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  pathId      String
+  employeeId  String?
+  department  String?
+  designation String?
+  dueDate     DateTime?
+  status      String       @default("ASSIGNED")
+  assignedBy  String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([companyId, status])
+  @@index([pathId])
+  @@map("learning_path_assignments")
+}
+
+model LearningLessonProgress {
+  id                   String             @id @default(uuid())
+  companyId            String?
+  enrollment           LearningEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollmentId         String
+  lesson               LearningLesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lessonId             String
+  employee             Employee?          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId           String?
+  chapterId            String?
+  status               String             @default("NOT_STARTED")
+  progress             Int                @default(0)
+  timeSpentMins        Int                @default(0)
+  minimumTimeMinutes   Int                @default(0)
+  chapterStartTime     DateTime?
+  chapterEndTime       DateTime?
+  actualTimeSpent      Int                @default(0)
+  completionPercentage Int                @default(0)
+  lastViewedAt         DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@unique([enrollmentId, lessonId])
+  @@index([companyId])
+  @@index([lessonId])
+  @@index([employeeId])
+  @@map("learning_lesson_progress")
+}
+
+model LearningNote {
+  id         String          @id @default(uuid())
+  companyId  String?
+  employee   Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  course     LearningCourse? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId   String?
+  lesson     LearningLesson? @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lessonId   String?
+  note       String
+  isPrivate  Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([employeeId, courseId])
+  @@map("learning_notes")
+}
+
+model LearningFavorite {
+  id         String         @id @default(uuid())
+  companyId  String?
+  employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  course     LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId   String
+  createdAt  DateTime       @default(now())
+
+  @@unique([employeeId, courseId])
+  @@index([companyId])
+  @@map("learning_favorites")
 }
 
 model Quiz {
@@ -1768,6 +2045,170 @@ model QuizAttempt {
   @@index([quizId])
   @@index([enrollmentId])
   @@map("quiz_attempts")
+}
+
+model LearningQuestionBank {
+  id            String          @id @default(uuid())
+  companyId     String?
+  course        LearningCourse? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId      String?
+  skill         LearningSkill?  @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  skillId       String?
+  question      String
+  questionType  String          @default("MCQ")
+  optionsJson   String          @default("[]")
+  correctAnswer String?
+  explanation   String?
+  difficulty    String          @default("BEGINNER")
+  marks         Int             @default(1)
+  negativeMarks Float?
+  tags          String?
+  createdBy     String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([companyId, courseId])
+  @@map("learning_question_bank")
+}
+
+model LearningAssessment {
+  id           String         @id @default(uuid())
+  companyId    String?
+  course       LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId     String
+  title        String
+  assessmentType String       @default("ASSIGNMENT")
+  instructions String?
+  rubricJson   String         @default("[]")
+  maxMarks     Int            @default(100)
+  dueDate      DateTime?
+  attemptLimit Int            @default(1)
+  status       String         @default("ACTIVE")
+  createdBy    String?
+  submissions  LearningAssessmentSubmission[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([companyId, courseId])
+  @@map("learning_assessments")
+}
+
+model LearningAssessmentSubmission {
+  id             String             @id @default(uuid())
+  companyId      String?
+  assessment     LearningAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentId   String
+  enrollment     LearningEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollmentId   String
+  employee       Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String
+  attemptNumber  Int                @default(1)
+  submissionText String?
+  fileUrl        String?
+  status         String             @default("SUBMITTED")
+  marks          Int?
+  feedback       String?
+  reviewedBy     String?
+  submittedAt    DateTime           @default(now())
+  reviewedAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([companyId])
+  @@index([assessmentId, employeeId])
+  @@index([enrollmentId])
+  @@map("learning_assessment_submissions")
+}
+
+model LearningSkill {
+  id             String   @id @default(uuid())
+  companyId      String?
+  name           String
+  category       String?
+  description    String?
+  isActive       Boolean  @default(true)
+  courseSkills   LearningCourseSkill[]
+  employeeSkills EmployeeLearningSkill[]
+  questionBank   LearningQuestionBank[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("learning_skills")
+}
+
+model LearningCourseSkill {
+  id          String         @id @default(uuid())
+  companyId   String?
+  course      LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String
+  skill       LearningSkill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skillId     String
+  targetLevel Int            @default(1)
+  createdAt   DateTime       @default(now())
+
+  @@unique([courseId, skillId])
+  @@index([companyId])
+  @@index([skillId])
+  @@map("learning_course_skills")
+}
+
+model EmployeeLearningSkill {
+  id             String        @id @default(uuid())
+  companyId      String?
+  employee       Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String
+  skill          LearningSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  skillId        String
+  currentLevel   Int           @default(0)
+  targetLevel    Int           @default(1)
+  achievedLevel  Int           @default(0)
+  source         String        @default("MANUAL")
+  lastAssessedAt DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([employeeId, skillId])
+  @@index([companyId])
+  @@index([skillId])
+  @@map("employee_learning_skills")
+}
+
+model LearningFeedback {
+  id         String         @id @default(uuid())
+  companyId  String?
+  course     LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId   String
+  employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  rating     Int
+  feedback   String?
+  suggestions String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([courseId, employeeId])
+  @@index([companyId, courseId])
+  @@map("learning_feedback")
+}
+
+model LearningAiGeneration {
+  id              String         @id @default(uuid())
+  companyId       String?
+  course          LearningCourse? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  courseId        String?
+  sourceType      String
+  sourceFileName  String?
+  inputPreview    String?
+  generatedJson   String         @default("{}")
+  status          String         @default("GENERATED")
+  requestedBy     String?
+  createdAt       DateTime       @default(now())
+
+  @@index([companyId])
+  @@index([courseId])
+  @@map("learning_ai_generations")
 }
 
 model Certificate {

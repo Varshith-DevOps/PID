@@ -1,7 +1,9 @@
 const COURSE_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'];
 const DIFFICULTIES = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'];
 const PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
-const MATERIAL_TYPES = ['PDF', 'DOCX', 'PPT', 'PPTX', 'MP4', 'YOUTUBE', 'EXTERNAL_URL'];
+const MATERIAL_TYPES = ['PDF', 'DOCX', 'PPT', 'PPTX', 'TXT', 'MP4', 'VIDEO', 'YOUTUBE', 'VIMEO', 'EXTERNAL_URL'];
+const LESSON_TYPES = ['RICH_TEXT', 'VIDEO', 'YOUTUBE', 'VIMEO', 'PDF', 'ATTACHMENT', 'EXTERNAL_LINK', 'QUIZ'];
+const QUESTION_TYPES = ['MCQ', 'MULTIPLE_ANSWER', 'TRUE_FALSE', 'FILL_BLANK', 'SHORT_ANSWER', 'DESCRIPTIVE'];
 
 const normalizeCsv = (value) => Array.isArray(value) ? value.join(',') : value;
 
@@ -36,11 +38,15 @@ const buildCourseData = (payload = {}) => ({
   department: payload.department?.trim() || undefined,
   difficulty: payload.difficulty ? String(payload.difficulty).toUpperCase() : 'BEGINNER',
   durationMinutes: payload.durationMinutes !== undefined ? Number(payload.durationMinutes) : 0,
+  estimatedHours: payload.estimatedHours !== undefined && payload.estimatedHours !== '' ? Number(payload.estimatedHours) : undefined,
   instructor: payload.instructor?.trim() || undefined,
   thumbnailUrl: payload.thumbnailUrl?.trim() || undefined,
   bannerUrl: payload.bannerUrl?.trim() || undefined,
   tags: normalizeCsv(payload.tags)?.trim?.() || undefined,
   prerequisites: normalizeCsv(payload.prerequisites)?.trim?.() || undefined,
+  learningObjectives: normalizeCsv(payload.learningObjectives)?.trim?.() || undefined,
+  visibility: payload.visibility ? String(payload.visibility).toUpperCase() : undefined,
+  language: payload.language?.trim?.() || undefined,
   passingScore: payload.passingScore !== undefined ? Number(payload.passingScore) : 70,
   certificateAvailable: Boolean(payload.certificateAvailable),
   status: payload.status ? String(payload.status).toUpperCase() : 'DRAFT',
@@ -57,6 +63,30 @@ const validateMaterialPayload = (payload = {}) => {
   return errors;
 };
 
+const validateChapterPayload = (payload = {}, partial = false) => {
+  const errors = [];
+  if (!partial) {
+    const titleError = requireText(payload, 'title', 'Chapter title');
+    if (titleError) errors.push(titleError);
+  }
+  if (payload.minimumTimeMinutes !== undefined && Number(payload.minimumTimeMinutes) < 0) errors.push('Minimum learning time cannot be negative');
+  return errors;
+};
+
+const validateLessonPayload = (payload = {}, partial = false) => {
+  const errors = [];
+  if (!partial) {
+    const titleError = requireText(payload, 'title', 'Lesson title');
+    if (titleError) errors.push(titleError);
+  }
+  const type = String(payload.lessonType || 'VIDEO').toUpperCase();
+  if (!LESSON_TYPES.includes(type)) errors.push('Lesson type is not supported');
+  if (payload.durationMinutes !== undefined && Number(payload.durationMinutes) < 0) errors.push('Lesson duration cannot be negative');
+  return errors;
+};
+
+const validateQuestionType = (type) => QUESTION_TYPES.includes(String(type || '').toUpperCase());
+
 const validateAssignmentPayload = (payload = {}) => {
   const errors = [];
   if (!payload.courseId) errors.push('Course is required');
@@ -70,6 +100,9 @@ const validateAssignmentPayload = (payload = {}) => {
 module.exports = {
   buildCourseData,
   validateAssignmentPayload,
+  validateChapterPayload,
   validateCoursePayload,
+  validateLessonPayload,
   validateMaterialPayload,
+  validateQuestionType,
 };

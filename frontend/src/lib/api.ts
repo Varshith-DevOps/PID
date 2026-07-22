@@ -1359,8 +1359,14 @@ export const returnAsset = async (id: string, payload?: { condition?: string; no
   return data;
 };
 
-export const getLearningCourses = async () => {
-  const { data } = await api.get('/learning/courses');
+export const getLearningCourses = async (params?: Record<string, unknown>) => {
+  const { data } = await api.get('/learning/courses', { params });
+  if (Array.isArray(data)) return data;
+  return data.courses || [];
+};
+
+export const getLearningCourse = async (id: string) => {
+  const { data } = await api.get(`/learning/courses/${id}`);
   return data;
 };
 
@@ -1414,8 +1420,111 @@ export const addLearningMaterial = async (courseId: string, payload: Record<stri
   return data;
 };
 
+export const uploadLearningMaterial = async (courseId: string, payload: { title: string; materialType: string; file: File }) => {
+  const formData = new FormData();
+  formData.append('title', payload.title);
+  formData.append('materialType', payload.materialType);
+  formData.append('file', payload.file);
+  const { data } = await api.post(`/learning/courses/${courseId}/materials`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+};
+
+export const createLearningChapter = async (courseId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/chapters`, payload);
+  return data;
+};
+
+export const updateLearningChapter = async (id: string, payload: Record<string, unknown>) => {
+  const { data } = await api.put(`/learning/chapters/${id}`, payload);
+  return data;
+};
+
+export const reorderLearningChapters = async (chapterIds: string[]) => {
+  const { data } = await api.patch('/learning/chapters/reorder', { chapterIds });
+  return data;
+};
+
+export const archiveLearningChapter = async (id: string) => {
+  const { data } = await api.delete(`/learning/chapters/${id}`);
+  return data;
+};
+
+export const createLearningLesson = async (courseId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/lessons`, payload);
+  return data;
+};
+
+export const archiveLearningLesson = async (id: string) => {
+  const { data } = await api.delete(`/learning/lessons/${id}`);
+  return data;
+};
+
+export const updateLearningLessonProgress = async (lessonId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.put(`/learning/lessons/${lessonId}/progress`, payload);
+  return data;
+};
+
 export const createLearningQuiz = async (courseId: string, payload: Record<string, unknown>) => {
   const { data } = await api.post(`/learning/courses/${courseId}/quizzes`, payload);
+  return data;
+};
+
+export const createLearningAssessment = async (courseId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/assessments`, payload);
+  return data;
+};
+
+export const submitLearningAssessment = async (assessmentId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/assessments/${assessmentId}/submissions`, payload);
+  return data;
+};
+
+export const evaluateLearningAssessment = async (submissionId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.put(`/learning/assessment-submissions/${submissionId}/evaluate`, payload);
+  return data;
+};
+
+export const requestLearningApproval = async (courseId: string) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/approval-request`);
+  return data;
+};
+
+export const reviewLearningApproval = async (approvalId: string, payload: { status: 'APPROVED' | 'REJECTED'; comment?: string }) => {
+  const { data } = await api.post(`/learning/approvals/${approvalId}/review`, payload);
+  return data;
+};
+
+export const restoreLearningVersion = async (courseId: string, versionId: string) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/versions/${versionId}/restore`);
+  return data;
+};
+
+export const generateLearningCourseWithAi = async (payload: Record<string, unknown> | FormData) => {
+  const { data } = await api.post('/learning/ai/generate-course', payload, payload instanceof FormData ? {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  } : undefined);
+  return data;
+};
+
+export const getLearningPaths = async () => {
+  const { data } = await api.get('/learning/paths');
+  return data;
+};
+
+export const createLearningPath = async (payload: Record<string, unknown>) => {
+  const { data } = await api.post('/learning/paths', payload);
+  return data;
+};
+
+export const submitLearningFeedback = async (courseId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/feedback`, payload);
+  return data;
+};
+
+export const upsertLearningSkill = async (courseId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/skills`, payload);
   return data;
 };
 
