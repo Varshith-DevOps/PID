@@ -190,8 +190,12 @@ model Employee {
   tdsLedgerEntries        TDSLedger[]
   assetAssignments        Asset[]
   learningEnrollments     LearningEnrollment[]
+  learningBookmarks       LearningBookmark[]
+  learningCertificates    Certificate[]
+  learningNotifications   LearningNotification[]
   helpdeskTickets         HelpdeskTicket[]
   notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   isActive                    Boolean   @default(true)
   deactivatedAt               DateTime?
@@ -1371,6 +1375,9 @@ model Company {
   payments           PaymentTransaction[]
   supportAssignments SupportAssignment[]
   notifications      Notification[]
+  notificationTemplates NotificationTemplate[]
+  notificationPreferences NotificationPreference[]
+  notificationSettings NotificationSetting?
   customModules      CustomModule[]
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
@@ -1593,36 +1600,240 @@ model Asset {
 }
 
 model LearningCourse {
-  id          String               @id @default(uuid())
-  companyId   String?
-  title       String
-  description String?
-  category    String               @default("GENERAL")
-  isMandatory Boolean              @default(false)
-  isActive    Boolean              @default(true)
-  enrollments LearningEnrollment[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id                   String               @id @default(uuid())
+  companyId            String?
+  title                String
+  courseCode           String?
+  description          String?
+  category             String               @default("GENERAL")
+  department           String?
+  difficulty           String               @default("BEGINNER")
+  durationMinutes      Int                  @default(0)
+  instructor           String?
+  thumbnailUrl         String?
+  bannerUrl            String?
+  tags                 String?
+  prerequisites        String?
+  passingScore         Int                  @default(70)
+  certificateAvailable Boolean              @default(false)
+  status               String               @default("DRAFT")
+  isMandatory          Boolean              @default(false)
+  isActive             Boolean              @default(true)
+  materials            CourseMaterial[]
+  assignments          CourseAssignment[]
+  enrollments          LearningEnrollment[]
+  quizzes              Quiz[]
+  bookmarks            LearningBookmark[]
+  certificates         Certificate[]
+  notifications        LearningNotification[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
   @@index([companyId])
+  @@index([companyId, status])
+  @@unique([companyId, courseCode])
   @@map("learning_courses")
 }
 
 model LearningEnrollment {
-  id          String         @id @default(uuid())
-  course      LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  courseId    String
-  employee    Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId  String
-  status      String         @default("ASSIGNED")
-  progress    Int            @default(0)
-  dueDate     DateTime?
-  completedAt DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id             String         @id @default(uuid())
+  course         LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId       String
+  employee       Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String
+  assignment     CourseAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  assignmentId   String?
+  status         String         @default("ASSIGNED")
+  progress       Int            @default(0)
+  timeSpentMins  Int            @default(0)
+  lastAccessedAt DateTime?
+  dueDate        DateTime?
+  completedAt    DateTime?
+  quizAttempts   QuizAttempt[]
+  certificate    Certificate?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@unique([courseId, employeeId])
+  @@index([employeeId, status])
   @@map("learning_enrollments")
+}
+
+model LearningCategory {
+  id          String   @id @default(uuid())
+  companyId   String?
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("learning_categories")
+}
+
+model CourseMaterial {
+  id             String         @id @default(uuid())
+  course         LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId       String
+  title          String
+  materialType   String
+  fileName       String?
+  filePath       String?
+  fileSize       Int?
+  mimeType       String?
+  externalUrl    String?
+  isDownloadable Boolean        @default(true)
+  sortOrder      Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([courseId])
+  @@map("course_materials")
+}
+
+model CourseAssignment {
+  id              String         @id @default(uuid())
+  companyId       String?
+  course          LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId        String
+  assignmentType  String
+  employeeId      String?
+  department      String?
+  designation     String?
+  dueDate         DateTime?
+  priority        String         @default("MEDIUM")
+  notifyEmployees Boolean        @default(true)
+  assignedBy      String?
+  enrollments     LearningEnrollment[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([companyId])
+  @@index([courseId])
+  @@map("course_assignments")
+}
+
+model Quiz {
+  id             String         @id @default(uuid())
+  course         LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId       String
+  title          String
+  passingMarks   Int            @default(70)
+  timeLimitMins  Int?
+  attemptLimit   Int            @default(1)
+  randomize      Boolean        @default(false)
+  questions      QuizQuestion[]
+  attempts       QuizAttempt[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([courseId])
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id             String   @id @default(uuid())
+  quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quizId         String
+  question       String
+  questionType   String   @default("MULTIPLE_CHOICE")
+  options        String?
+  correctAnswer  String
+  marks          Int      @default(1)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([quizId])
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id              String             @id @default(uuid())
+  quiz            Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quizId          String
+  enrollment      LearningEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollmentId    String
+  score           Int                @default(0)
+  percentage      Float              @default(0)
+  attemptNumber   Int                @default(1)
+  status          String             @default("FAIL")
+  answers         String?
+  completionMins  Int?
+  submittedAt     DateTime           @default(now())
+  createdAt       DateTime           @default(now())
+
+  @@index([quizId])
+  @@index([enrollmentId])
+  @@map("quiz_attempts")
+}
+
+model Certificate {
+  id                String              @id @default(uuid())
+  course            LearningCourse      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId          String
+  employee          Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId        String
+  enrollment        LearningEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  enrollmentId      String?             @unique
+  certificateNumber String              @unique
+  employeeName      String
+  courseName        String
+  completionDate    DateTime
+  fileUrl           String?
+  qrCode            String?
+  issuedAt          DateTime            @default(now())
+
+  @@index([employeeId])
+  @@index([courseId])
+  @@map("certificates")
+}
+
+model LearningNotification {
+  id         String          @id @default(uuid())
+  employee   Employee?       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String?
+  course     LearningCourse? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId   String?
+  type       String
+  title      String
+  message    String
+  isRead     Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+
+  @@index([employeeId])
+  @@index([courseId])
+  @@map("learning_notifications")
+}
+
+model LearningBookmark {
+  id         String         @id @default(uuid())
+  employee   Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  course     LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId   String
+  createdAt  DateTime       @default(now())
+
+  @@unique([employeeId, courseId])
+  @@map("learning_bookmarks")
+}
+
+model LearningAuditLog {
+  id        String   @id @default(uuid())
+  companyId String?
+  actorId   String?
+  actorEmail String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
+  @@map("learning_audit_logs")
 }
 
 model HelpdeskTicket {
@@ -1643,22 +1854,111 @@ model HelpdeskTicket {
 }
 
 model Notification {
-  id         String    @id @default(uuid())
+  id             String            @id @default(uuid())
   // Tenant marker so company-wide broadcasts (employeeId null) stay isolated.
-  companyId  String?
-  company    Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId String?
-  title      String
-  message    String
-  type       String    @default("INFO")
-  isRead     Boolean   @default(false)
-  actionUrl  String?
-  createdAt  DateTime  @default(now())
-  readAt     DateTime?
+  companyId      String?
+  company        Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee       Employee?         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String?
+  title          String
+  message        String
+  type           String            @default("INFO")
+  channel        String            @default("IN_APP") // EMAIL | SMS | IN_APP
+  recipientType  String            @default("EMPLOYEE") // EMPLOYEE | CANDIDATE | USER | BROADCAST
+  recipientId    String?
+  recipientEmail String?
+  recipientPhone String?
+  status         String            @default("QUEUED") // QUEUED | SENT | DELIVERED | FAILED | READ | ARCHIVED
+  isRead         Boolean           @default(false)
+  read           Boolean           @default(false)
+  metadata       String?
+  actionUrl      String?
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  logs           NotificationLog[]
 
-  @@index([companyId])
+  @@index([companyId, status])
+  @@index([employeeId, isRead])
+  @@index([recipientId])
   @@map("notifications")
+}
+
+model NotificationTemplate {
+  id        String   @id @default(uuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  event     String
+  subject   String?
+  body      String
+  channel   String   @default("EMAIL")
+  active    Boolean  @default(true)
+  locale    String   @default("en-IN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, event, channel, locale])
+  @@index([companyId, active])
+  @@map("notification_templates")
+}
+
+model NotificationPreference {
+  id           String   @id @default(uuid())
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  module       String   @default("GENERAL")
+  emailEnabled Boolean  @default(true)
+  smsEnabled   Boolean  @default(true)
+  inAppEnabled Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([employeeId, module])
+  @@index([companyId])
+  @@map("notification_preferences")
+}
+
+model NotificationLog {
+  id             String       @id @default(uuid())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  notificationId String
+  provider       String
+  status         String
+  response       String?
+  retryCount     Int          @default(0)
+  createdAt      DateTime     @default(now())
+
+  @@index([notificationId])
+  @@index([status, createdAt])
+  @@map("notification_logs")
+}
+
+model NotificationSetting {
+  id              String   @id @default(uuid())
+  companyId       String?  @unique
+  company         Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  smtpHost        String?
+  smtpPort        Int?
+  smtpUsername    String?
+  smtpPassword    String?
+  smtpSecure      Boolean  @default(false)
+  smsProvider     String   @default("MOCK")
+  smsConfig       String?
+  retryCount      Int      @default(3)
+  reminderTimings String   @default("24h,1h,15m")
+  emailSignature  String?
+  companyLogo     String?
+  senderName      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("notification_settings")
 }
 
 model Plan {

@@ -238,6 +238,8 @@ const normalizeInterviewDetails = ({ interviewMode, meetingLink, location, instr
 
 const interviewResponseMessage = (emailStatus) => emailStatus === 'SENT'
   ? 'Interview scheduled and email sent successfully.'
+  : emailStatus === 'QUEUED'
+    ? 'Interview scheduled and email queued successfully.'
   : 'Interview scheduled, but the email could not be delivered.';
 
 const formatCandidateReview = (review) => ({

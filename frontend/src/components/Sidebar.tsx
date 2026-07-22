@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
@@ -20,6 +20,26 @@ type NavItem = {
 
 const isFeatureEnabled = (features: Record<string, boolean>, key: string) => features[key] !== false;
 
+const normalizePath = (path: string) => {
+  const [pathname] = path.split('?');
+  if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);
+  return pathname;
+};
+
+const isRouteMatch = (pathname: string, href: string) => {
+  if (pathname === href) return true;
+  return pathname.startsWith(`${href}/`);
+};
+
+const getActiveHref = (pathname: string, hrefs: string[]) => {
+  const normalizedPathname = normalizePath(pathname);
+  const aliasedPathname = normalizedPathname === '/onboarding' ? '/checklists' : normalizedPathname;
+
+  return hrefs
+    .filter((href) => isRouteMatch(aliasedPathname, href))
+    .sort((a, b) => b.length - a.length)[0] || null;
+};
+
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>, section: 'main' },
   { label: 'AI Command Center', href: '/dashboard/ai-agents', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1 0-3.12 3 3 0 0 1 0-3.88 2.5 2.5 0 0 1 0-3.12A2.5 2.5 0 0 1 9.5 2zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 0-3.12 3 3 0 0 0 0-3.88 2.5 2.5 0 0 0 0-3.12A2.5 2.5 0 0 0 14.5 2z"/></svg>, section: 'main' },
@@ -28,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Attendance', href: '/attendance', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, section: 'hr', module: 'ATTENDANCE' },
   { label: 'Leave', href: '/leave', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/></svg>, section: 'hr', module: 'LEAVE' },
   { label: 'Recruitment', href: '/recruitment', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 11v6"/><path d="M16 14h6"/></svg>, section: 'hr', module: 'RECRUITMENT' },
+  { label: 'Learning Management', href: '/learning', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4v15.5"/><path d="M20 22V6a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 6.5"/></svg>, section: 'hr', module: 'LEARNING' },
   { label: 'On/Offboarding', href: '/checklists', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>, section: 'hr', module: 'EMPLOYEES' },
   { label: 'Performance', href: '/performance', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>, section: 'hr', module: 'PERFORMANCE' },
   { label: 'Payroll', href: '/payroll', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>, section: 'finance', module: 'PAYROLL', adminOnly: true },
@@ -35,7 +56,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Payslip Format', href: '/payroll/payslip-format', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>, section: 'finance', module: 'PAYROLL', adminOnly: true },
   { label: 'Expense Claims', href: '/expenses', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="2" y1="12" x2="22" y2="12"/></svg>, section: 'finance', module: 'EXPENSES' },
   { label: 'Assets', href: '/assets', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 12h20"/></svg>, section: 'work', module: 'ASSETS' },
-  { label: 'Learning', href: '/learning', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4v15.5"/><path d="M20 22V6a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 6.5"/></svg>, section: 'work', module: 'LEARNING' },
   { label: 'Helpdesk', href: '/helpdesk', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 1 1 5.83 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg>, section: 'work', module: 'HELPDESK' },
   { label: 'Notifications', href: '/notifications', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>, section: 'work', module: 'NOTIFICATIONS' },
   { label: 'Projects', href: '/projects', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>, section: 'work', module: 'PROJECTS' },
@@ -45,11 +65,11 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Shift Roster', href: '/shifts', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v4"/><path d="M8 16h8"/></svg>, section: 'work', module: 'ATTENDANCE' },
 ];
 
-function Sidebar({ activePath }: { activePath?: string }) {
+function Sidebar({ activePath: _activePath }: { activePath?: string }) {
   const { user, logout, hasPermission } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const active = activePath || pathname;
+  const navRef = useRef<HTMLElement>(null);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -108,6 +128,35 @@ function Sidebar({ activePath }: { activePath?: string }) {
       .filter((section) => section.visibleItems.length > 0);
   }, [hasPermission, isAdmin, isOwner, sections, user]);
 
+  const visibleNavHrefs = useMemo(
+    () => visibleSections.flatMap((section) => section.visibleItems.map((item) => item.href)),
+    [visibleSections],
+  );
+
+  const adminNavHrefs = useMemo(() => {
+    if (!isAdmin) return [];
+    if (!user?.companyCin || user?.companyKycStatus !== 'APPROVED') return ['/kyc'];
+    return ['/permissions', '/platform', '/dashboard/admin', '/dashboard/admin/reports', '/dashboard/billing'];
+  }, [isAdmin, user?.companyCin, user?.companyKycStatus]);
+
+  const platformNavHrefs = useMemo(
+    () => (user?.role === 'SUPER_ADMIN' || user?.role === 'SALES' ? ['/platform-admin'] : []),
+    [user?.role],
+  );
+
+  const activeHref = useMemo(
+    () => getActiveHref(pathname, [...visibleNavHrefs, ...adminNavHrefs, ...platformNavHrefs]),
+    [adminNavHrefs, pathname, platformNavHrefs, visibleNavHrefs],
+  );
+
+  useEffect(() => {
+    const activeItem = navRef.current?.querySelector<HTMLElement>('[data-active="true"]');
+    activeItem?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
+  }, [pathname, activeHref]);
+
   useEffect(() => {
     if (!user) return;
     const hrefs = isOwner
@@ -134,7 +183,7 @@ function Sidebar({ activePath }: { activePath?: string }) {
   // ── App-owner portal: a platform-only nav, fully separate from the tenant app,
   //    further filtered per platform role (separation of duties) ──
   if (isOwner) {
-    const currentTab = (typeof window !== 'undefined' && active.startsWith('/platform-admin'))
+    const currentTab = (typeof window !== 'undefined' && pathname.startsWith('/platform-admin'))
       ? (new URLSearchParams(window.location.search).get('tab') || 'overview')
       : null;
     const allowed = new Set(ownerTabsFor(user.role));
@@ -158,10 +207,10 @@ function Sidebar({ activePath }: { activePath?: string }) {
             <span style={{ fontSize: '0.65rem', color: '#73E0E7', textTransform: 'uppercase', display: 'block', letterSpacing: '1px', fontWeight: 700 }}>Admin Portal</span>
           </div>
         </div>
-        <nav className="sidebar-nav" style={{ flex: 1 }}>
+        <nav ref={navRef} className="sidebar-nav" style={{ flex: 1 }}>
           <div className="sidebar-section">Platform</div>
           {ownerNav.map(item => (
-            <Link key={item.key} href={`/platform-admin?tab=${item.key}`} className={currentTab === item.key ? 'active' : ''}>
+            <Link key={item.key} href={`/platform-admin?tab=${item.key}`} className={currentTab === item.key ? 'active' : ''} data-active={currentTab === item.key ? 'true' : undefined}>
               <span className="nav-icon">{icon(item.d)}</span>
               {item.label}
             </Link>
@@ -213,17 +262,20 @@ function Sidebar({ activePath }: { activePath?: string }) {
         </div>
       )}
 
-      <nav className="sidebar-nav" style={{ flex: 1 }}>
+      <nav ref={navRef} className="sidebar-nav" style={{ flex: 1 }}>
         {visibleSections.map(section => {
           return (
             <div key={section.key}>
               <div className="sidebar-section">{section.label}</div>
-              {section.visibleItems.map(item => (
-                <Link key={item.href} href={item.href} className={active === item.href || (item.href !== '/dashboard' && active.startsWith(item.href)) ? 'active' : ''}>
-                  <span className="nav-icon">{item.icon}</span>
-                  {item.label}
-                </Link>
-              ))}
+              {section.visibleItems.map(item => {
+                const isActive = activeHref === item.href;
+                return (
+                  <Link key={item.href} href={item.href} className={isActive ? 'active' : ''} data-active={isActive ? 'true' : undefined}>
+                    <span className="nav-icon">{item.icon}</span>
+                    {item.label}
+                  </Link>
+                );
+              })}
             </div>
           );
         })}
@@ -232,7 +284,7 @@ function Sidebar({ activePath }: { activePath?: string }) {
           <>
             <div className="sidebar-section">Admin</div>
             {(!user.companyCin || user.companyKycStatus !== 'APPROVED') ? (
-              <Link href="/kyc" className={active === '/kyc' ? 'active' : ''}>
+              <Link href="/kyc" className={activeHref === '/kyc' ? 'active' : ''} data-active={activeHref === '/kyc' ? 'true' : undefined}>
                 <span className="nav-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 </span>
@@ -240,23 +292,23 @@ function Sidebar({ activePath }: { activePath?: string }) {
               </Link>
             ) : (
               <>
-                <Link href="/permissions" className={active === '/permissions' ? 'active' : ''}>
+                <Link href="/permissions" className={activeHref === '/permissions' ? 'active' : ''} data-active={activeHref === '/permissions' ? 'true' : undefined}>
                   <span className="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
                   Permissions
                 </Link>
-                <Link href="/platform" className={active === '/platform' ? 'active' : ''}>
+                <Link href="/platform" className={activeHref === '/platform' ? 'active' : ''} data-active={activeHref === '/platform' ? 'true' : undefined}>
                   <span className="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/><path d="M18 15l2 2 3-4"/></svg></span>
                   Platform Settings
                 </Link>
-                <Link href="/dashboard/admin" className={active === '/dashboard/admin' ? 'active' : ''}>
+                <Link href="/dashboard/admin" className={activeHref === '/dashboard/admin' ? 'active' : ''} data-active={activeHref === '/dashboard/admin' ? 'true' : undefined}>
                   <span className="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>
                   Analytics
                 </Link>
-                <Link href="/dashboard/admin/reports" className={active === '/dashboard/admin/reports' ? 'active' : ''}>
+                <Link href="/dashboard/admin/reports" className={activeHref === '/dashboard/admin/reports' ? 'active' : ''} data-active={activeHref === '/dashboard/admin/reports' ? 'true' : undefined}>
                   <span className="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                   Compliance & Reports
                 </Link>
-                <Link href="/dashboard/billing" className={active === '/dashboard/billing' ? 'active' : ''}>
+                <Link href="/dashboard/billing" className={activeHref === '/dashboard/billing' ? 'active' : ''} data-active={activeHref === '/dashboard/billing' ? 'true' : undefined}>
                   <span className="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="2" y1="12" x2="22" y2="12"/></svg></span>
                   SaaS Billing
                 </Link>
@@ -268,7 +320,7 @@ function Sidebar({ activePath }: { activePath?: string }) {
         {(user.role === 'SUPER_ADMIN' || user.role === 'SALES') && (
           <>
             <div className="sidebar-section">Platform Admin</div>
-            <Link href="/platform-admin" className={active.startsWith('/platform-admin') ? 'active' : ''}>
+            <Link href="/platform-admin" className={activeHref === '/platform-admin' ? 'active' : ''} data-active={activeHref === '/platform-admin' ? 'true' : undefined}>
               <span className="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 12H3"/><path d="M12 3v18"/></svg></span>
               Control Center
             </Link>

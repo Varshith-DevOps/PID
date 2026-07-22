@@ -9,6 +9,7 @@ import ProfessionalTab from '@/components/employee-tabs/ProfessionalTab';
 import { BankTab, PFTab } from '@/components/employee-tabs/FinanceTabs';
 import DocumentsTab from '@/components/employee-tabs/DocumentsTab';
 import { DependentsTab, ExitTab, AddressTab, HistoryTab } from '@/components/employee-tabs/OtherTabs';
+import LearningTab from '@/components/employee-tabs/LearningTab';
 import {
   PageHeader, Button, Card, StatCard, Avatar, Badge, StatusChip,
   Tabs, DataTable, Field, Select, DateField, TextField, NumberField,
@@ -16,7 +17,7 @@ import {
 } from '@/components/ui';
 import type { Column, TabItem } from '@/components/ui';
 
-const TABS = ['personal', 'professional', 'bank', 'pf', 'documents', 'dependents', 'exit', 'salary', 'address', 'access', 'history'];
+const TABS = ['personal', 'professional', 'bank', 'pf', 'documents', 'learning', 'dependents', 'exit', 'salary', 'address', 'access', 'history'];
 const TAB_ICONS: Record<string, string> = {
   personal: '👤', professional: '💼', bank: '🏦', pf: '🛡️', documents: '📄',
   dependents: '👨‍👩‍👧', exit: '🚪', salary: '💰', address: '🏠', access: '🔐', history: '📝',
@@ -232,8 +233,8 @@ export default function EmployeeDetailPage() {
 
   const tabItems: TabItem[] = TABS.map((tab) => ({
     key: tab,
-    label: TAB_LABELS[tab],
-    icon: <span aria-hidden="true" style={{ fontSize: '0.9rem' }}>{TAB_ICONS[tab]}</span>,
+    label: tab === 'learning' ? 'Learning' : TAB_LABELS[tab],
+    icon: <span aria-hidden="true" style={{ fontSize: '0.9rem' }}>{tab === 'learning' ? 'LM' : TAB_ICONS[tab]}</span>,
   }));
 
   const revisionColumns: Column<any>[] = [
@@ -311,6 +312,7 @@ export default function EmployeeDetailPage() {
           {activeTab === 'bank' && <BankTab employee={employee} canEdit={canEdit} shouldMask={shouldMask} onReload={loadEmployee} />}
           {activeTab === 'pf' && <PFTab employee={employee} canEdit={canEdit} shouldMask={shouldMask} onReload={loadEmployee} />}
           {activeTab === 'documents' && <DocumentsTab employee={employee} canEdit={canEdit} onReload={loadEmployee} />}
+          {activeTab === 'learning' && <LearningTab employee={employee} />}
           {activeTab === 'dependents' && <DependentsTab employee={employee} canEdit={canEdit} onReload={loadEmployee} />}
           {activeTab === 'exit' && <ExitTab employee={employee} canEdit={canEdit} onReload={loadEmployee} />}
 

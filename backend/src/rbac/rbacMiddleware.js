@@ -32,6 +32,16 @@ const SUPER_ADMIN_ROLES = ['SUPER_ADMIN'];
 const ADMIN_MANAGER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'];
 
 const permissionGranted = (user, module, action) => {
+  const learningDefaults = {
+    ADMIN: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
+    HR: ['VIEW', 'CREATE', 'EDIT', 'EXPORT'],
+    MANAGER: ['VIEW', 'CREATE', 'EDIT', 'EXPORT'],
+    EMPLOYEE: ['VIEW', 'EDIT'],
+  };
+  if (module === 'LEARNING' && learningDefaults[user.role]?.includes(action)) {
+    return true;
+  }
+
   const permission = user.permissions.find(
     (p) => p.module === module && p.action === action
   );

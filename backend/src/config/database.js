@@ -60,8 +60,14 @@ const tenantModels = [
   'BiometricDevice',
   'Asset',
   'LearningCourse',
+  'LearningCategory',
+  'CourseAssignment',
+  'LearningAuditLog',
   // Carries a companyId so company-wide broadcasts (no employee) stay isolated.
   'Notification',
+  'NotificationTemplate',
+  'NotificationPreference',
+  'NotificationSetting',
   // Tenant-defined access modules — isolated per organization.
   'CustomModule'
 ];
@@ -75,15 +81,20 @@ const relationScopedModels = {
   ChangeHistory: 'employee', Dependent: 'employee', Document: 'employee', Education: 'employee',
   EmployeeAddress: 'employee', EmployeeChecklistTask: 'employee', EmployeeTaxDeclaration: 'employee',
   ExitDetails: 'employee', ExpenseClaim: 'employee', Feedback360: 'employee', HelpdeskTicket: 'employee',
-  KRA: 'employee', LearningEnrollment: 'employee', Leave: 'employee', LeaveQuota: 'employee',
+  KRA: 'employee', LearningEnrollment: 'employee', LearningBookmark: 'employee', LearningNotification: 'employee', Certificate: 'employee', Leave: 'employee', LeaveQuota: 'employee',
   Overtime: 'employee', PFDetails: 'employee', PayrollRecord: 'employee', PerformanceAppraisal: 'employee',
   PreviousEmployerIncome: 'employee', ProfessionalExperience: 'employee', ProjectResource: 'employee',
   SalaryRevision: 'employee', SalaryStructure: 'employee', ShiftAssignment: 'employee', TDSLedger: 'employee',
   Timesheet: 'employee', TravelAdvance: 'employee',
   JobApplicant: 'jobOpening',
   ProjectExpense: 'project',
+  CourseMaterial: 'course',
+  Quiz: 'course',
+  QuizQuestion: ['quiz', 'course'],
+  QuizAttempt: ['enrollment', 'employee'],
   ChecklistTemplateTask: 'template',
   PayrollApproval: 'payrollRun',
+  NotificationLog: 'notification',
   Interview: ['applicant', 'jobOpening'],
   JobOffer: ['applicant', 'jobOpening'],
 };

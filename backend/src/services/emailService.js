@@ -53,11 +53,11 @@ const logDevelopmentEmailError = (error) => {
   });
 };
 
-const getSmtpConfig = () => {
-  const host = trimEnv('SMTP_HOST');
-  const port = readNumberEnv('SMTP_PORT', 587);
-  const user = trimEnv('SMTP_USER');
-  const pass = trimEnv('SMTP_PASS').replace(/\s+/g, '');
+const getSmtpConfig = (override = {}) => {
+  const host = String(override.host || override.smtpHost || trimEnv('SMTP_HOST')).trim();
+  const port = Number(override.port || override.smtpPort || readNumberEnv('SMTP_PORT', 587));
+  const user = String(override.user || override.smtpUsername || trimEnv('SMTP_USER')).trim();
+  const pass = String(override.pass || override.smtpPassword || trimEnv('SMTP_PASS')).replace(/\s+/g, '');
 
   if (!host || !user || !pass) {
     const error = new Error('Email service is not configured.');
@@ -65,7 +65,9 @@ const getSmtpConfig = () => {
     throw error;
   }
 
-  const secure = readBooleanEnv('SMTP_SECURE', port === 465);
+  const secure = override.secure !== undefined || override.smtpSecure !== undefined
+    ? Boolean(override.secure ?? override.smtpSecure)
+    : readBooleanEnv('SMTP_SECURE', port === 465);
 
   return {
     host,
@@ -79,10 +81,10 @@ const getSmtpConfig = () => {
   };
 };
 
-const fromAddress = () => {
-  const name = trimEnv('SMTP_FROM_NAME') || 'PID HCMS Recruitment';
-  const user = trimEnv('SMTP_USER');
-  const configuredFrom = trimEnv('SMTP_FROM_EMAIL');
+const fromAddress = (override = {}) => {
+  const name = String(override.fromName || override.senderName || trimEnv('SMTP_FROM_NAME') || 'PID HCMS Recruitment').replace(/"/g, '');
+  const user = String(override.user || override.smtpUsername || trimEnv('SMTP_USER')).trim();
+  const configuredFrom = String(override.fromEmail || trimEnv('SMTP_FROM_EMAIL')).trim();
   const allowVerifiedSender = readBooleanEnv('SMTP_ALLOW_VERIFIED_FROM', false);
   const email = configuredFrom && (allowVerifiedSender || configuredFrom.toLowerCase() === user.toLowerCase())
     ? configuredFrom
@@ -92,10 +94,10 @@ const fromAddress = () => {
     console.warn('[SMTP_CONFIG_WARNING]', 'SMTP_FROM_EMAIL differs from SMTP_USER; using SMTP_USER as From address.');
   }
 
-  return `"${String(name).replace(/"/g, '')}" <${email}>`;
+  return `"${name}" <${email}>`;
 };
 
-const createTransporter = () => nodemailer.createTransport(getSmtpConfig());
+const createTransporter = (smtpConfig) => nodemailer.createTransport(getSmtpConfig(smtpConfig));
 
 const verifySmtpTransporter = async () => {
   const transporter = createTransporter();
@@ -103,17 +105,18 @@ const verifySmtpTransporter = async () => {
   return true;
 };
 
-const sendMail = async ({ to, subject, text, html }) => {
-  const transporter = nodemailer.createTransport(getSmtpConfig());
+const sendMail = async ({ to, subject, text, html, attachments, smtpConfig }) => {
+  const transporter = nodemailer.createTransport(getSmtpConfig(smtpConfig));
   if (isDevelopment() || readBooleanEnv('SMTP_VERIFY_ON_SEND', false)) {
     await transporter.verify();
   }
   return transporter.sendMail({
-    from: fromAddress(),
+    from: fromAddress(smtpConfig),
     to,
     subject,
     text,
     html,
+    attachments,
   });
 };
 

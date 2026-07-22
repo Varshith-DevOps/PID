@@ -245,6 +245,8 @@ if (require.main === module) {
     };
     setTimeout(runSweepSafely, 10_000);
     setInterval(runSweepSafely, 24 * 60 * 60 * 1000).unref();
+    const { startNotificationScheduler } = require('./services/notificationScheduler');
+    startNotificationScheduler();
   } else {
     logger.info('Scheduler disabled on this instance (RUN_SCHEDULER=false)');
   }

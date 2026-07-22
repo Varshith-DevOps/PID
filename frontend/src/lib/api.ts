@@ -1364,8 +1364,33 @@ export const getLearningCourses = async () => {
   return data;
 };
 
-export const createLearningCourse = async (payload: { title: string; description?: string; category?: string; isMandatory?: boolean }) => {
+export const getLearningDashboard = async () => {
+  const { data } = await api.get('/learning/dashboard');
+  return data;
+};
+
+export const getLearningReports = async () => {
+  const { data } = await api.get('/learning/reports');
+  return data;
+};
+
+export const createLearningCourse = async (payload: Record<string, unknown>) => {
   const { data } = await api.post('/learning/courses', payload);
+  return data;
+};
+
+export const updateLearningCourse = async (id: string, payload: Record<string, unknown>) => {
+  const { data } = await api.put(`/learning/courses/${id}`, payload);
+  return data;
+};
+
+export const publishLearningCourse = async (id: string) => {
+  const { data } = await api.post(`/learning/courses/${id}/publish`);
+  return data;
+};
+
+export const deleteLearningCourse = async (id: string) => {
+  const { data } = await api.delete(`/learning/courses/${id}`);
   return data;
 };
 
@@ -1374,13 +1399,33 @@ export const getLearningEnrollments = async (params?: { employeeId?: string }) =
   return data;
 };
 
-export const assignLearningCourse = async (payload: { courseId: string; employeeId: string; dueDate?: string }) => {
-  const { data } = await api.post('/learning/enrollments', payload);
+export const assignLearningCourse = async (payload: Record<string, unknown>) => {
+  const { data } = await api.post('/learning/assignments', payload);
   return data;
 };
 
 export const updateLearningEnrollment = async (id: string, payload: { status?: string; progress?: number }) => {
   const { data } = await api.put(`/learning/enrollments/${id}`, payload);
+  return data;
+};
+
+export const addLearningMaterial = async (courseId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/materials`, payload);
+  return data;
+};
+
+export const createLearningQuiz = async (courseId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/quizzes`, payload);
+  return data;
+};
+
+export const generateLearningCertificate = async (enrollmentId: string) => {
+  const { data } = await api.post(`/learning/certificates/${enrollmentId}/generate`);
+  return data;
+};
+
+export const getEmployeeLearningSummary = async (employeeId: string) => {
+  const { data } = await api.get(`/learning/employees/${employeeId}/summary`);
   return data;
 };
 
@@ -1411,6 +1456,71 @@ export const createNotification = async (payload: { employeeId?: string; title: 
 
 export const markNotificationRead = async (id: string) => {
   const { data } = await api.put(`/notifications/${id}/read`);
+  return data;
+};
+
+export const getNotificationCenter = async (params?: { page?: number; limit?: number; unreadOnly?: boolean; status?: string; channel?: string; search?: string }) => {
+  const { data } = await api.get('/notifications/center', { params });
+  return data;
+};
+
+export const markAllNotificationsRead = async () => {
+  const { data } = await api.patch('/notifications/read-all');
+  return data;
+};
+
+export const deleteNotification = async (id: string) => {
+  const { data } = await api.delete(`/notifications/${id}`);
+  return data;
+};
+
+export const getNotificationHistory = async (params?: { page?: number; limit?: number }) => {
+  const { data } = await api.get('/notifications/history', { params });
+  return data;
+};
+
+export const getNotificationTemplates = async () => {
+  const { data } = await api.get('/notifications/templates');
+  return data;
+};
+
+export const createNotificationTemplate = async (payload: any) => {
+  const { data } = await api.post('/notifications/templates', payload);
+  return data;
+};
+
+export const updateNotificationTemplate = async (id: string, payload: any) => {
+  const { data } = await api.put(`/notifications/templates/${id}`, payload);
+  return data;
+};
+
+export const deleteNotificationTemplate = async (id: string) => {
+  const { data } = await api.delete(`/notifications/templates/${id}`);
+  return data;
+};
+
+export const seedNotificationTemplates = async () => {
+  const { data } = await api.post('/notifications/templates/seed-defaults');
+  return data;
+};
+
+export const getNotificationPreferences = async (employeeId?: string) => {
+  const { data } = await api.get('/notifications/preferences', { params: { employeeId } });
+  return data;
+};
+
+export const updateNotificationPreferences = async (preferences: any[], employeeId?: string) => {
+  const { data } = await api.put('/notifications/preferences', { employeeId, preferences });
+  return data;
+};
+
+export const getNotificationSettings = async () => {
+  const { data } = await api.get('/notifications/settings');
+  return data;
+};
+
+export const updateNotificationSettings = async (payload: any) => {
+  const { data } = await api.put('/notifications/settings', payload);
   return data;
 };
 

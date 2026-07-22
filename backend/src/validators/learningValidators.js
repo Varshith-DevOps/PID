@@ -1,0 +1,75 @@
+const COURSE_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'];
+const DIFFICULTIES = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'];
+const PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
+const MATERIAL_TYPES = ['PDF', 'DOCX', 'PPT', 'PPTX', 'MP4', 'YOUTUBE', 'EXTERNAL_URL'];
+
+const normalizeCsv = (value) => Array.isArray(value) ? value.join(',') : value;
+
+const requireText = (payload, field, label) => {
+  if (!payload[field] || typeof payload[field] !== 'string' || !payload[field].trim()) {
+    return `${label} is required`;
+  }
+  return null;
+};
+
+const validateCoursePayload = (payload = {}, partial = false) => {
+  const errors = [];
+  if (!partial) {
+    const titleError = requireText(payload, 'title', 'Course name');
+    if (titleError) errors.push(titleError);
+  }
+  if (payload.difficulty && !DIFFICULTIES.includes(String(payload.difficulty).toUpperCase())) errors.push('Difficulty must be Beginner, Intermediate, or Advanced');
+  if (payload.status && !COURSE_STATUSES.includes(String(payload.status).toUpperCase())) errors.push('Status must be Draft, Published, or Archived');
+  if (payload.passingScore !== undefined) {
+    const score = Number(payload.passingScore);
+    if (!Number.isFinite(score) || score < 0 || score > 100) errors.push('Passing score must be between 0 and 100');
+  }
+  if (payload.durationMinutes !== undefined && Number(payload.durationMinutes) < 0) errors.push('Duration cannot be negative');
+  return errors;
+};
+
+const buildCourseData = (payload = {}) => ({
+  title: payload.title?.trim(),
+  courseCode: payload.courseCode?.trim() || undefined,
+  description: payload.description?.trim() || undefined,
+  category: payload.category?.trim() || 'GENERAL',
+  department: payload.department?.trim() || undefined,
+  difficulty: payload.difficulty ? String(payload.difficulty).toUpperCase() : 'BEGINNER',
+  durationMinutes: payload.durationMinutes !== undefined ? Number(payload.durationMinutes) : 0,
+  instructor: payload.instructor?.trim() || undefined,
+  thumbnailUrl: payload.thumbnailUrl?.trim() || undefined,
+  bannerUrl: payload.bannerUrl?.trim() || undefined,
+  tags: normalizeCsv(payload.tags)?.trim?.() || undefined,
+  prerequisites: normalizeCsv(payload.prerequisites)?.trim?.() || undefined,
+  passingScore: payload.passingScore !== undefined ? Number(payload.passingScore) : 70,
+  certificateAvailable: Boolean(payload.certificateAvailable),
+  status: payload.status ? String(payload.status).toUpperCase() : 'DRAFT',
+  isMandatory: Boolean(payload.isMandatory),
+});
+
+const validateMaterialPayload = (payload = {}) => {
+  const errors = [];
+  const titleError = requireText(payload, 'title', 'Material title');
+  if (titleError) errors.push(titleError);
+  const type = String(payload.materialType || '').toUpperCase();
+  if (!MATERIAL_TYPES.includes(type)) errors.push('Material type is not supported');
+  if (['YOUTUBE', 'EXTERNAL_URL'].includes(type) && !payload.externalUrl) errors.push('External URL is required');
+  return errors;
+};
+
+const validateAssignmentPayload = (payload = {}) => {
+  const errors = [];
+  if (!payload.courseId) errors.push('Course is required');
+  if (!payload.employeeId && !payload.employeeIds?.length && !payload.department && !payload.designation && payload.assignmentType !== 'COMPANY') {
+    errors.push('Select at least one assignment target');
+  }
+  if (payload.priority && !PRIORITIES.includes(String(payload.priority).toUpperCase())) errors.push('Priority must be High, Medium, or Low');
+  return errors;
+};
+
+module.exports = {
+  buildCourseData,
+  validateAssignmentPayload,
+  validateCoursePayload,
+  validateMaterialPayload,
+};

@@ -33,6 +33,7 @@ describe('Recruitment / ATS pipeline', () => {
       await prisma.permission.deleteMany({ where: { userId: user.id } }).catch(() => {});
       await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
     }
+    await prisma.notification.deleteMany({ where: { recipientEmail: CAND_EMAIL } }).catch(() => {});
     // Test cleanup can cascade. Runtime delete endpoints must not.
     await prisma.jobOpening.deleteMany({ where: { title: { contains: stamp } } }).catch(() => {});
   };
@@ -332,9 +333,14 @@ describe('Recruitment / ATS pipeline', () => {
     const res = await request(app).post('/api/recruitment/interviews').set('Authorization', `Bearer ${adminToken}`)
       .send({ applicantId, interviewerName: 'Meera Joshi', interviewDate: '2099-07-01T10:00:00.000Z', roundName: 'Technical Round 1', interviewMode: 'ONLINE', meetingLink: 'https://meet.example.com/main' });
     expect(res.status).toBe(201);
-    expect(res.body.interview.emailStatus).toBe('FAILED');
+    expect(res.body.interview.emailStatus).toBe('QUEUED');
     expect(res.body.interview.meetingLink).toBe('https://meet.example.com/main');
     interviewId = res.body.interview.id;
+
+    const queuedEmail = await prisma.notification.findFirst({
+      where: { type: 'INTERVIEW_SCHEDULED', recipientId: applicantId, channel: 'EMAIL' },
+    });
+    expect(queuedEmail).toBeTruthy();
 
     const applicant = await prisma.jobApplicant.findUnique({ where: { id: applicantId } });
     expect(applicant.stage).toBe('INTERVIEW');
