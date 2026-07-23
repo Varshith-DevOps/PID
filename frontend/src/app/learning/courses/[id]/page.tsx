@@ -51,8 +51,11 @@ import type { TabItem } from '@/components/ui';
 type Lesson = {
   id: string;
   title: string;
+  lessonType?: string;
   contentType?: string;
   contentUrl?: string;
+  embedUrl?: string;
+  richText?: string;
   contentBody?: string;
   durationMinutes?: number;
   isMandatory?: boolean;
@@ -83,8 +86,20 @@ type Quiz = {
   title: string;
   description?: string;
   passingScore?: number;
+  passingMarks?: number;
   durationMinutes?: number;
+  timeLimitMins?: number;
   questions?: QuizQuestion[];
+};
+
+type LearningAssessment = {
+  id: string;
+  title: string;
+  instructions?: string;
+  maxMarks?: number;
+  rubricJson?: string;
+  attemptLimit?: number;
+  submissions?: any[];
 };
 
 type Material = {
@@ -182,6 +197,9 @@ export default function CourseWorkspacePage() {
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [quizResult, setQuizResult] = useState<any>(null);
+  const [activeAssessment, setActiveAssessment] = useState<LearningAssessment | null>(null);
+  const [assessmentAnswers, setAssessmentAnswers] = useState<Record<string, any>>({});
+  const [assessmentResult, setAssessmentResult] = useState<any>(null);
 
   // Student Assessment Submission
   const [submissionText, setSubmissionText] = useState('');
@@ -229,7 +247,7 @@ export default function CourseWorkspacePage() {
 
       // Fetch student's enrollment
       try {
-        const enrollments = await getLearningEnrollments({ employeeId: user?.id });
+        const enrollments = await getLearningEnrollments();
         const userEnrollment = Array.isArray(enrollments)
           ? enrollments.find((e: any) => e.courseId === courseId || e.course?.id === courseId)
           : null;
@@ -368,7 +386,13 @@ export default function CourseWorkspacePage() {
     setError('');
     try {
       await createLearningLesson(courseId, {
-        ...lessonForm,
+        chapterId: lessonForm.chapterId || undefined,
+        title: lessonForm.title,
+        lessonType: lessonForm.contentType === 'TEXT' ? 'RICH_TEXT' : lessonForm.contentType === 'DOCUMENT' ? 'ATTACHMENT' : lessonForm.contentType,
+        contentUrl: lessonForm.contentUrl || undefined,
+        embedUrl: lessonForm.contentType === 'VIDEO' ? lessonForm.contentUrl || undefined : undefined,
+        richText: lessonForm.contentBody || undefined,
+        isMandatory: lessonForm.isMandatory,
         durationMinutes: Number(lessonForm.durationMinutes) || 15,
       });
       setLessonForm({ chapterId: '', title: '', contentType: 'TEXT', contentUrl: '', contentBody: '', durationMinutes: '15', isMandatory: true });
@@ -382,8 +406,9 @@ export default function CourseWorkspacePage() {
   };
 
   const handleMarkLessonComplete = async (lessonId: string) => {
+    if (!enrollment?.id) return setError('Enrollment required to update lesson progress.');
     try {
-      await updateLearningLessonProgress(lessonId, { status: 'COMPLETED', percentComplete: 100 });
+      await updateLearningLessonProgress(lessonId, { enrollmentId: enrollment.id, status: 'COMPLETED', progress: 100, completionPercentage: 100 });
       setSuccess('Lesson marked as completed!');
       await loadCourseData();
     } catch (err: any) {
@@ -435,10 +460,11 @@ export default function CourseWorkspacePage() {
 
   const handleSubmitQuizAttempt = async () => {
     if (!activeQuiz) return;
+    if (!enrollment?.id) return setError('Enrollment required to submit quiz.');
     setSaving(true);
     setError('');
     try {
-      const result = await submitQuizAttempt(activeQuiz.id, { answers: quizAnswers });
+      const result = await submitQuizAttempt(activeQuiz.id, { enrollmentId: enrollment.id, courseId, answers: quizAnswers });
       setQuizResult(result);
       setSuccess('Quiz submitted successfully!');
       await loadCourseData();
@@ -457,7 +483,8 @@ export default function CourseWorkspacePage() {
       await createLearningAssessment(courseId, {
         title: assessmentForm.title,
         instructions: assessmentForm.instructions,
-        maxScore: Number(assessmentForm.maxScore) || 100,
+        maxMarks: Number(assessmentForm.maxScore) || 100,
+        passingScore: Number(courseSettings.passingScore) || 70,
         dueDate: assessmentForm.dueDate || undefined,
       });
       setAssessmentForm({ title: '', instructions: '', maxScore: '100', dueDate: '' });
@@ -545,11 +572,22 @@ export default function CourseWorkspacePage() {
   const chapters: Chapter[] = course?.chapters || course?.enterprise?.chapters || [];
   const topLessons: Lesson[] = course?.lessons || course?.enterprise?.lessons || [];
   const quizzes: Quiz[] = course?.quizzes || course?.enterprise?.quizzes || [];
+  const assessments: LearningAssessment[] = course?.assessments || course?.enterprise?.assessments || [];
   const materials: Material[] = course?.materials || course?.enterprise?.materials || [];
   const feedbackList: Feedback[] = course?.feedback || course?.enterprise?.feedback || [];
   const versions: Version[] = course?.versions || course?.enterprise?.versions || [];
   const approvals: Approval[] = course?.approvals || course?.enterprise?.approvals || [];
   const skillsList: any[] = course?.courseSkills || course?.enterprise?.skills || [];
+  const assessmentUnlocked = (enrollment?.progress || 0) >= 100;
+  const getAssessmentQuestions = (assessment: LearningAssessment | null) => {
+    if (!assessment?.rubricJson) return [];
+    try {
+      const parsed = JSON.parse(assessment.rubricJson);
+      return Array.isArray(parsed.questions) ? parsed.questions : [];
+    } catch {
+      return [];
+    }
+  };
 
   return (
     <div className="app-layout">
@@ -743,17 +781,17 @@ export default function CourseWorkspacePage() {
               {selectedLesson ? (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <Badge tone="info">{selectedLesson.contentType || 'TEXT'}</Badge>
+                    <Badge tone="info">{selectedLesson.contentType || selectedLesson.lessonType || 'TEXT'}</Badge>
                     <Button size="sm" variant="success" onClick={() => handleMarkLessonComplete(selectedLesson.id)}>
                       ✓ Mark Complete
                     </Button>
                   </div>
 
-                  {selectedLesson.contentType === 'VIDEO' && selectedLesson.contentUrl ? (
+                  {(selectedLesson.contentType === 'VIDEO' || selectedLesson.lessonType === 'VIDEO') && (selectedLesson.contentUrl || selectedLesson.embedUrl) ? (
                     <div style={{ marginBottom: '1.5rem', background: '#000', borderRadius: '8px', padding: '1rem', textAlign: 'center' }}>
                       <p style={{ color: '#fff', margin: '0 0 0.5rem 0' }}>Video Media Player</p>
-                      <a href={selectedLesson.contentUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>
-                        Open External Video Link ({selectedLesson.contentUrl})
+                      <a href={selectedLesson.contentUrl || selectedLesson.embedUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>
+                        Open External Video Link ({selectedLesson.contentUrl || selectedLesson.embedUrl})
                       </a>
                     </div>
                   ) : selectedLesson.contentUrl ? (
@@ -766,7 +804,7 @@ export default function CourseWorkspacePage() {
                   ) : null}
 
                   <div style={{ lineHeight: '1.6', fontSize: '0.95rem', whiteSpace: 'pre-wrap', minHeight: '180px' }}>
-                    {selectedLesson.contentBody || 'No text content provided for this lesson.'}
+                    {selectedLesson.contentBody || selectedLesson.richText || 'No text content provided for this lesson.'}
                   </div>
                 </div>
               ) : (
@@ -792,15 +830,16 @@ export default function CourseWorkspacePage() {
                         Q{qIdx + 1}: {q.question}
                       </strong>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        {(q.options || []).map((opt, optIdx) => {
+                        {(Array.isArray(q.options) ? q.options : (() => { try { return JSON.parse(q.options as any); } catch { return []; } })()).map((opt: string, optIdx: number) => {
                           const optionKey = String.fromCharCode(65 + optIdx); // A, B, C, D
+                          const answerKey = q.id || String(qIdx);
                           return (
                             <label key={optIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                               <input
                                 type="radio"
                                 name={`question_${qIdx}`}
-                                checked={quizAnswers[qIdx] === optionKey}
-                                onChange={() => setQuizAnswers({ ...quizAnswers, [qIdx]: optionKey })}
+                                checked={quizAnswers[answerKey] === optionKey}
+                                onChange={() => setQuizAnswers({ ...quizAnswers, [answerKey]: optionKey })}
                               />
                               <span>
                                 <strong>{optionKey}.</strong> {opt}
@@ -818,7 +857,7 @@ export default function CourseWorkspacePage() {
                   {quizResult && (
                     <Card title="Quiz Result" style={{ marginTop: '1rem', background: 'var(--bg-subtle)' }}>
                       <p>
-                        Score: <strong>{quizResult.score || 0}%</strong>
+                        Score: <strong>{quizResult.percentage ?? quizResult.score ?? 0}%</strong>
                       </p>
                       <StatusChip status={quizResult.passed ? 'PASSED' : 'FAILED'} />
                     </Card>
@@ -830,7 +869,7 @@ export default function CourseWorkspacePage() {
                     <div>
                       <strong>{quiz.title}</strong>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                        Passing score: {quiz.passingScore || 70}% | Duration: {quiz.durationMinutes || 20}m
+                        Passing score: {quiz.passingScore || quiz.passingMarks || 70}% | Duration: {quiz.durationMinutes || quiz.timeLimitMins || 20}m
                       </div>
                     </div>
                     <Button size="sm" onClick={() => { setActiveQuiz(quiz); setQuizAnswers({}); setQuizResult(null); }}>
@@ -907,33 +946,106 @@ export default function CourseWorkspacePage() {
               )}
 
               <div>
-                <h4>Submit Written Assessment Response</h4>
-                <Textarea label="Your Answer / Project Summary" value={submissionText} onChange={setSubmissionText} />
-                <Button
-                  size="sm"
-                  style={{ marginTop: '0.5rem' }}
-                  loading={saving}
-                  onClick={async () => {
-                    if (!submissionText.trim()) return setError('Provide submission text.');
-                    setSaving(true);
-                    try {
-                      await submitLearningAssessment(courseId, { submissionText });
-                      setSubmissionText('');
-                      setSuccess('Assessment submitted!');
-                    } catch (err: any) {
-                      setError(err?.response?.data?.error || 'Failed to submit assessment.');
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                >
-                  Submit Written Work
-                </Button>
+                <h4>{assessmentUnlocked ? 'Assessment Available' : 'Assessment Locked'}</h4>
+                {!assessmentUnlocked && <Banner tone="warning" style={{ marginBottom: '1rem' }}>Complete every lesson to unlock the course assessment.</Banner>}
+                {!activeAssessment ? (
+                  assessments.length ? assessments.map((assessment) => (
+                    <div key={assessment.id} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center' }}>
+                      <div>
+                        <strong>{assessment.title}</strong>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                          Max score: {assessment.maxMarks || 100} | Attempts: {assessment.attemptLimit || 1}
+                        </div>
+                      </div>
+                      <Button size="sm" disabled={!assessmentUnlocked} onClick={() => { setActiveAssessment(assessment); setAssessmentAnswers({}); setAssessmentResult(null); }}>
+                        Start Assessment
+                      </Button>
+                    </div>
+                  )) : <EmptyState title="No assessment configured for this course" />
+                ) : (
+                  <div>
+                    <Button size="sm" variant="ghost" onClick={() => setActiveAssessment(null)} style={{ marginBottom: '1rem' }}>
+                      Back to Assessments
+                    </Button>
+                    {getAssessmentQuestions(activeAssessment).length ? getAssessmentQuestions(activeAssessment).map((question: any, index: number) => {
+                      const answerKey = question.id || `q${index + 1}`;
+                      const type = String(question.questionType || 'MCQ').toUpperCase();
+                      const options = Array.isArray(question.options) ? question.options : [];
+                      return (
+                        <div key={answerKey} style={{ marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-subtle)' }}>
+                          <strong style={{ display: 'block', marginBottom: '0.5rem' }}>Q{index + 1}: {question.question}</strong>
+                          {['MCQ', 'TRUE_FALSE'].includes(type) ? (
+                            (type === 'TRUE_FALSE' ? ['true', 'false'] : options).map((option: string, optionIndex: number) => {
+                              const value = type === 'TRUE_FALSE' ? option : String.fromCharCode(65 + optionIndex);
+                              return (
+                                <label key={value} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                                  <input type="radio" checked={assessmentAnswers[answerKey] === value} onChange={() => setAssessmentAnswers({ ...assessmentAnswers, [answerKey]: value })} />
+                                  <span>{type === 'TRUE_FALSE' ? option : `${value}. ${option}`}</span>
+                                </label>
+                              );
+                            })
+                          ) : type === 'MULTIPLE_ANSWER' ? (
+                            options.map((option: string, optionIndex: number) => {
+                              const value = String.fromCharCode(65 + optionIndex);
+                              const selected = Array.isArray(assessmentAnswers[answerKey]) ? assessmentAnswers[answerKey] : [];
+                              return (
+                                <label key={value} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.includes(value)}
+                                    onChange={(event) => setAssessmentAnswers({
+                                      ...assessmentAnswers,
+                                      [answerKey]: event.target.checked ? [...selected, value] : selected.filter((item: string) => item !== value),
+                                    })}
+                                  />
+                                  <span>{value}. {option}</span>
+                                </label>
+                              );
+                            })
+                          ) : (
+                            <Textarea label="Answer" value={assessmentAnswers[answerKey] || ''} onChange={(value) => setAssessmentAnswers({ ...assessmentAnswers, [answerKey]: value })} />
+                          )}
+                        </div>
+                      );
+                    }) : (
+                      <Textarea label="Your Answer / Project Summary" value={submissionText} onChange={setSubmissionText} />
+                    )}
+                    <Button
+                      size="sm"
+                      loading={saving}
+                      onClick={async () => {
+                        if (!enrollment?.id) return setError('Enrollment required to submit assessment.');
+                        const hasQuestions = getAssessmentQuestions(activeAssessment).length > 0;
+                        if (!hasQuestions && !submissionText.trim()) return setError('Provide submission text.');
+                        setSaving(true);
+                        try {
+                          const result = await submitLearningAssessment(activeAssessment.id, { enrollmentId: enrollment.id, answers: assessmentAnswers, submissionText: hasQuestions ? undefined : submissionText });
+                          setAssessmentResult(result);
+                          setSubmissionText('');
+                          setSuccess(result.requiresManualReview ? 'Assessment submitted for manual review.' : 'Assessment evaluated.');
+                          await loadCourseData();
+                        } catch (err: any) {
+                          setError(err?.response?.data?.error || 'Failed to submit assessment.');
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                    >
+                      Submit Assessment
+                    </Button>
+                    {assessmentResult && (
+                      <Card title="Assessment Result" style={{ marginTop: '1rem', background: 'var(--bg-subtle)' }}>
+                        <p>Score: <strong>{assessmentResult.percentage ?? 0}%</strong></p>
+                        <StatusChip status={assessmentResult.requiresManualReview ? 'PENDING_REVIEW' : assessmentResult.passed ? 'PASSED' : 'FAILED'} />
+                      </Card>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
 
             <Card title="Assessment Guidance">
-              <p>Assessments require instructor review. Once submitted, your manager or HR administrator will evaluate your submission and assign a grade.</p>
+              <p>Objective questions are scored automatically. Short answer and essay responses are routed to manager or HR review before certificate eligibility is granted.</p>
             </Card>
           </div>
         )}

@@ -10,6 +10,7 @@ const includeCourseDetails = {
   feedback: true,
   aiGenerations: { orderBy: { createdAt: 'desc' } },
   quizzes: { include: { questions: { orderBy: { sortOrder: 'asc' } } } },
+  assessments: { include: { submissions: { orderBy: { submittedAt: 'desc' } } }, orderBy: { createdAt: 'desc' } },
   _count: { select: { enrollments: true, assignments: true, certificates: true } },
 };
 
@@ -94,6 +95,8 @@ const listEnrollments = (where = {}) => prisma.learningEnrollment.findMany({
     course: true,
     employee: { select: { id: true, employeeId: true, firstName: true, lastName: true, department: { select: { name: true } }, jobTitle: true } },
     certificate: true,
+    quizAttempts: { orderBy: { submittedAt: 'desc' } },
+    assessmentSubmissions: { include: { assessment: true }, orderBy: { submittedAt: 'desc' } },
   },
   orderBy: { updatedAt: 'desc' },
 });

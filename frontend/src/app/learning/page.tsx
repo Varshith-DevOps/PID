@@ -259,6 +259,7 @@ export default function LearningPage() {
   const certificateRows = enrollments.filter((row) => row.certificate || row.course?.certificateAvailable);
   const avgProgress = enrollments.length ? Math.round(enrollments.reduce((sum, row) => sum + (row.progress || 0), 0) / enrollments.length) : 0;
   const avgScore = reports?.courseCompletion?.length ? Math.round((reports.courseCompletion.reduce((sum: number, row: any) => sum + (row.averageScore || 0), 0) / reports.courseCompletion.length) || 0) : dashboard?.averageScore || 0;
+  const assessmentAvailable = enrollments.filter((row) => (row.progress || 0) >= 100 && !row.certificate).length;
   const publishedCourses = courses.filter((course) => course.status === 'PUBLISHED');
   const courseOptions = publishedCourses.map((course) => ({ value: course.id, label: `${course.title}${course.courseCode ? ` (${course.courseCode})` : ''}` }));
   const employeeOptions = employees.map((employee) => ({ value: employee.id, label: `${fullName(employee)}${employee.employeeId ? ` (${employee.employeeId})` : ''}` }));
@@ -424,6 +425,8 @@ export default function LearningPage() {
               <StatCard label="Average Progress" value={`${avgProgress}%`} />
               <StatCard label="Learning Hours" value={dashboard?.learningHours || Math.round(enrollments.reduce((sum, row) => sum + (row.timeSpentMins || 0), 0) / 60)} />
               <StatCard label="Certificates" value={dashboard?.certificatesEarned || certificateRows.filter((row) => row.certificate).length} />
+              <StatCard label="Assessment Available" value={assessmentAvailable} />
+              <StatCard label="Pass Rate" value={`${dashboard?.passRate || reports?.passRate || 0}%`} />
             </div>
             <div className="grid grid-2" style={{ marginTop: '1.5rem' }}>
               <Card title="Learning Portfolio">
@@ -432,6 +435,7 @@ export default function LearningPage() {
                   <div><strong>{courses.filter((course) => course.status === 'PUBLISHED').length}</strong> published courses</div>
                   <div><strong>{paths.length}</strong> learning paths configured</div>
                   <div><strong>{avgScore || 0}%</strong> average assessment score</div>
+                  <div><strong>{dashboard?.pendingCertificates || 0}</strong> pending certificates</div>
                 </div>
               </Card>
               <Card title="Recent Learning Activity">
@@ -614,7 +618,7 @@ export default function LearningPage() {
                 { key: 'employee', header: 'Employee', render: (row: Enrollment) => row.employee ? fullName(row.employee) : 'Me' },
                 { key: 'number', header: 'Certificate Number', render: (row: Enrollment) => row.certificate?.certificateNumber || 'Not issued' },
                 { key: 'status', header: 'Status', render: (row: Enrollment) => row.certificate ? <StatusChip status="ISSUED" /> : <StatusChip status="PENDING" /> },
-                { key: 'actions', header: '', align: 'right', render: (row: Enrollment) => row.certificate ? <Button size="sm" variant="ghost" href={`/api/learning/certificates/${row.certificate.id}/download`}>Download</Button> : <Button size="sm" onClick={async () => { await generateLearningCertificate(row.id); loadData(); }}>Generate</Button> },
+                { key: 'actions', header: '', align: 'right', render: (row: Enrollment) => row.certificate ? <Button size="sm" variant="ghost" href={`/api/learning/certificates/${row.certificate.id}/download`}>Download</Button> : <Button size="sm" onClick={async () => { try { await generateLearningCertificate(row.id); await loadData(); } catch (err: any) { setError(err?.response?.data?.error || 'Certificate generation failed.'); } }}>Generate</Button> },
               ]}
               rows={certificateRows}
               rowKey={(row: Enrollment) => row.id}
@@ -625,6 +629,28 @@ export default function LearningPage() {
 
         {activeTab === 'reports' && canReport && (
           <div className="grid grid-2">
+            <Card title="Assessment & Certificate KPIs">
+              <div className="stat-grid">
+                <StatCard label="Average Score" value={`${reports?.averageScore || dashboard?.averageScore || 0}%`} />
+                <StatCard label="Pass Rate" value={`${reports?.passRate || dashboard?.passRate || 0}%`} />
+                <StatCard label="Certificates Issued" value={reports?.certificatesIssued || dashboard?.certificatesIssued || 0} />
+                <StatCard label="Pending Certificates" value={reports?.pendingCertificates || dashboard?.pendingCertificates || 0} />
+              </div>
+            </Card>
+            <Card title="Assessment Results" padded={false}>
+              <DataTable
+                columns={[
+                  { key: 'employee', header: 'Employee', render: (row: any) => row.employee ? `${row.employee.firstName || ''} ${row.employee.lastName || ''}`.trim() : row.employeeId },
+                  { key: 'course', header: 'Course', render: (row: any) => row.assessment?.course?.title || '-' },
+                  { key: 'score', header: 'Score', render: (row: any) => row.marks ?? 'Review' },
+                  { key: 'attempt', header: 'Attempt', render: (row: any) => row.attemptNumber || 1 },
+                  { key: 'status', header: 'Result', render: (row: any) => <StatusChip status={row.status || 'SUBMITTED'} /> },
+                ]}
+                rows={reports?.assessmentResults || dashboard?.assessmentResults || []}
+                rowKey={(row: any) => row.id}
+                emptyTitle="No assessment results"
+              />
+            </Card>
             <Card title="Department Completion" padded={false}>
               <DataTable columns={[{ key: 'department', header: 'Department' }, { key: 'assigned', header: 'Assigned' }, { key: 'completed', header: 'Completed' }]} rows={reports?.departmentCompletion || []} rowKey={(row: any) => row.department} emptyTitle="No department report data" />
             </Card>
