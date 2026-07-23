@@ -305,16 +305,22 @@ const assignCourse = async (req, res) => {
     if (errors.length) return res.status(400).json({ error: errors.join(', ') });
     const courseId = req.body.courseId;
     const dueDate = asDate(req.body.dueDate);
+    const assignmentType = normalize(req.body.assignmentType);
+    const departmentId = req.body.departmentId || req.body.department || null;
+    const designationId = req.body.designationId || req.body.designation || null;
     const targetEmployeeIds = new Set(req.body.employeeIds || []);
     if (req.body.employeeId) targetEmployeeIds.add(req.body.employeeId);
 
+    const course = await prisma.learningCourse.findFirst({ where: { id: courseId, isActive: true, status: 'PUBLISHED' }, select: { id: true } });
+    if (!course) return res.status(404).json({ error: 'Published course not found' });
+
     const employeeWhere = { isActive: true };
     if (targetEmployeeIds.size) employeeWhere.id = { in: [...targetEmployeeIds] };
-    else if (req.body.department) employeeWhere.department = { name: req.body.department };
-    else if (req.body.designation) employeeWhere.jobTitle = req.body.designation;
+    else if (departmentId) employeeWhere.departmentId = departmentId;
+    else if (designationId) employeeWhere.jobTitle = designationId;
 
     const employees = await prisma.employee.findMany({ where: employeeWhere, select: { id: true, firstName: true, lastName: true } });
-    if (!employees.length) return res.status(404).json({ error: 'No employees matched the assignment target' });
+    if (!employees.length) return res.status(404).json({ error: 'No active employees found.' });
 
     if (req.user.role === 'MANAGER') {
       for (const employee of employees) {
@@ -322,23 +328,44 @@ const assignCourse = async (req, res) => {
       }
     }
 
-    const assignment = await learningRepo.createAssignment({
-      courseId,
-      assignmentType: req.body.assignmentType || (targetEmployeeIds.size > 1 ? 'MULTIPLE_EMPLOYEES' : targetEmployeeIds.size ? 'EMPLOYEE' : req.body.department ? 'DEPARTMENT' : req.body.designation ? 'DESIGNATION' : 'COMPANY'),
-      employeeId: targetEmployeeIds.size === 1 ? [...targetEmployeeIds][0] : null,
-      department: req.body.department || null,
-      designation: req.body.designation || null,
-      dueDate,
-      priority: req.body.priority ? normalize(req.body.priority) : 'MEDIUM',
-      notifyEmployees: req.body.notifyEmployees !== false,
-      assignedBy: req.user.email || req.user.id,
+    const employeeIds = employees.map((employee) => employee.id);
+    const existingEnrollments = await prisma.learningEnrollment.findMany({
+      where: { courseId, employeeId: { in: employeeIds } },
+      select: { employeeId: true },
     });
+    const alreadyAssigned = new Set(existingEnrollments.map((row) => row.employeeId));
+    const assignableEmployees = employees.filter((employee) => !alreadyAssigned.has(employee.id));
+    if (!assignableEmployees.length) return res.status(409).json({ error: 'Selected active employees already have this course assigned.' });
 
+    const resolvedAssignmentType = assignmentType || (
+      targetEmployeeIds.size > 1 ? 'MULTIPLE_EMPLOYEES'
+        : targetEmployeeIds.size ? 'EMPLOYEE'
+          : departmentId ? 'DEPARTMENT'
+            : designationId ? 'DESIGNATION'
+              : 'COMPANY'
+    );
+    const priority = req.body.priority ? normalize(req.body.priority) : 'MEDIUM';
+    const notifyEmployees = req.body.notifyEmployees !== false;
+    const assignedBy = req.user.email || req.user.id;
+    const assignments = [];
     const enrollments = [];
-    for (const employee of employees) {
+    for (const employee of assignableEmployees) {
+      const assignment = await learningRepo.createAssignment({
+        courseId,
+        assignmentType: resolvedAssignmentType === 'ORGANIZATION' ? 'COMPANY' : resolvedAssignmentType,
+        employeeId: employee.id,
+        department: departmentId,
+        designation: designationId,
+        dueDate,
+        priority,
+        notifyEmployees,
+        assignedBy,
+        companyId: req.user.companyId || null,
+      });
+      assignments.push(assignment);
       const enrollment = await learningRepo.upsertEnrollment({ courseId, employeeId: employee.id, assignmentId: assignment.id, dueDate });
       enrollments.push(enrollment);
-      if (assignment.notifyEmployees) {
+      if (notifyEmployees) {
         await learningRepo.createNotification({
           employeeId: employee.id,
           courseId,
@@ -348,8 +375,8 @@ const assignCourse = async (req, res) => {
         });
       }
     }
-    await learningRepo.logLearningAudit({ req, action: 'COURSE_ASSIGNED', entity: 'CourseAssignment', entityId: assignment.id, details: { courseId, count: enrollments.length } });
-    res.status(201).json({ assignment, enrollments });
+    await learningRepo.logLearningAudit({ req, action: 'COURSE_ASSIGNED', entity: 'CourseAssignment', entityId: assignments[0].id, details: { courseId, count: enrollments.length, skippedDuplicates: alreadyAssigned.size } });
+    res.status(201).json({ assignment: assignments[0], assignments, enrollments, skippedDuplicates: alreadyAssigned.size });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }

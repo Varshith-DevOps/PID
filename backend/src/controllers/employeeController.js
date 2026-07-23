@@ -1108,6 +1108,20 @@ const getDepartments = async (req, res) => {
   }
 };
 
+const getDesignations = async (req, res) => {
+  try {
+    const rows = await prisma.employee.findMany({
+      where: { isActive: true, jobTitle: { not: '' } },
+      select: { jobTitle: true },
+      distinct: ['jobTitle'],
+      orderBy: { jobTitle: 'asc' },
+    });
+    res.json(rows.map((row) => ({ id: row.jobTitle, name: row.jobTitle })));
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 const updateDepartment = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1267,6 +1281,7 @@ module.exports = {
   reactivateEmployee,
   deleteEmployee: deactivateEmployee,
   getDepartments,
+  getDesignations,
   updateDepartment,
   createDepartment,
   getOrgChart,

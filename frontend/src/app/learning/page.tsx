@@ -11,6 +11,8 @@ import {
   deleteLearningCourse,
   generateLearningCertificate,
   generateLearningCourseWithAi,
+  getDepartments,
+  getEmployeeDesignations,
   getEmployees,
   getLearningCourses,
   getLearningDashboard,
@@ -73,6 +75,9 @@ type Enrollment = {
   certificate?: { id: string; certificateNumber: string; issuedAt?: string };
 };
 
+type LookupOption = { id: string; name: string };
+type AssignmentTarget = 'EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'DEPARTMENT' | 'DESIGNATION' | 'ORGANIZATION';
+
 const tabs: TabItem[] = [
   { key: 'analytics', label: 'Analytics' },
   { key: 'courses', label: 'Courses' },
@@ -101,6 +106,48 @@ const statusOptions = [
 const fullName = (employee: any) => `${employee.firstName || ''} ${employee.lastName || ''}`.trim();
 const extractEmployeeArray = (response: any): any[] => Array.isArray(response) ? response : response?.employees || response?.data || [];
 
+function SearchableSelect({ label, value, onChange, options, placeholder, disabled, help }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+  help?: string;
+}) {
+  const selectedLabel = options.find((option) => option.value === value)?.label || '';
+  const [text, setText] = useState(selectedLabel);
+  const listId = useMemo(() => `lookup-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, [label]);
+
+  useEffect(() => {
+    setText(selectedLabel);
+  }, [selectedLabel]);
+
+  return (
+    <div className="form-group">
+      <label className="form-label" htmlFor={listId}>{label}</label>
+      <input
+        id={listId}
+        className="input-field"
+        list={`${listId}-options`}
+        value={text}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          const exact = options.find((option) => option.label === next);
+          onChange(exact?.value || '');
+        }}
+      />
+      <datalist id={`${listId}-options`}>
+        {options.map((option) => <option key={option.value} value={option.label} />)}
+      </datalist>
+      {help && <span style={{ display: 'block', marginTop: 4, fontSize: '0.72rem', color: 'var(--text-muted)' }}>{help}</span>}
+    </div>
+  );
+}
+
 export default function LearningPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -109,12 +156,16 @@ export default function LearningPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [paths, setPaths] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<LookupOption[]>([]);
+  const [designations, setDesignations] = useState<LookupOption[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);
   const [reports, setReports] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [lookupsLoading, setLookupsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [employeeQuery, setEmployeeQuery] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [status, setStatus] = useState('');
   const [courseForm, setCourseForm] = useState({
@@ -134,7 +185,16 @@ export default function LearningPage() {
     status: 'DRAFT',
     description: '',
   });
-  const [assignmentForm, setAssignmentForm] = useState({ courseId: '', employeeId: '', department: '', designation: '', dueDate: '', priority: 'MEDIUM' });
+  const [assignmentForm, setAssignmentForm] = useState({
+    courseId: '',
+    targetType: 'EMPLOYEE' as AssignmentTarget,
+    employeeId: '',
+    employeeIds: [] as string[],
+    departmentId: '',
+    designationId: '',
+    dueDate: '',
+    priority: 'MEDIUM',
+  });
   const [aiForm, setAiForm] = useState({ title: '', category: 'AI Generated', difficulty: 'BEGINNER', text: '' });
   const [aiFile, setAiFile] = useState<File>();
   const [pathForm, setPathForm] = useState({ name: '', description: '', courseIds: [] as string[], pathType: 'SEQUENTIAL', targetType: 'COMPANY', targetValue: '' });
@@ -150,6 +210,7 @@ export default function LearningPage() {
   const loadData = async () => {
     setLoading(true);
     setError('');
+    if (canAuthor) setLookupsLoading(true);
     try {
       const [courseData, enrollmentData, dashboardData, pathData] = await Promise.all([
         getLearningCourses(),
@@ -161,12 +222,22 @@ export default function LearningPage() {
       setEnrollments(enrollmentData);
       setDashboard(dashboardData);
       setPaths(Array.isArray(pathData) ? pathData : []);
-      if (canAuthor) getEmployees({ status: 'active', limit: 500 }).then((response) => setEmployees(extractEmployeeArray(response))).catch(() => setEmployees([]));
+      if (canAuthor) {
+        const [employeeData, departmentData, designationData] = await Promise.all([
+          getEmployees({ status: 'active', limit: 500 }).catch(() => ({ employees: [] })),
+          getDepartments().catch(() => []),
+          getEmployeeDesignations().catch(() => []),
+        ]);
+        setEmployees(extractEmployeeArray(employeeData));
+        setDepartments(Array.isArray(departmentData) ? departmentData : []);
+        setDesignations(Array.isArray(designationData) ? designationData : []);
+      }
       if (canReport) getLearningReports().then(setReports).catch(() => setReports(null));
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Failed to load learning data.');
     } finally {
       setLoading(false);
+      setLookupsLoading(false);
     }
   };
 
@@ -188,6 +259,14 @@ export default function LearningPage() {
   const certificateRows = enrollments.filter((row) => row.certificate || row.course?.certificateAvailable);
   const avgProgress = enrollments.length ? Math.round(enrollments.reduce((sum, row) => sum + (row.progress || 0), 0) / enrollments.length) : 0;
   const avgScore = reports?.courseCompletion?.length ? Math.round((reports.courseCompletion.reduce((sum: number, row: any) => sum + (row.averageScore || 0), 0) / reports.courseCompletion.length) || 0) : dashboard?.averageScore || 0;
+  const publishedCourses = courses.filter((course) => course.status === 'PUBLISHED');
+  const courseOptions = publishedCourses.map((course) => ({ value: course.id, label: `${course.title}${course.courseCode ? ` (${course.courseCode})` : ''}` }));
+  const employeeOptions = employees.map((employee) => ({ value: employee.id, label: `${fullName(employee)}${employee.employeeId ? ` (${employee.employeeId})` : ''}` }));
+  const departmentOptions = departments.map((department) => ({ value: department.id, label: department.name }));
+  const designationOptions = designations.map((designation) => ({ value: designation.id, label: designation.name }));
+  const filteredEmployees = employeeQuery.trim()
+    ? employees.filter((employee) => [fullName(employee), employee.employeeId, employee.email, employee.department?.name, employee.jobTitle].filter(Boolean).join(' ').toLowerCase().includes(employeeQuery.trim().toLowerCase()))
+    : employees;
 
   const handleCreateCourse = async () => {
     if (!courseForm.title.trim()) return setError('Course name is required.');
@@ -215,7 +294,7 @@ export default function LearningPage() {
     setError('');
     try {
       const payload = aiFile ? new FormData() : null;
-      if (payload) {
+      if (payload && aiFile) {
         payload.append('file', aiFile);
         payload.append('title', aiForm.title);
         payload.append('category', aiForm.category);
@@ -250,16 +329,34 @@ export default function LearningPage() {
   };
 
   const handleAssign = async () => {
-    if (!assignmentForm.courseId || (!assignmentForm.employeeId && !assignmentForm.department && !assignmentForm.designation)) return setError('Select a course and assignment target.');
+    const needsTarget = assignmentForm.targetType !== 'ORGANIZATION';
+    const hasTarget = assignmentForm.targetType === 'EMPLOYEE'
+      ? Boolean(assignmentForm.employeeId)
+      : assignmentForm.targetType === 'MULTIPLE_EMPLOYEES'
+        ? assignmentForm.employeeIds.length > 0
+        : assignmentForm.targetType === 'DEPARTMENT'
+          ? Boolean(assignmentForm.departmentId)
+          : assignmentForm.targetType === 'DESIGNATION'
+            ? Boolean(assignmentForm.designationId)
+            : true;
+    if (!assignmentForm.courseId || (needsTarget && !hasTarget)) return setError('Select a published course and assignment target.');
     setSaving(true);
     setError('');
     try {
-      await assignLearningCourse({
-        ...assignmentForm,
-        assignmentType: assignmentForm.employeeId ? 'EMPLOYEE' : assignmentForm.department ? 'DEPARTMENT' : 'DESIGNATION',
+      const payload: Record<string, unknown> = {
+        courseId: assignmentForm.courseId,
+        dueDate: assignmentForm.dueDate || undefined,
+        priority: assignmentForm.priority,
+        assignmentType: assignmentForm.targetType === 'ORGANIZATION' ? 'COMPANY' : assignmentForm.targetType,
         notifyEmployees: true,
-      });
-      setAssignmentForm({ courseId: '', employeeId: '', department: '', designation: '', dueDate: '', priority: 'MEDIUM' });
+      };
+      if (assignmentForm.targetType === 'EMPLOYEE') payload.employeeId = assignmentForm.employeeId;
+      if (assignmentForm.targetType === 'MULTIPLE_EMPLOYEES') payload.employeeIds = assignmentForm.employeeIds;
+      if (assignmentForm.targetType === 'DEPARTMENT') payload.departmentId = assignmentForm.departmentId;
+      if (assignmentForm.targetType === 'DESIGNATION') payload.designationId = assignmentForm.designationId;
+      await assignLearningCourse(payload);
+      setAssignmentForm({ courseId: '', targetType: 'EMPLOYEE', employeeId: '', employeeIds: [], departmentId: '', designationId: '', dueDate: '', priority: 'MEDIUM' });
+      setEmployeeQuery('');
       await loadData();
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Assignment failed.');
@@ -451,13 +548,56 @@ export default function LearningPage() {
             {canAuthor ? (
               <>
                 <div className="form-grid">
-                  <Select label="Course" value={assignmentForm.courseId} onChange={(v) => setAssignmentForm({ ...assignmentForm, courseId: v })} placeholder="Select course" options={courses.map((course) => ({ value: course.id, label: course.title }))} />
-                  <Select label="Employee" value={assignmentForm.employeeId} onChange={(v) => setAssignmentForm({ ...assignmentForm, employeeId: v, department: '', designation: '' })} placeholder="Optional employee" options={employees.map((employee) => ({ value: employee.id, label: fullName(employee) }))} />
-                  <TextField label="Department" value={assignmentForm.department} onChange={(v) => setAssignmentForm({ ...assignmentForm, department: v, employeeId: '', designation: '' })} />
-                  <TextField label="Designation" value={assignmentForm.designation} onChange={(v) => setAssignmentForm({ ...assignmentForm, designation: v, employeeId: '', department: '' })} />
+                  <SearchableSelect label="Course" value={assignmentForm.courseId} onChange={(v) => setAssignmentForm({ ...assignmentForm, courseId: v })} placeholder={lookupsLoading ? 'Loading courses...' : 'Search published courses'} disabled={lookupsLoading || !publishedCourses.length} options={courseOptions} help={!lookupsLoading && !publishedCourses.length ? 'No published courses found.' : undefined} />
+                  <Select
+                    label="Assign To"
+                    value={assignmentForm.targetType}
+                    onChange={(v) => setAssignmentForm({ ...assignmentForm, targetType: v as AssignmentTarget, employeeId: '', employeeIds: [], departmentId: '', designationId: '' })}
+                    options={[
+                      { value: 'EMPLOYEE', label: 'One employee' },
+                      { value: 'MULTIPLE_EMPLOYEES', label: 'Multiple employees' },
+                      { value: 'DEPARTMENT', label: 'Department' },
+                      { value: 'DESIGNATION', label: 'Designation' },
+                      { value: 'ORGANIZATION', label: 'Entire organization' },
+                    ]}
+                  />
+                  {assignmentForm.targetType === 'EMPLOYEE' && (
+                    <SearchableSelect label="Employee" value={assignmentForm.employeeId} onChange={(v) => setAssignmentForm({ ...assignmentForm, employeeId: v })} placeholder={lookupsLoading ? 'Loading employees...' : 'Search active employees'} disabled={lookupsLoading || !employees.length} options={employeeOptions} help={!lookupsLoading && !employees.length ? 'No active employees found.' : undefined} />
+                  )}
+                  {assignmentForm.targetType === 'DEPARTMENT' && (
+                    <SearchableSelect label="Department" value={assignmentForm.departmentId} onChange={(v) => setAssignmentForm({ ...assignmentForm, departmentId: v })} placeholder={lookupsLoading ? 'Loading departments...' : 'Search departments'} disabled={lookupsLoading || !departments.length} options={departmentOptions} help={!lookupsLoading && !departments.length ? 'No departments found.' : undefined} />
+                  )}
+                  {assignmentForm.targetType === 'DESIGNATION' && (
+                    <SearchableSelect label="Designation" value={assignmentForm.designationId} onChange={(v) => setAssignmentForm({ ...assignmentForm, designationId: v })} placeholder={lookupsLoading ? 'Loading designations...' : 'Search designations'} disabled={lookupsLoading || !designations.length} options={designationOptions} help={!lookupsLoading && !designations.length ? 'No designations found.' : undefined} />
+                  )}
                   <DateField label="Due Date" value={assignmentForm.dueDate} onChange={(v) => setAssignmentForm({ ...assignmentForm, dueDate: v })} />
                   <Select label="Priority" value={assignmentForm.priority} onChange={(v) => setAssignmentForm({ ...assignmentForm, priority: v })} options={[{ value: 'HIGH', label: 'High' }, { value: 'MEDIUM', label: 'Medium' }, { value: 'LOW', label: 'Low' }]} />
                 </div>
+                {assignmentForm.targetType === 'MULTIPLE_EMPLOYEES' && (
+                  <div style={{ marginTop: '1rem' }}>
+                    <SearchInput value={employeeQuery} onChange={setEmployeeQuery} placeholder="Search active employees..." />
+                    <div style={{ marginTop: '0.75rem', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', maxHeight: 260, overflowY: 'auto', padding: '0.35rem 0.75rem' }}>
+                      {lookupsLoading ? <LoadingBlock label="Loading employees..." /> : filteredEmployees.length ? filteredEmployees.map((employee) => (
+                        <label key={employee.id} className="checkbox-label" style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                          <input
+                            type="checkbox"
+                            checked={assignmentForm.employeeIds.includes(employee.id)}
+                            onChange={(event) => setAssignmentForm({
+                              ...assignmentForm,
+                              employeeIds: event.target.checked
+                                ? [...assignmentForm.employeeIds, employee.id]
+                                : assignmentForm.employeeIds.filter((id) => id !== employee.id),
+                            })}
+                          />
+                          <span>{fullName(employee)} <span style={{ color: 'var(--text-muted)' }}>{employee.employeeId ? `(${employee.employeeId})` : ''} {employee.department?.name || ''} {employee.jobTitle || ''}</span></span>
+                        </label>
+                      )) : <EmptyState title="No active employees found." />}
+                    </div>
+                  </div>
+                )}
+                {assignmentForm.targetType === 'ORGANIZATION' && (
+                  <Banner tone="info" style={{ marginTop: '1rem' }}>This will assign the selected published course to every active employee.</Banner>
+                )}
                 <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleAssign}>Assign Course</Button>
               </>
             ) : <EmptyState title="Assignments are restricted" />}

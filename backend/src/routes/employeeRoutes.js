@@ -21,6 +21,7 @@ const {
   reactivateEmployee,
   deleteEmployee,
   getDepartments,
+  getDesignations,
   updateDepartment,
   createDepartment,
   getOrgChart,
@@ -85,6 +86,9 @@ const photoUpload = multer({
 
 /** GET /api/employees/departments — List all active departments */
 router.get('/departments', authenticate, getDepartments);
+
+/** GET /api/employees/designations — List active employee designations */
+router.get('/designations', authenticate, rbacMiddleware('EMPLOYEES', 'VIEW'), getDesignations);
 
 /** POST /api/employees/departments — Create a new department (Admin only) */
 router.post('/departments', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), createDepartment);

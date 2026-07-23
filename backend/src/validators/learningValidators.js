@@ -89,8 +89,9 @@ const validateQuestionType = (type) => QUESTION_TYPES.includes(String(type || ''
 
 const validateAssignmentPayload = (payload = {}) => {
   const errors = [];
+  const assignmentType = String(payload.assignmentType || '').toUpperCase();
   if (!payload.courseId) errors.push('Course is required');
-  if (!payload.employeeId && !payload.employeeIds?.length && !payload.department && !payload.designation && payload.assignmentType !== 'COMPANY') {
+  if (!payload.employeeId && !payload.employeeIds?.length && !payload.departmentId && !payload.department && !payload.designationId && !payload.designation && !['COMPANY', 'ORGANIZATION'].includes(assignmentType)) {
     errors.push('Select at least one assignment target');
   }
   if (payload.priority && !PRIORITIES.includes(String(payload.priority).toUpperCase())) errors.push('Priority must be High, Medium, or Low');

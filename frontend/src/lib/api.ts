@@ -293,6 +293,11 @@ export const getDepartments = async () => {
   return data;
 };
 
+export const getEmployeeDesignations = async () => {
+  const { data } = await api.get('/employees/designations');
+  return data;
+};
+
 export const createDepartment = async (department: { name: string; description?: string }) => {
   const { data } = await api.post('/employees/departments', department);
   return data;
@@ -1471,6 +1476,11 @@ export const createLearningQuiz = async (courseId: string, payload: Record<strin
   return data;
 };
 
+export const submitQuizAttempt = async (quizId: string, payload: Record<string, unknown>) => {
+  const { data } = await api.post(`/learning/quizzes/${quizId}/attempts`, payload);
+  return data;
+};
+
 export const createLearningAssessment = async (courseId: string, payload: Record<string, unknown>) => {
   const { data } = await api.post(`/learning/courses/${courseId}/assessments`, payload);
   return data;
@@ -1520,6 +1530,11 @@ export const createLearningPath = async (payload: Record<string, unknown>) => {
 
 export const submitLearningFeedback = async (courseId: string, payload: Record<string, unknown>) => {
   const { data } = await api.post(`/learning/courses/${courseId}/feedback`, payload);
+  return data;
+};
+
+export const toggleCourseBookmark = async (courseId: string) => {
+  const { data } = await api.post(`/learning/courses/${courseId}/bookmark`);
   return data;
 };
 
