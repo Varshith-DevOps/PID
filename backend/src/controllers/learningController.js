@@ -40,53 +40,143 @@ const safeJson = (value, fallback) => {
 };
 
 const normalizeQuestionType = (type) => {
-  const value = normalize(type || 'MCQ');
-  if (['MULTIPLE_SELECT', 'MULTIPLE_ANSWER'].includes(value)) return 'MULTIPLE_ANSWER';
+  const value = normalize(type || 'MULTIPLE_CHOICE').replace(/\s+/g, '_');
+  if (['MCQ', 'MULTIPLE_CHOICE', 'SINGLE_CHOICE'].includes(value)) return 'MCQ';
+  if (['MULTIPLE_SELECT', 'MULTIPLE_ANSWER', 'MULTI_SELECT', 'CHECKBOX'].includes(value)) return 'MULTIPLE_ANSWER';
   if (['TRUEFALSE', 'TRUE_FALSE', 'BOOLEAN'].includes(value)) return 'TRUE_FALSE';
-  if (['ESSAY', 'DESCRIPTIVE'].includes(value)) return 'DESCRIPTIVE';
+  if (['FILL_BLANK', 'FILL_IN_THE_BLANK', 'FILL_IN_BLANK'].includes(value)) return 'FILL_BLANK';
+  if (['ESSAY', 'DESCRIPTIVE', 'LONG_ANSWER'].includes(value)) return 'DESCRIPTIVE';
   if (['SHORT', 'SHORT_ANSWER'].includes(value)) return 'SHORT_ANSWER';
   return value;
 };
 
-const isObjectiveQuestion = (type) => ['MCQ', 'MULTIPLE_ANSWER', 'TRUE_FALSE'].includes(normalizeQuestionType(type));
+const isObjectiveQuestion = (type) => ['MCQ', 'MULTIPLE_ANSWER', 'TRUE_FALSE', 'FILL_BLANK'].includes(normalizeQuestionType(type));
 
 const normalizeAnswer = (answer, type) => {
-  if (Array.isArray(answer)) return JSON.stringify(answer.map((item) => String(item).trim()).sort());
-  if (normalizeQuestionType(type) === 'TRUE_FALSE') return String(answer).trim().toLowerCase();
-  return String(answer ?? '').trim();
+  const normalizedType = normalizeQuestionType(type);
+  if (Array.isArray(answer)) return JSON.stringify(answer.map((item) => String(item).trim().toLowerCase()).sort());
+  if (normalizedType === 'TRUE_FALSE') return String(answer ?? '').trim().toLowerCase();
+  return String(answer ?? '').trim().toLowerCase();
+};
+
+const shuffleArray = (items = []) => {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+  return copy;
+};
+
+const normalizeQuestionPayload = (question = {}, index = 0) => {
+  const options = Array.isArray(question.options)
+    ? question.options
+    : parseMaybeJson(question.optionsJson ?? question.options, []);
+  return {
+    id: question.id || question.questionBankId || `q${index + 1}`,
+    questionBankId: question.questionBankId || question.id || null,
+    question: question.question || question.text || '',
+    questionType: normalizeQuestionType(question.questionType || question.type || 'MCQ'),
+    category: question.category || null,
+    difficulty: normalize(question.difficulty || 'BEGINNER'),
+    options,
+    correctAnswer: question.correctAnswer ?? question.answer ?? '',
+    explanation: question.explanation || null,
+    marks: Number(question.marks ?? question.points ?? 1),
+    negativeMarks: question.negativeMarks !== undefined && question.negativeMarks !== null ? Number(question.negativeMarks) : 0,
+    sortOrder: Number(question.sortOrder ?? index),
+  };
+};
+
+const questionBankToPayload = (row, index = 0, override = {}) => normalizeQuestionPayload({
+  ...row,
+  questionBankId: row.id,
+  options: parseMaybeJson(row.optionsJson, []),
+  marks: override.marks ?? row.marks,
+  negativeMarks: override.negativeMarks ?? row.negativeMarks ?? 0,
+  sortOrder: override.sortOrder ?? index,
+}, index);
+
+const publicQuestion = (question, shuffleOptions = false) => {
+  const options = shuffleOptions && ['MCQ', 'MULTIPLE_ANSWER'].includes(normalizeQuestionType(question.questionType))
+    ? shuffleArray(question.options || [])
+    : (question.options || []);
+  return {
+    id: question.id,
+    questionBankId: question.questionBankId,
+    question: question.question,
+    questionType: question.questionType,
+    category: question.category,
+    difficulty: question.difficulty,
+    options,
+    marks: question.marks,
+  };
 };
 
 const buildAssessmentConfig = (payload = {}) => ({
   passingScore: Number(payload.passingScore ?? payload.passingMarks ?? 70),
   timeLimitMins: payload.timeLimitMins !== undefined ? Number(payload.timeLimitMins) : payload.durationMinutes !== undefined ? Number(payload.durationMinutes) : null,
-  randomize: Boolean(payload.randomize ?? payload.questionRandomization),
-  questions: (payload.questions || []).map((question, index) => ({
-    id: question.id || `q${index + 1}`,
-    question: question.question || question.text || '',
-    questionType: normalizeQuestionType(question.questionType || question.type || 'MCQ'),
-    options: Array.isArray(question.options) ? question.options : parseMaybeJson(question.options, []),
-    correctAnswer: question.correctAnswer ?? question.answer ?? '',
-    marks: Number(question.marks ?? question.points ?? 1),
-    sortOrder: Number(question.sortOrder ?? index),
-  })),
+  randomize: Boolean(payload.randomize ?? payload.questionRandomization ?? payload.shuffleQuestions),
+  shuffleQuestions: Boolean(payload.shuffleQuestions ?? payload.randomize ?? payload.questionRandomization),
+  shuffleOptions: Boolean(payload.shuffleOptions),
+  randomQuestionSelection: Boolean(payload.randomQuestionSelection ?? payload.randomSelection),
+  negativeMarking: Boolean(payload.negativeMarking),
+  showResultsImmediately: payload.showResultsImmediately !== false,
+  lockOnExhausted: payload.lockOnExhausted !== false,
+  questionCount: payload.questionCount !== undefined ? Number(payload.questionCount) : undefined,
+  categories: payload.categories || payload.questionCategories || undefined,
+  difficulties: payload.difficulties || payload.difficultyLevels || undefined,
+  questionBankIds: payload.questionBankIds || [],
+  questions: (payload.questions || []).map(normalizeQuestionPayload),
 });
 
-const scoreAssessmentAnswers = (assessment, answers = {}) => {
+const resolveAssessmentQuestions = async (assessment) => {
   const config = parseMaybeJson(assessment.rubricJson, {});
-  const questions = Array.isArray(config.questions) ? config.questions : [];
+  let questions = [];
+  if (assessment.questions?.length) {
+    questions = assessment.questions.map((link, index) => questionBankToPayload(link.questionBank, index, link));
+  } else if (Array.isArray(config.questions)) {
+    questions = config.questions.map(normalizeQuestionPayload);
+  }
+
+  const shouldRandomSelect = assessment.randomQuestionSelection || config.randomQuestionSelection;
+  if (shouldRandomSelect) {
+    const categoryList = (config.categories || []).map((item) => String(item));
+    const difficultyList = (config.difficulties || []).map((item) => normalize(item));
+    const where = {
+      isActive: true,
+      OR: [{ courseId: assessment.courseId }, { courseId: null }],
+      companyId: assessment.companyId || undefined,
+    };
+    if (categoryList.length) where.category = { in: categoryList };
+    if (difficultyList.length) where.difficulty = { in: difficultyList };
+    const bank = await prisma.learningQuestionBank.findMany({ where });
+    const selected = shuffleArray(bank).slice(0, Number(assessment.questionCount || config.questionCount || questions.length || bank.length));
+    questions = selected.map(questionBankToPayload);
+  }
+
+  if (assessment.shuffleQuestions || config.shuffleQuestions || config.randomize) questions = shuffleArray(questions);
+  return questions;
+};
+
+const scoreAssessmentAnswers = (assessment, questions, answers = {}) => {
   const totalMarks = questions.reduce((sum, question) => sum + Number(question.marks || 0), 0) || assessment.maxMarks || 100;
   const hasDescriptive = questions.some((question) => !isObjectiveQuestion(question.questionType));
   const objectiveScore = questions.reduce((sum, question, index) => {
     if (!isObjectiveQuestion(question.questionType)) return sum;
     const key = question.id || `q${index + 1}`;
-    const submitted = normalizeAnswer(answers[key] ?? answers[index] ?? answers[String(index)], question.questionType);
+    const submittedRaw = answers[key] ?? answers[question.questionBankId] ?? answers[index] ?? answers[String(index)];
+    const submitted = normalizeAnswer(submittedRaw, question.questionType);
     const expected = normalizeAnswer(question.correctAnswer, question.questionType);
-    return submitted === expected ? sum + Number(question.marks || 0) : sum;
+    if (!submitted) return sum;
+    if (submitted === expected) return sum + Number(question.marks || 0);
+    return assessment.negativeMarking ? sum - Math.abs(Number(question.negativeMarks || 0)) : sum;
   }, 0);
-  const percentage = Math.round((objectiveScore / totalMarks) * 100);
-  const passingScore = Number(config.passingScore ?? assessment.course?.passingScore ?? 70);
+  const clampedScore = Math.max(0, objectiveScore);
+  const percentage = Math.round((clampedScore / totalMarks) * 100);
+  const passingScore = Number(assessment.passingPercentage ?? assessment.course?.passingScore ?? 70);
   return {
-    score: objectiveScore,
+    score: clampedScore,
     totalMarks,
     percentage,
     passed: !hasDescriptive && percentage >= passingScore,
@@ -146,8 +236,8 @@ const hasPassedAssessment = async (enrollment) => {
     if (!['EVALUATED', 'REVIEWED'].includes(normalize(submission.status)) || submission.marks === null || submission.marks === undefined) return false;
     const config = parseMaybeJson(submission.assessment?.rubricJson, {});
     const maxMarks = submission.assessment?.maxMarks || 100;
-    const percentage = Math.round((Number(submission.marks) / maxMarks) * 100);
-    return percentage >= Number(config.passingScore ?? submission.assessment?.course?.passingScore ?? 70);
+    const percentage = submission.percentage ?? Math.round((Number(submission.marks) / maxMarks) * 100);
+    return percentage >= Number(submission.assessment?.passingPercentage ?? config.passingScore ?? submission.assessment?.course?.passingScore ?? 70);
   });
   return {
     passed: Boolean(passedSubmission || (assessments === 0 && passedQuiz)),
@@ -752,6 +842,74 @@ const restoreCourseVersion = async (req, res) => {
   }
 };
 
+const listQuestionBank = async (req, res) => {
+  try {
+    const where = { isActive: true };
+    if (req.query.courseId) where.courseId = req.query.courseId;
+    if (req.query.category) where.category = String(req.query.category);
+    if (req.query.difficulty) where.difficulty = normalize(req.query.difficulty);
+    if (req.query.questionType) where.questionType = normalizeQuestionType(req.query.questionType);
+    if (req.user.companyId) where.companyId = req.user.companyId;
+    const questions = await prisma.learningQuestionBank.findMany({ where, orderBy: [{ category: 'asc' }, { difficulty: 'asc' }, { createdAt: 'desc' }] });
+    res.json(questions.map((question, index) => questionBankToPayload(question, index)));
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const createQuestionBankItem = async (req, res) => {
+  try {
+    if (!req.body.question?.trim()) return res.status(400).json({ error: 'Question text is required' });
+    const questionType = normalizeQuestionType(req.body.questionType || req.body.type || 'MCQ');
+    if (!validateQuestionType(questionType)) return res.status(400).json({ error: 'Unsupported question type' });
+    const item = await prisma.learningQuestionBank.create({
+      data: {
+        companyId: req.user.companyId,
+        courseId: req.params.courseId || req.body.courseId || null,
+        skillId: req.body.skillId || null,
+        category: req.body.category || null,
+        question: req.body.question.trim(),
+        questionType,
+        optionsJson: safeJson(req.body.options || [], '[]'),
+        correctAnswer: Array.isArray(req.body.correctAnswer) ? JSON.stringify(req.body.correctAnswer) : req.body.correctAnswer ?? null,
+        explanation: req.body.explanation || null,
+        difficulty: normalize(req.body.difficulty || 'BEGINNER'),
+        marks: Number(req.body.marks ?? req.body.points ?? 1),
+        negativeMarks: req.body.negativeMarks !== undefined ? Number(req.body.negativeMarks) : null,
+        tags: Array.isArray(req.body.tags) ? req.body.tags.join(',') : req.body.tags || null,
+        createdBy: req.user.email || req.user.id,
+      },
+    });
+    res.status(201).json(questionBankToPayload(item));
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const updateQuestionBankItem = async (req, res) => {
+  try {
+    const data = {};
+    if (req.body.question !== undefined) data.question = req.body.question.trim();
+    if (req.body.questionType !== undefined || req.body.type !== undefined) data.questionType = normalizeQuestionType(req.body.questionType || req.body.type);
+    if (data.questionType && !validateQuestionType(data.questionType)) return res.status(400).json({ error: 'Unsupported question type' });
+    if (req.body.courseId !== undefined) data.courseId = req.body.courseId || null;
+    if (req.body.skillId !== undefined) data.skillId = req.body.skillId || null;
+    if (req.body.category !== undefined) data.category = req.body.category || null;
+    if (req.body.options !== undefined) data.optionsJson = safeJson(req.body.options || [], '[]');
+    if (req.body.correctAnswer !== undefined) data.correctAnswer = Array.isArray(req.body.correctAnswer) ? JSON.stringify(req.body.correctAnswer) : req.body.correctAnswer ?? null;
+    if (req.body.explanation !== undefined) data.explanation = req.body.explanation || null;
+    if (req.body.difficulty !== undefined) data.difficulty = normalize(req.body.difficulty);
+    if (req.body.marks !== undefined) data.marks = Number(req.body.marks);
+    if (req.body.negativeMarks !== undefined) data.negativeMarks = req.body.negativeMarks === null ? null : Number(req.body.negativeMarks);
+    if (req.body.tags !== undefined) data.tags = Array.isArray(req.body.tags) ? req.body.tags.join(',') : req.body.tags || null;
+    if (req.body.isActive !== undefined) data.isActive = Boolean(req.body.isActive);
+    const item = await prisma.learningQuestionBank.update({ where: { id: req.params.questionId }, data });
+    res.json(questionBankToPayload(item));
+  } catch (error) {
+    res.status(error.code === 'P2025' ? 404 : 500).json({ error: error.code === 'P2025' ? 'Question not found' : 'Server error' });
+  }
+};
+
 const createQuiz = async (req, res) => {
   try {
     const invalidQuestion = (req.body.questions || []).find((q) => !validateQuestionType(q.questionType || 'MCQ'));
@@ -835,24 +993,114 @@ const submitQuiz = async (req, res) => {
 const createAssessment = async (req, res) => {
   try {
     if (!req.body.title?.trim()) return res.status(400).json({ error: 'Assessment title is required' });
+    if (!req.params.courseId && !req.body.courseId) return res.status(400).json({ error: 'Course is required' });
     const config = buildAssessmentConfig(req.body);
+    if (config.passingScore < 0 || config.passingScore > 100) return res.status(400).json({ error: 'Passing percentage must be between 0 and 100' });
+    if (config.timeLimitMins !== null && config.timeLimitMins <= 0) return res.status(400).json({ error: 'Duration must be greater than zero' });
+    if (Number(req.body.attemptLimit ?? req.body.reattempts ?? 1) <= 0) return res.status(400).json({ error: 'Maximum attempts must be greater than zero' });
     const invalidQuestion = config.questions.find((question) => !validateQuestionType(question.questionType));
     if (invalidQuestion) return res.status(400).json({ error: 'Unsupported question type' });
-    const assessment = await prisma.learningAssessment.create({
-      data: {
-        companyId: req.user.companyId,
-        courseId: req.params.courseId || req.body.courseId,
-        title: req.body.title.trim(),
-        assessmentType: normalize(req.body.assessmentType || (config.questions.length ? 'ASSESSMENT' : 'ASSIGNMENT')),
-        instructions: req.body.instructions || null,
-        rubricJson: safeJson(req.body.rubric ?? config, '{}'),
-        maxMarks: Number(req.body.maxMarks ?? req.body.maxScore ?? (config.questions.reduce((sum, question) => sum + Number(question.marks || 0), 0) || 100)),
-        dueDate: asDate(req.body.dueDate),
-        attemptLimit: Number(req.body.attemptLimit ?? req.body.reattempts ?? 1),
-        createdBy: req.user.email || req.user.id,
-      },
+    const courseId = req.params.courseId || req.body.courseId;
+    const linkedBankIds = [...new Set(config.questionBankIds.filter(Boolean))];
+    const assessment = await prisma.$transaction(async (tx) => {
+      const created = await tx.learningAssessment.create({
+        data: {
+          companyId: req.user.companyId,
+          courseId,
+          title: req.body.title.trim(),
+          assessmentType: normalize(req.body.assessmentType || 'ASSESSMENT'),
+          instructions: req.body.instructions || null,
+          rubricJson: safeJson(req.body.rubric ?? config, '{}'),
+          maxMarks: Number(req.body.maxMarks ?? req.body.maxScore ?? (config.questions.reduce((sum, question) => sum + Number(question.marks || 0), 0) || 100)),
+          passingPercentage: Number(req.body.passingPercentage ?? req.body.passingScore ?? req.body.passingMarks ?? 70),
+          timeLimitMins: config.timeLimitMins,
+          attemptLimit: Number(req.body.attemptLimit ?? req.body.reattempts ?? 1),
+          questionCount: config.questionCount,
+          randomQuestionSelection: config.randomQuestionSelection,
+          shuffleQuestions: config.shuffleQuestions,
+          shuffleOptions: config.shuffleOptions,
+          negativeMarking: config.negativeMarking,
+          showResultsImmediately: config.showResultsImmediately,
+          lockOnExhausted: config.lockOnExhausted,
+          dueDate: asDate(req.body.dueDate),
+          createdBy: req.user.email || req.user.id,
+        },
+      });
+
+      for (let index = 0; index < linkedBankIds.length; index += 1) {
+        await tx.learningAssessmentQuestion.create({
+          data: { companyId: req.user.companyId, assessmentId: created.id, questionBankId: linkedBankIds[index], sortOrder: index },
+        });
+      }
+      for (let index = 0; index < config.questions.length; index += 1) {
+        const question = config.questions[index];
+        const bankItem = await tx.learningQuestionBank.create({
+          data: {
+            companyId: req.user.companyId,
+            courseId,
+            category: question.category,
+            question: question.question,
+            questionType: question.questionType,
+            optionsJson: safeJson(question.options || [], '[]'),
+            correctAnswer: Array.isArray(question.correctAnswer) ? JSON.stringify(question.correctAnswer) : String(question.correctAnswer ?? ''),
+            explanation: question.explanation,
+            difficulty: question.difficulty,
+            marks: question.marks,
+            negativeMarks: question.negativeMarks || null,
+            createdBy: req.user.email || req.user.id,
+          },
+        });
+        await tx.learningAssessmentQuestion.create({
+          data: {
+            companyId: req.user.companyId,
+            assessmentId: created.id,
+            questionBankId: bankItem.id,
+            sortOrder: linkedBankIds.length + index,
+            marks: question.marks,
+            negativeMarks: question.negativeMarks || null,
+          },
+        });
+      }
+      return created;
     });
-    res.status(201).json(assessment);
+    const hydrated = await prisma.learningAssessment.findUnique({
+      where: { id: assessment.id },
+      include: { questions: { include: { questionBank: true }, orderBy: { sortOrder: 'asc' } }, course: true, submissions: true },
+    });
+    const questions = await resolveAssessmentQuestions(hydrated);
+    const updated = await prisma.learningAssessment.update({
+      where: { id: assessment.id },
+      data: {
+        maxMarks: Number(req.body.maxMarks ?? req.body.maxScore ?? (questions.reduce((sum, question) => sum + Number(question.marks || 0), 0) || hydrated.maxMarks)),
+        rubricJson: JSON.stringify({ ...config, questions }),
+      },
+      include: { questions: { include: { questionBank: true }, orderBy: { sortOrder: 'asc' } }, submissions: true },
+    });
+    await learningRepo.snapshotCourse({ courseId, changeSummary: `Assessment added: ${updated.title}`, createdBy: req.user.email || req.user.id, companyId: req.user.companyId });
+    res.status(201).json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const listAssessments = async (req, res) => {
+  try {
+    const where = { status: 'ACTIVE' };
+    if (req.query.courseId) where.courseId = req.query.courseId;
+    if (!isHr(req.user)) {
+      const employeeIds = await getEmployeeScopeIds(req.user);
+      where.course = { enrollments: { some: { employeeId: { in: employeeIds.length ? employeeIds : ['__no_employee_scope__'] } } } };
+    }
+    const assessments = await prisma.learningAssessment.findMany({
+      where,
+      include: {
+        course: { select: { id: true, title: true, courseCode: true } },
+        questions: { include: { questionBank: true }, orderBy: { sortOrder: 'asc' } },
+        submissions: { orderBy: { submittedAt: 'desc' }, include: { employee: { select: { firstName: true, lastName: true, employeeId: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(assessments);
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -860,17 +1108,28 @@ const createAssessment = async (req, res) => {
 
 const submitAssessment = async (req, res) => {
   try {
-    const assessment = await prisma.learningAssessment.findUnique({ where: { id: req.params.assessmentId }, include: { course: true } });
+    const assessment = await prisma.learningAssessment.findUnique({
+      where: { id: req.params.assessmentId },
+      include: { course: true, questions: { include: { questionBank: true }, orderBy: { sortOrder: 'asc' } } },
+    });
     if (!assessment) return res.status(404).json({ error: 'Assessment not found' });
     const enrollment = await findEnrollmentForLearningAction(req, assessment.courseId, req.body.enrollmentId);
     if (!enrollment) return res.status(404).json({ error: 'Enrollment not found' });
     if (!(await canAccessEmployee(req.user, enrollment.employeeId))) return res.status(403).json({ error: 'Access denied for assessment submission' });
     if (enrollment.progress < 100) return res.status(400).json({ error: 'Course not completed.' });
     const previousAttempts = await prisma.learningAssessmentSubmission.count({ where: { assessmentId: req.params.assessmentId, enrollmentId: enrollment.id } });
-    if (previousAttempts >= assessment.attemptLimit) return res.status(400).json({ error: 'Attempt limit reached' });
+    if (previousAttempts >= assessment.attemptLimit) return res.status(423).json({ error: 'Assessment locked. Attempt limit reached', locked: assessment.lockOnExhausted !== false, attemptsUsed: previousAttempts, attemptLimit: assessment.attemptLimit });
+    const completionMins = req.body.completionMins !== undefined || req.body.completionTime !== undefined ? Number(req.body.completionMins ?? req.body.completionTime) : null;
+    if (assessment.timeLimitMins && completionMins !== null && completionMins > assessment.timeLimitMins) {
+      return res.status(400).json({ error: 'Assessment time limit exceeded', timeLimitMins: assessment.timeLimitMins });
+    }
     const answers = req.body.answers || parseMaybeJson(req.body.submissionText, null) || {};
-    const scoring = scoreAssessmentAnswers(assessment, answers);
+    const questions = await resolveAssessmentQuestions(assessment);
+    const scoring = questions.length
+      ? scoreAssessmentAnswers(assessment, questions, answers)
+      : { score: 0, totalMarks: assessment.maxMarks || 100, percentage: 0, passed: false, requiresManualReview: true, passingScore: assessment.passingPercentage || 70 };
     const status = scoring.requiresManualReview ? 'PENDING_REVIEW' : scoring.passed ? 'PASS' : 'FAIL';
+    const resultVisible = assessment.showResultsImmediately !== false;
     const submission = await prisma.learningAssessmentSubmission.create({
       data: {
         companyId: req.user.companyId,
@@ -881,11 +1140,31 @@ const submitAssessment = async (req, res) => {
         submissionText: req.body.submissionText || JSON.stringify(answers),
         fileUrl: req.body.fileUrl || null,
         status,
-        marks: scoring.requiresManualReview ? null : scoring.score,
+        marks: scoring.requiresManualReview ? null : Math.round(scoring.score),
+        percentage: scoring.requiresManualReview ? null : scoring.percentage,
+        totalMarks: scoring.totalMarks,
+        autoScore: scoring.score,
+        answersJson: JSON.stringify(answers),
+        questionSnapshotJson: JSON.stringify(questions),
+        startedAt: req.body.startedAt ? new Date(req.body.startedAt) : null,
+        completionMins,
       },
     });
     if (scoring.passed && enrollment.course.certificateAvailable) await generateCertificateForEnrollment(req, enrollment.id).catch(() => null);
-    res.status(201).json({ ...submission, score: scoring.score, percentage: scoring.percentage, passed: scoring.passed, requiresManualReview: scoring.requiresManualReview, completionTime: req.body.completionTime ?? req.body.completionMins ?? null });
+    await learningRepo.logLearningAudit({ req, action: 'ASSESSMENT_SUBMITTED', entity: 'LearningAssessmentSubmission', entityId: submission.id, details: { assessmentId: assessment.id, passed: scoring.passed, requiresManualReview: scoring.requiresManualReview } });
+    res.status(201).json({
+      ...submission,
+      score: resultVisible ? scoring.score : null,
+      percentage: resultVisible ? scoring.percentage : null,
+      passed: scoring.passed,
+      requiresManualReview: scoring.requiresManualReview,
+      attemptsRemaining: Math.max(0, assessment.attemptLimit - previousAttempts - 1),
+      locked: assessment.lockOnExhausted !== false && previousAttempts + 1 >= assessment.attemptLimit,
+      passingScore: scoring.passingScore,
+      totalMarks: scoring.totalMarks,
+      questions: resultVisible ? questions.map((question) => ({ ...publicQuestion(question), correctAnswer: question.correctAnswer, explanation: question.explanation })) : undefined,
+      completionTime: completionMins,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -896,14 +1175,24 @@ const evaluateAssessment = async (req, res) => {
     if (!isManagerRole(req.user)) return res.status(403).json({ error: 'Role not authorized' });
     const existing = await prisma.learningAssessmentSubmission.findUnique({ where: { id: req.params.submissionId }, include: { assessment: { include: { course: true } }, enrollment: { include: { course: true, employee: true, certificate: true } } } });
     if (!existing) return res.status(404).json({ error: 'Submission not found' });
-    const marks = req.body.marks !== undefined ? Number(req.body.marks) : req.body.score !== undefined ? Number(req.body.score) : existing.marks;
+    const manualScore = req.body.manualScore !== undefined ? Number(req.body.manualScore) : req.body.descriptiveScore !== undefined ? Number(req.body.descriptiveScore) : null;
+    const marks = req.body.marks !== undefined
+      ? Number(req.body.marks)
+      : req.body.score !== undefined
+        ? Number(req.body.score)
+        : manualScore !== null
+          ? Number(existing.autoScore || 0) + manualScore
+          : existing.marks;
     const config = parseMaybeJson(existing.assessment.rubricJson, {});
-    const percentage = Math.round(((marks || 0) / (existing.assessment.maxMarks || 100)) * 100);
-    const passed = percentage >= Number(config.passingScore ?? existing.assessment.course.passingScore ?? 70);
+    const totalMarks = Number(existing.totalMarks || existing.assessment.maxMarks || 100);
+    const percentage = Math.round(((marks || 0) / totalMarks) * 100);
+    const passed = percentage >= Number(existing.assessment.passingPercentage ?? config.passingScore ?? existing.assessment.course.passingScore ?? 70);
     const submission = await prisma.learningAssessmentSubmission.update({
       where: { id: req.params.submissionId },
       data: {
-        marks,
+        marks: marks !== null && marks !== undefined ? Math.round(marks) : null,
+        percentage,
+        manualScore: manualScore !== null ? manualScore : existing.manualScore,
         feedback: req.body.feedback || null,
         status: passed ? 'PASS' : 'FAIL',
         reviewedBy: req.user.email || req.user.id,
@@ -914,51 +1203,6 @@ const evaluateAssessment = async (req, res) => {
     res.json({ ...submission, percentage, passed });
   } catch (error) {
     res.status(error.code === 'P2025' ? 404 : 500).json({ error: error.code === 'P2025' ? 'Submission not found' : 'Server error' });
-  }
-};
-
-const generateCourseWithAi = async (req, res) => {
-  try {
-    const inputText = String(req.body.text || req.body.rawText || '').trim();
-    const uploaded = req.file;
-    if (!inputText && !uploaded) return res.status(400).json({ error: 'Provide text or a supported file' });
-    const sourceType = normalize(req.body.sourceType || (uploaded ? uploaded.originalname.split('.').pop() : 'TEXT'));
-    const title = req.body.title?.trim() || inputText.split(/\r?\n/).find(Boolean)?.slice(0, 80) || `${sourceType} Generated Course`;
-    const sentences = inputText.split(/[.!?]\s+/).filter(Boolean).slice(0, 6);
-    const objectives = sentences.length ? sentences.slice(0, 4).map((s) => `- ${s.trim()}`).join('\n') : '- Understand the core concepts\n- Apply the learning in workplace scenarios';
-    const chapters = (sentences.length ? sentences.slice(0, 5) : ['Introduction', 'Core Concepts', 'Practice', 'Assessment']).map((text, index) => ({
-      title: text.length > 70 ? text.slice(0, 70) : text,
-      sortOrder: index,
-      lessons: { create: [{ companyId: req.user.companyId, title: `Lesson ${index + 1}`, lessonType: 'RICH_TEXT', richText: text, sortOrder: 0 }] },
-    }));
-    const course = await prisma.learningCourse.create({
-      data: {
-        companyId: req.user.companyId,
-        title,
-        description: req.body.description || (inputText ? inputText.slice(0, 240) : `Generated from ${uploaded.originalname}`),
-        category: req.body.category || 'AI GENERATED',
-        difficulty: normalize(req.body.difficulty || 'BEGINNER'),
-        durationMinutes: Number(req.body.durationMinutes ?? Math.max(30, chapters.length * 15)),
-        learningObjectives: objectives,
-        status: 'DRAFT',
-        chapters: { create: chapters.map((chapter) => ({ ...chapter, companyId: req.user.companyId })) },
-        aiGenerations: {
-          create: {
-            companyId: req.user.companyId,
-            sourceType,
-            sourceFileName: uploaded?.originalname || null,
-            inputPreview: inputText.slice(0, 1000),
-            generatedJson: JSON.stringify({ title, objectives, chapters: chapters.map(({ lessons, ...chapter }) => chapter) }),
-            requestedBy: req.user.email || req.user.id,
-          },
-        },
-      },
-      include: { chapters: { include: { lessons: true } }, aiGenerations: true },
-    });
-    await learningRepo.snapshotCourse({ courseId: course.id, changeSummary: 'AI generated draft', createdBy: req.user.email || req.user.id, companyId: req.user.companyId });
-    res.status(201).json(course);
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
   }
 };
 
@@ -1208,17 +1452,19 @@ module.exports = {
   createLearningPath,
   createLesson,
   createMaterial,
+  createQuestionBankItem,
   downloadMaterial,
   createQuiz,
   deleteCourse,
   downloadCertificate,
   evaluateAssessment,
   generateCertificate,
-  generateCourseWithAi,
   getCourse,
   getDashboard,
   getEmployeeLearningSummary,
   listLearningPaths,
+  listQuestionBank,
+  listAssessments,
   getReports,
   requestCourseApproval,
   restoreCourseVersion,
@@ -1236,4 +1482,5 @@ module.exports = {
   updateCourse,
   updateEnrollment,
   updateLessonProgress,
+  updateQuestionBankItem,
 };

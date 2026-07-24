@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { uploadLearningMaterial } = require('../middleware/learningUpload');
 const { rbacMiddleware, requireRole } = require('../rbac/rbacMiddleware');
+const { getKpiDashboard, createKpi, updateKpi, createKpa, updateKpa, listKpa, listLearningSkills } = require('../controllers/learningKpiController');
 const {
   assignCourse,
   archiveChapter,
@@ -13,17 +14,19 @@ const {
   createLearningPath,
   createLesson,
   createMaterial,
+  createQuestionBankItem,
   createQuiz,
   deleteCourse,
   downloadCertificate,
   downloadMaterial,
   evaluateAssessment,
   generateCertificate,
-  generateCourseWithAi,
   getCourse,
   getDashboard,
   getEmployeeLearningSummary,
   listLearningPaths,
+  listQuestionBank,
+  listAssessments,
   getReports,
   requestCourseApproval,
   restoreCourseVersion,
@@ -41,6 +44,7 @@ const {
   updateCourse,
   updateEnrollment,
   updateLessonProgress,
+  updateQuestionBankItem,
 } = require('../controllers/learningController');
 
 router.use(authenticate);
@@ -59,6 +63,10 @@ router.post('/courses/:id/versions/:versionId/restore', requireRole('SUPER_ADMIN
 router.post('/courses/:courseId/bookmark', rbacMiddleware('LEARNING', 'VIEW'), toggleBookmark);
 router.post('/courses/:courseId/feedback', rbacMiddleware('LEARNING', 'EDIT'), submitCourseFeedback);
 router.post('/courses/:courseId/skills', requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), rbacMiddleware('LEARNING', 'EDIT'), upsertCourseSkill);
+router.get('/question-bank', rbacMiddleware('LEARNING', 'VIEW'), listQuestionBank);
+router.post('/question-bank', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('LEARNING', 'CREATE'), createQuestionBankItem);
+router.put('/question-bank/:questionId', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('LEARNING', 'EDIT'), updateQuestionBankItem);
+router.post('/courses/:courseId/question-bank', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('LEARNING', 'CREATE'), createQuestionBankItem);
 
 router.post('/courses/:courseId/chapters', requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), rbacMiddleware('LEARNING', 'CREATE'), createChapter);
 router.put('/chapters/:id', requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), rbacMiddleware('LEARNING', 'EDIT'), updateChapter);
@@ -77,6 +85,7 @@ router.post('/courses/:courseId/quizzes', requireRole('SUPER_ADMIN', 'ADMIN'), r
 router.post('/quizzes', requireRole('SUPER_ADMIN', 'ADMIN'), rbacMiddleware('LEARNING', 'CREATE'), createQuiz);
 router.post('/quizzes/:quizId/attempts', rbacMiddleware('LEARNING', 'EDIT'), submitQuiz);
 router.post('/courses/:courseId/assessments', requireRole('SUPER_ADMIN', 'ADMIN'), rbacMiddleware('LEARNING', 'CREATE'), createAssessment);
+router.get('/assessments', rbacMiddleware('LEARNING', 'VIEW'), listAssessments);
 router.post('/assessments/:assessmentId/submissions', rbacMiddleware('LEARNING', 'EDIT'), submitAssessment);
 router.put('/assessment-submissions/:submissionId/evaluate', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('LEARNING', 'EDIT'), evaluateAssessment);
 
@@ -90,7 +99,6 @@ router.post('/enrollments', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER')
 
 router.get('/paths', rbacMiddleware('LEARNING', 'VIEW'), listLearningPaths);
 router.post('/paths', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('LEARNING', 'CREATE'), createLearningPath);
-router.post('/ai/generate-course', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('LEARNING', 'CREATE'), uploadLearningMaterial.single('file'), generateCourseWithAi);
 router.post('/approvals/:approvalId/review', requireRole('SUPER_ADMIN', 'ADMIN'), rbacMiddleware('LEARNING', 'EDIT'), reviewCourseApproval);
 
 router.post('/certificates', requireRole('SUPER_ADMIN', 'ADMIN'), rbacMiddleware('LEARNING', 'CREATE'), generateCertificate);
@@ -99,5 +107,13 @@ router.get('/certificates/:id/download', rbacMiddleware('LEARNING', 'VIEW'), dow
 
 router.get('/reports', requireRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'), rbacMiddleware('LEARNING', 'EXPORT'), getReports);
 router.get('/employees/:employeeId/summary', rbacMiddleware('LEARNING', 'VIEW'), getEmployeeLearningSummary);
+
+router.get('/kpi-dashboard', rbacMiddleware('LEARNING', 'VIEW'), getKpiDashboard);
+router.get('/kpas', rbacMiddleware('LEARNING', 'VIEW'), listKpa);
+router.get('/skills', rbacMiddleware('LEARNING', 'VIEW'), listLearningSkills);
+router.post('/kpis', requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), rbacMiddleware('LEARNING', 'CREATE'), createKpi);
+router.put('/kpis/:id', requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), rbacMiddleware('LEARNING', 'EDIT'), updateKpi);
+router.post('/kpas', requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), rbacMiddleware('LEARNING', 'CREATE'), createKpa);
+router.put('/kpas/:id', requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), rbacMiddleware('LEARNING', 'EDIT'), updateKpa);
 
 module.exports = router;

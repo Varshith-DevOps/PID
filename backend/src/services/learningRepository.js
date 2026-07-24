@@ -10,7 +10,13 @@ const includeCourseDetails = {
   feedback: true,
   aiGenerations: { orderBy: { createdAt: 'desc' } },
   quizzes: { include: { questions: { orderBy: { sortOrder: 'asc' } } } },
-  assessments: { include: { submissions: { orderBy: { submittedAt: 'desc' } } }, orderBy: { createdAt: 'desc' } },
+  assessments: {
+    include: {
+      questions: { include: { questionBank: true }, orderBy: { sortOrder: 'asc' } },
+      submissions: { orderBy: { submittedAt: 'desc' } },
+    },
+    orderBy: { createdAt: 'desc' },
+  },
   _count: { select: { enrollments: true, assignments: true, certificates: true } },
 };
 
@@ -65,6 +71,7 @@ const snapshotCourse = async ({ courseId, changeSummary, createdBy, companyId })
       chapters: { include: { lessons: true } },
       lessons: true,
       quizzes: { include: { questions: true } },
+      assessments: { include: { questions: { include: { questionBank: true } } } },
     },
   });
   if (!course) return null;

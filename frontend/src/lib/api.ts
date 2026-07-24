@@ -1486,6 +1486,46 @@ export const createLearningAssessment = async (courseId: string, payload: Record
   return data;
 };
 
+export const getLearningAssessments = async (params?: { courseId?: string }) => {
+  const { data } = await api.get('/learning/assessments', { params });
+  return Array.isArray(data) ? data : data.assessments || [];
+};
+
+export const getLearningKpiDashboard = async () => {
+  const { data } = await api.get('/learning/kpi-dashboard');
+  return data;
+};
+
+export const getLearningKpas = async () => {
+  const { data } = await api.get('/learning/kpas');
+  return Array.isArray(data) ? data : data.kpas || [];
+};
+
+export const getLearningSkills = async () => {
+  const { data } = await api.get('/learning/skills');
+  return Array.isArray(data) ? data : data.skills || [];
+};
+
+export const createLearningKpi = async (payload: Record<string, unknown>) => {
+  const { data } = await api.post('/learning/kpis', payload);
+  return data;
+};
+
+export const updateLearningKpi = async (id: string, payload: Record<string, unknown>) => {
+  const { data } = await api.put(`/learning/kpis/${id}`, payload);
+  return data;
+};
+
+export const createLearningKpa = async (payload: Record<string, unknown>) => {
+  const { data } = await api.post('/learning/kpas', payload);
+  return data;
+};
+
+export const updateLearningKpa = async (id: string, payload: Record<string, unknown>) => {
+  const { data } = await api.put(`/learning/kpas/${id}`, payload);
+  return data;
+};
+
 export const submitLearningAssessment = async (assessmentId: string, payload: Record<string, unknown>) => {
   const { data } = await api.post(`/learning/assessments/${assessmentId}/submissions`, payload);
   return data;
@@ -1508,13 +1548,6 @@ export const reviewLearningApproval = async (approvalId: string, payload: { stat
 
 export const restoreLearningVersion = async (courseId: string, versionId: string) => {
   const { data } = await api.post(`/learning/courses/${courseId}/versions/${versionId}/restore`);
-  return data;
-};
-
-export const generateLearningCourseWithAi = async (payload: Record<string, unknown> | FormData) => {
-  const { data } = await api.post('/learning/ai/generate-course', payload, payload instanceof FormData ? {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  } : undefined);
   return data;
 };
 

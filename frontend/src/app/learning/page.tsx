@@ -6,20 +6,26 @@ import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/lib/authContext';
 import {
   assignLearningCourse,
+  createLearningAssessment,
   createLearningCourse,
   createLearningPath,
   deleteLearningCourse,
   generateLearningCertificate,
-  generateLearningCourseWithAi,
   getDepartments,
   getEmployeeDesignations,
   getEmployees,
   getLearningCourses,
   getLearningDashboard,
   getLearningEnrollments,
+  getLearningAssessments,
+  getLearningKpiDashboard,
+  getLearningKpas,
+  getLearningSkills,
   getLearningPaths,
   getLearningReports,
   publishLearningCourse,
+  createLearningKpi,
+  createLearningKpa,
   updateLearningEnrollment,
 } from '@/lib/api';
 import {
@@ -75,13 +81,26 @@ type Enrollment = {
   certificate?: { id: string; certificateNumber: string; issuedAt?: string };
 };
 
+type LearningAssessment = {
+  id: string;
+  title: string;
+  courseId: string;
+  course?: { id: string; title: string; courseCode?: string };
+  instructions?: string;
+  maxMarks?: number;
+  attemptLimit?: number;
+  rubricJson?: string;
+  submissions?: any[];
+};
+
 type LookupOption = { id: string; name: string };
 type AssignmentTarget = 'EMPLOYEE' | 'MULTIPLE_EMPLOYEES' | 'DEPARTMENT' | 'DESIGNATION' | 'ORGANIZATION';
 
 const tabs: TabItem[] = [
   { key: 'analytics', label: 'Analytics' },
   { key: 'courses', label: 'Courses' },
-  { key: 'ai', label: 'AI Generator' },
+  { key: 'assessments', label: 'Assessments' },
+  { key: 'kpi', label: 'KPI & KPA' },
   { key: 'paths', label: 'Learning Paths' },
   { key: 'assignments', label: 'Assignments' },
   { key: 'progress', label: 'Progress' },
@@ -105,6 +124,14 @@ const statusOptions = [
 
 const fullName = (employee: any) => `${employee.firstName || ''} ${employee.lastName || ''}`.trim();
 const extractEmployeeArray = (response: any): any[] => Array.isArray(response) ? response : response?.employees || response?.data || [];
+const parseAssessmentConfig = (value?: string) => {
+  if (!value) return {};
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+};
 
 function SearchableSelect({ label, value, onChange, options, placeholder, disabled, help }: {
   label: string;
@@ -154,6 +181,10 @@ export default function LearningPage() {
   const [activeTab, setActiveTab] = useState('analytics');
   const [courses, setCourses] = useState<Course[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [assessments, setAssessments] = useState<LearningAssessment[]>([]);
+  const [kpiDashboard, setKpiDashboard] = useState<any>({ kpis: [], assignments: [], summary: {} });
+  const [kpas, setKpas] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
   const [paths, setPaths] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [departments, setDepartments] = useState<LookupOption[]>([]);
@@ -164,10 +195,16 @@ export default function LearningPage() {
   const [lookupsLoading, setLookupsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [query, setQuery] = useState('');
   const [employeeQuery, setEmployeeQuery] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [status, setStatus] = useState('');
+  const [assessmentForm, setAssessmentForm] = useState({ courseId: '', title: '', instructions: '', passingScore: '70', durationMinutes: '30', maxAttempts: '1', maxMarks: '100' });
+  const [assessmentQuestions, setAssessmentQuestions] = useState<any[]>([]);
+  const [assessmentQuestion, setAssessmentQuestion] = useState({ question: '', questionType: 'MCQ', options: ['', '', '', ''], correctAnswer: 'A', marks: '1' });
+  const [kpiForm, setKpiForm] = useState({ name: '', description: '', departmentId: '', designation: '', targetValue: '100', weightage: '0', kpaIds: [] as string[] });
+  const [kpaForm, setKpaForm] = useState({ name: '', description: '', skillIds: [] as string[], courseIds: [] as string[] });
   const [courseForm, setCourseForm] = useState({
     title: '',
     courseCode: '',
@@ -195,13 +232,12 @@ export default function LearningPage() {
     dueDate: '',
     priority: 'MEDIUM',
   });
-  const [aiForm, setAiForm] = useState({ title: '', category: 'AI Generated', difficulty: 'BEGINNER', text: '' });
-  const [aiFile, setAiFile] = useState<File>();
   const [pathForm, setPathForm] = useState({ name: '', description: '', courseIds: [] as string[], pathType: 'SEQUENTIAL', targetType: 'COMPANY', targetValue: '' });
 
   const canCreateCourse = ['SUPER_ADMIN', 'ADMIN'].includes(user?.role || '');
   const canAuthor = ['SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'].includes(user?.role || '');
   const canReport = ['SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER'].includes(user?.role || '');
+  const canManageKpi = ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(user?.role || '');
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
@@ -212,16 +248,24 @@ export default function LearningPage() {
     setError('');
     if (canAuthor) setLookupsLoading(true);
     try {
-      const [courseData, enrollmentData, dashboardData, pathData] = await Promise.all([
+      const [courseData, enrollmentData, dashboardData, pathData, assessmentData, kpiData, kpaData, skillData] = await Promise.all([
         getLearningCourses(),
         getLearningEnrollments(),
         getLearningDashboard(),
         getLearningPaths().catch(() => []),
+        getLearningAssessments().catch(() => []),
+        getLearningKpiDashboard().catch(() => ({ kpis: [], assignments: [], summary: {} })),
+        getLearningKpas().catch(() => []),
+        getLearningSkills().catch(() => []),
       ]);
       setCourses(courseData);
       setEnrollments(enrollmentData);
       setDashboard(dashboardData);
       setPaths(Array.isArray(pathData) ? pathData : []);
+      setAssessments(Array.isArray(assessmentData) ? assessmentData : []);
+      setKpiDashboard(kpiData || { kpis: [], assignments: [], summary: {} });
+      setKpas(Array.isArray(kpaData) ? kpaData : []);
+      setSkills(Array.isArray(skillData) ? skillData : []);
       if (canAuthor) {
         const [employeeData, departmentData, designationData] = await Promise.all([
           getEmployees({ status: 'active', limit: 500 }).catch(() => ({ employees: [] })),
@@ -289,29 +333,69 @@ export default function LearningPage() {
     }
   };
 
-  const handleGenerateAiCourse = async () => {
-    if (!aiForm.text.trim() && !aiFile) return setError('Provide source text or upload a file for AI generation.');
+  const handleAddAssessmentQuestion = () => {
+    if (!assessmentQuestion.question.trim()) return setError('Question text is required.');
+    const type = assessmentQuestion.questionType;
+    const options = type === 'TRUE_FALSE' ? ['true', 'false'] : assessmentQuestion.options.filter(Boolean);
+    if (['MCQ', 'MULTIPLE_ANSWER'].includes(type) && options.length < 2) return setError('Add at least two answer options.');
+    if (!assessmentQuestion.correctAnswer.trim()) return setError('Correct answer is required.');
+    setAssessmentQuestions([...assessmentQuestions, { ...assessmentQuestion, options, marks: Number(assessmentQuestion.marks) || 1, sortOrder: assessmentQuestions.length }]);
+    setAssessmentQuestion({ question: '', questionType: 'MCQ', options: ['', '', '', ''], correctAnswer: 'A', marks: '1' });
+  };
+
+  const handleCreateAssessment = async () => {
+    if (!assessmentForm.courseId || !assessmentForm.title.trim()) return setError('Select a course and enter an assessment title.');
+    if (!assessmentQuestions.length) return setError('Add at least one assessment question.');
     setSaving(true);
     setError('');
     try {
-      const payload = aiFile ? new FormData() : null;
-      if (payload && aiFile) {
-        payload.append('file', aiFile);
-        payload.append('title', aiForm.title);
-        payload.append('category', aiForm.category);
-        payload.append('difficulty', aiForm.difficulty);
-        payload.append('text', aiForm.text);
-      }
-      await generateLearningCourseWithAi(payload || aiForm);
-      setAiForm({ title: '', category: 'AI Generated', difficulty: 'BEGINNER', text: '' });
-      setAiFile(undefined);
+      await createLearningAssessment(assessmentForm.courseId, {
+        title: assessmentForm.title,
+        instructions: assessmentForm.instructions,
+        maxMarks: Number(assessmentForm.maxMarks) || 100,
+        passingScore: Number(assessmentForm.passingScore) || 70,
+        durationMinutes: Number(assessmentForm.durationMinutes) || 30,
+        attemptLimit: Number(assessmentForm.maxAttempts) || 1,
+        questions: assessmentQuestions.map((question) => ({
+          ...question,
+          correctAnswer: question.questionType === 'MULTIPLE_ANSWER'
+            ? question.correctAnswer.split(',').map((answer: string) => answer.trim()).filter(Boolean)
+            : question.correctAnswer,
+        })),
+      });
+      setAssessmentForm({ courseId: '', title: '', instructions: '', passingScore: '70', durationMinutes: '30', maxAttempts: '1', maxMarks: '100' });
+      setAssessmentQuestions([]);
+      setSuccess('Assessment created successfully.');
       await loadData();
-      setActiveTab('courses');
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'AI course generation failed.');
+      setError(err?.response?.data?.error || 'Assessment creation failed.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCreateKpa = async () => {
+    if (!kpaForm.name.trim()) return setError('KPA name is required.');
+    setSaving(true);
+    try {
+      await createLearningKpa(kpaForm);
+      setKpaForm({ name: '', description: '', skillIds: [], courseIds: [] });
+      setSuccess('KPA configured successfully.');
+      await loadData();
+    } catch (err: any) { setError(err?.response?.data?.error || 'KPA creation failed.'); }
+    finally { setSaving(false); }
+  };
+
+  const handleCreateKpi = async () => {
+    if (!kpiForm.name.trim()) return setError('KPI name is required.');
+    setSaving(true);
+    try {
+      await createLearningKpi({ ...kpiForm, targetValue: Number(kpiForm.targetValue), weightage: Number(kpiForm.weightage) });
+      setKpiForm({ name: '', description: '', departmentId: '', designation: '', targetValue: '100', weightage: '0', kpaIds: [] });
+      setSuccess('KPI configured successfully.');
+      await loadData();
+    } catch (err: any) { setError(err?.response?.data?.error || 'KPI creation failed.'); }
+    finally { setSaving(false); }
   };
 
   const handleCreatePath = async () => {
@@ -409,11 +493,12 @@ export default function LearningPage() {
       <main className="main-content">
         <PageHeader
           title="Enterprise Learning Management"
-          subtitle="AI course generation, learning paths, gated progress, approvals, certificates, skills, and analytics"
+          subtitle="Courses, learning paths, gated progress, approvals, certificates, skills, and analytics"
           icon={<div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #0f766e, #2563eb)' }}>LM</div>}
         />
 
         {error && <Banner tone="danger" title={error} action={<Button size="sm" variant="ghost" onClick={() => setError('')}>Dismiss</Button>} />}
+        {success && <Banner tone="success" title={success} action={<Button size="sm" variant="ghost" onClick={() => setSuccess('')}>Dismiss</Button>} />}
         <Tabs items={tabs.filter((tab) => canReport || tab.key !== 'reports')} value={activeTab} onChange={setActiveTab} style={{ margin: '1rem 0 1.25rem' }} />
 
         {activeTab === 'analytics' && (
@@ -448,6 +533,54 @@ export default function LearningPage() {
               </Card>
             </div>
           </>
+        )}
+
+        {activeTab === 'assessments' && (
+          <div className="grid grid-2">
+            {canCreateCourse && (
+              <Card title="Create Assessment">
+                <div className="form-grid">
+                  <Select label="Course" value={assessmentForm.courseId} onChange={(v) => setAssessmentForm({ ...assessmentForm, courseId: v })} options={publishedCourses.map((course) => ({ value: course.id, label: course.title }))} />
+                  <TextField label="Assessment Title" value={assessmentForm.title} onChange={(v) => setAssessmentForm({ ...assessmentForm, title: v })} />
+                  <TextField label="Passing Percentage" value={assessmentForm.passingScore} restrict="digits" onChange={(v) => setAssessmentForm({ ...assessmentForm, passingScore: v })} />
+                  <TextField label="Duration (minutes)" value={assessmentForm.durationMinutes} restrict="digits" onChange={(v) => setAssessmentForm({ ...assessmentForm, durationMinutes: v })} />
+                  <TextField label="Maximum Attempts" value={assessmentForm.maxAttempts} restrict="digits" onChange={(v) => setAssessmentForm({ ...assessmentForm, maxAttempts: v })} />
+                  <TextField label="Maximum Marks" value={assessmentForm.maxMarks} restrict="digits" onChange={(v) => setAssessmentForm({ ...assessmentForm, maxMarks: v })} />
+                  <div style={{ gridColumn: '1 / -1' }}><Textarea label="Instructions" value={assessmentForm.instructions} onChange={(v) => setAssessmentForm({ ...assessmentForm, instructions: v })} /></div>
+                </div>
+                <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
+                  <h4>Add Question</h4>
+                  <div className="form-grid">
+                    <div style={{ gridColumn: '1 / -1' }}><Textarea label="Question" value={assessmentQuestion.question} onChange={(v) => setAssessmentQuestion({ ...assessmentQuestion, question: v })} /></div>
+                    <Select label="Question Type" value={assessmentQuestion.questionType} onChange={(v) => setAssessmentQuestion({ ...assessmentQuestion, questionType: v, correctAnswer: v === 'TRUE_FALSE' ? 'true' : 'A' })} options={[{ value: 'MCQ', label: 'MCQ' }, { value: 'TRUE_FALSE', label: 'True/False' }, { value: 'MULTIPLE_ANSWER', label: 'Multiple Select' }, { value: 'SHORT_ANSWER', label: 'Short Answer' }]} />
+                    <TextField label="Marks" value={assessmentQuestion.marks} restrict="digits" onChange={(v) => setAssessmentQuestion({ ...assessmentQuestion, marks: v })} />
+                    {['MCQ', 'MULTIPLE_ANSWER'].includes(assessmentQuestion.questionType) && assessmentQuestion.options.map((option, index) => (
+                      <TextField key={index} label={`Option ${String.fromCharCode(65 + index)}`} value={option} onChange={(v) => setAssessmentQuestion({ ...assessmentQuestion, options: assessmentQuestion.options.map((item, itemIndex) => itemIndex === index ? v : item) })} />
+                    ))}
+                    {assessmentQuestion.questionType === 'TRUE_FALSE' && <Select label="Correct Answer" value={assessmentQuestion.correctAnswer} onChange={(v) => setAssessmentQuestion({ ...assessmentQuestion, correctAnswer: v })} options={[{ value: 'true', label: 'True' }, { value: 'false', label: 'False' }]} />}
+                    {assessmentQuestion.questionType !== 'TRUE_FALSE' && <TextField label="Correct Answer" value={assessmentQuestion.correctAnswer} onChange={(v) => setAssessmentQuestion({ ...assessmentQuestion, correctAnswer: v })} help={assessmentQuestion.questionType === 'MULTIPLE_ANSWER' ? 'Use comma-separated option letters, for example A,B.' : undefined} />}
+                  </div>
+                  <Button size="sm" variant="ghost" style={{ marginTop: '0.75rem' }} onClick={handleAddAssessmentQuestion}>Add Question ({assessmentQuestions.length})</Button>
+                  {assessmentQuestions.length > 0 && <div style={{ marginTop: '0.75rem' }}>{assessmentQuestions.map((question, index) => <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.5rem 0', borderBottom: '1px solid var(--border-subtle)' }}><span>Q{index + 1}: {question.question}</span><Button size="sm" variant="danger" onClick={() => setAssessmentQuestions(assessmentQuestions.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button></div>)}</div>}
+                </div>
+                <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateAssessment}>Create Assessment</Button>
+              </Card>
+            )}
+            <Card title="Assessment History" padded={false} style={{ gridColumn: canCreateCourse ? undefined : '1 / -1' }}>
+              <DataTable
+                columns={[
+                  { key: 'assessment', header: 'Assessment', render: (row: LearningAssessment) => <div><strong>{row.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{row.course?.title || '-'}</div></div> },
+                  { key: 'settings', header: 'Settings', render: (row: LearningAssessment) => { const config = parseAssessmentConfig(row.rubricJson); return `${config.passingScore || 70}% | ${config.timeLimitMins || 0} min | ${row.attemptLimit || 1} attempts`; } },
+                  { key: 'attempts', header: 'Attempts', render: (row: LearningAssessment) => row.submissions?.length || 0 },
+                  { key: 'action', header: '', align: 'right', render: (row: LearningAssessment) => <Button size="sm" variant="ghost" href={`/learning/courses/${row.courseId}?tab=assessments`}>Open Assessment</Button> },
+                ]}
+                rows={assessments}
+                rowKey={(row: LearningAssessment) => row.id}
+                emptyTitle="No assessments configured"
+              />
+              {assessments.some((assessment) => assessment.submissions?.length) && <div style={{ padding: '1rem 1.25rem' }}><h4>Recent Attempts</h4>{assessments.flatMap((assessment) => (assessment.submissions || []).slice(0, 10).map((submission: any) => <div key={submission.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.5rem 0', borderBottom: '1px solid var(--border-subtle)' }}><span>{assessment.title} | {submission.employee ? `${submission.employee.firstName} ${submission.employee.lastName}` : 'Employee'}</span><span><StatusChip status={submission.status} /> {submission.marks ?? 'Pending'}</span></div>))}</div>}
+            </Card>
+          </div>
         )}
 
         {activeTab === 'courses' && (
@@ -485,33 +618,6 @@ export default function LearningPage() {
           </div>
         )}
 
-        {activeTab === 'ai' && (
-          <div className="grid grid-2">
-            <Card title="AI Course Generator">
-              {canAuthor ? (
-                <>
-                  <div className="form-grid">
-                    <TextField label="Draft Title" value={aiForm.title} onChange={(v) => setAiForm({ ...aiForm, title: v })} />
-                    <TextField label="Category" value={aiForm.category} onChange={(v) => setAiForm({ ...aiForm, category: v })} />
-                    <Select label="Difficulty" value={aiForm.difficulty} onChange={(v) => setAiForm({ ...aiForm, difficulty: v })} options={difficultyOptions.slice(1)} />
-                    <input type="file" accept=".pdf,.docx,.ppt,.pptx,.txt" onChange={(event) => setAiFile(event.target.files?.[0])} />
-                    <div style={{ gridColumn: '1 / -1' }}><Textarea label="Source Text" value={aiForm.text} onChange={(v) => setAiForm({ ...aiForm, text: v })} /></div>
-                  </div>
-                  <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleGenerateAiCourse}>Generate Draft Course</Button>
-                </>
-              ) : <EmptyState title="AI generation is restricted" />}
-            </Card>
-            <Card title="Generated Drafts">
-              {courses.filter((course) => course.category === 'AI Generated' || course.category === 'AI GENERATED').length ? courses.filter((course) => course.category === 'AI Generated' || course.category === 'AI GENERATED').map((course) => (
-                <div key={course.id} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-                  <div><strong>{course.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{course.status}</div></div>
-                  <Button size="sm" href={`/learning/courses/${course.id}`}>Edit</Button>
-                </div>
-              )) : <EmptyState title="No AI drafts yet" />}
-            </Card>
-          </div>
-        )}
-
         {activeTab === 'paths' && (
           <div className="grid grid-2">
             <Card title="Create Learning Path">
@@ -531,6 +637,50 @@ export default function LearningPage() {
                         {course.title}
                       </label>
                     ))}
+
+                    {activeTab === 'kpi' && (
+                      <div className="grid grid-2">
+                        {canManageKpi && (
+                          <>
+                            <Card title="Configure KPI">
+                              <div className="form-grid">
+                                <TextField label="KPI Name" value={kpiForm.name} onChange={(v) => setKpiForm({ ...kpiForm, name: v })} />
+                                <Select label="Department" value={kpiForm.departmentId} onChange={(v) => setKpiForm({ ...kpiForm, departmentId: v })} options={[{ value: '', label: 'All departments' }, ...departments.map((item) => ({ value: item.id, label: item.name }))]} />
+                                <TextField label="Designation" value={kpiForm.designation} onChange={(v) => setKpiForm({ ...kpiForm, designation: v })} />
+                                <TextField label="Target Value" value={kpiForm.targetValue} restrict="decimal" onChange={(v) => setKpiForm({ ...kpiForm, targetValue: v })} />
+                                <TextField label="Weightage" value={kpiForm.weightage} restrict="decimal" onChange={(v) => setKpiForm({ ...kpiForm, weightage: v })} />
+                                <div style={{ gridColumn: '1 / -1' }}><Textarea label="Description" value={kpiForm.description} onChange={(v) => setKpiForm({ ...kpiForm, description: v })} /></div>
+                              </div>
+                              <div style={{ marginTop: '0.75rem' }}><strong>Map to KPAs</strong>{kpas.length ? kpas.map((kpa) => <label key={kpa.id} className="checkbox-label"><input type="checkbox" checked={kpiForm.kpaIds.includes(kpa.id)} onChange={(event) => setKpiForm({ ...kpiForm, kpaIds: event.target.checked ? [...kpiForm.kpaIds, kpa.id] : kpiForm.kpaIds.filter((id) => id !== kpa.id) })} />{kpa.name}</label>) : <p style={{ color: 'var(--text-muted)' }}>Create a KPA first.</p>}</div>
+                              <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateKpi}>Save KPI</Button>
+                            </Card>
+                            <Card title="Configure KPA">
+                              <div className="form-grid">
+                                <TextField label="KPA Name" value={kpaForm.name} onChange={(v) => setKpaForm({ ...kpaForm, name: v })} />
+                                <div style={{ gridColumn: '1 / -1' }}><Textarea label="Description" value={kpaForm.description} onChange={(v) => setKpaForm({ ...kpaForm, description: v })} /></div>
+                              </div>
+                              <strong>Map to Courses</strong>
+                              {courses.map((course) => <label key={course.id} className="checkbox-label"><input type="checkbox" checked={kpaForm.courseIds.includes(course.id)} onChange={(event) => setKpaForm({ ...kpaForm, courseIds: event.target.checked ? [...kpaForm.courseIds, course.id] : kpaForm.courseIds.filter((id) => id !== course.id) })} />{course.title}</label>)}
+                              <strong style={{ display: 'block', marginTop: '0.75rem' }}>Map to Skills</strong>
+                              {skills.length ? skills.map((skill) => <label key={skill.id} className="checkbox-label"><input type="checkbox" checked={kpaForm.skillIds.includes(skill.id)} onChange={(event) => setKpaForm({ ...kpaForm, skillIds: event.target.checked ? [...kpaForm.skillIds, skill.id] : kpaForm.skillIds.filter((id) => id !== skill.id) })} />{skill.name}</label>) : <p style={{ color: 'var(--text-muted)' }}>No Learning skills configured yet.</p>}
+                              <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateKpa}>Save KPA</Button>
+                            </Card>
+                          </>
+                        )}
+                        <Card title="KPI Performance Dashboard" style={{ gridColumn: canManageKpi ? '1 / -1' : undefined }}>
+                          <div className="stat-grid">
+                            <StatCard label="Configured KPIs" value={kpiDashboard.summary?.totalKpis || 0} />
+                            <StatCard label="Employees Inherited" value={kpiDashboard.summary?.assignedEmployees || 0} />
+                            <StatCard label="Average KPI Score" value={`${kpiDashboard.summary?.averageScore || 0}%`} />
+                            <StatCard label="KPI Completion" value={`${kpiDashboard.summary?.averageCompletion || 0}%`} />
+                          </div>
+                          {kpiDashboard.assignments?.length ? <DataTable columns={[{ key: 'employee', header: 'Employee', render: (row: any) => row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '-' }, { key: 'kpi', header: 'KPI', render: (row: any) => row.kpi?.name || '-' }, { key: 'department', header: 'Department', render: (row: any) => row.employee?.department?.name || row.kpi?.department?.name || 'All' }, { key: 'completion', header: 'Completion', render: (row: any) => <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ProgressBar value={row.completionPct || 0} height={6} /><span>{Math.round(row.completionPct || 0)}%</span></div> }, { key: 'score', header: 'Score', render: (row: any) => `${Math.round(row.score || 0)}%` }]} rows={kpiDashboard.assignments} rowKey={(row: any) => row.id} emptyTitle="No KPI assignments" /> : <EmptyState title="No KPI performance data" />}
+                        </Card>
+                        <Card title="KPA Catalogue" style={{ gridColumn: canManageKpi ? '1 / -1' : undefined }}>
+                          {kpas.length ? kpas.map((kpa) => <div key={kpa.id} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)' }}><strong>{kpa.name}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{(kpa.courses || []).map((item: any) => item.course?.title).filter(Boolean).join(', ') || 'No courses mapped'}{(kpa.skills || []).length ? ` | ${(kpa.skills || []).map((item: any) => item.skill?.name).filter(Boolean).join(', ')}` : ''}</div><div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Version {kpa.version || 1}</div></div>) : <EmptyState title="No KPAs configured" />}
+                        </Card>
+                      </div>
+                    )}
                   </div>
                   <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreatePath}>Create Path</Button>
                 </>

@@ -90,6 +90,7 @@ model Department {
   description String?
   isActive    Boolean      @default(true)
   employees   Employee[]
+  kpis        KpiDefinition[]
   jobOpenings JobOpening[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -199,6 +200,7 @@ model Employee {
   employeeLearningSkills  EmployeeLearningSkill[]
   learningFeedback        LearningFeedback[]
   learningAssessmentSubmissions LearningAssessmentSubmission[]
+  kpiAssignments           EmployeeKpiAssignment[]
   helpdeskTickets         HelpdeskTicket[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
@@ -1642,6 +1644,7 @@ model LearningCourse {
   pathCourses          LearningPathCourse[]
   questionBank         LearningQuestionBank[]
   assessments          LearningAssessment[]
+  kpaCourses           KpaCourse[]
   courseSkills         LearningCourseSkill[]
   aiGenerations        LearningAiGeneration[]
   feedback             LearningFeedback[]
@@ -2054,6 +2057,7 @@ model LearningQuestionBank {
   courseId      String?
   skill         LearningSkill?  @relation(fields: [skillId], references: [id], onDelete: SetNull)
   skillId       String?
+  category      String?
   question      String
   questionType  String          @default("MCQ")
   optionsJson   String          @default("[]")
@@ -2063,34 +2067,66 @@ model LearningQuestionBank {
   marks         Int             @default(1)
   negativeMarks Float?
   tags          String?
+  isActive      Boolean         @default(true)
   createdBy     String?
+  assessments   LearningAssessmentQuestion[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   @@index([companyId, courseId])
+  @@index([companyId, category, difficulty])
   @@map("learning_question_bank")
 }
 
 model LearningAssessment {
-  id           String         @id @default(uuid())
-  companyId    String?
-  course       LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  courseId     String
-  title        String
+  id                      String         @id @default(uuid())
+  companyId               String?
+  course                  LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId                String
+  title                   String
   assessmentType String       @default("ASSIGNMENT")
-  instructions String?
-  rubricJson   String         @default("[]")
-  maxMarks     Int            @default(100)
-  dueDate      DateTime?
-  attemptLimit Int            @default(1)
-  status       String         @default("ACTIVE")
-  createdBy    String?
-  submissions  LearningAssessmentSubmission[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  instructions            String?
+  rubricJson              String         @default("[]")
+  maxMarks                Int            @default(100)
+  passingPercentage       Int            @default(70)
+  timeLimitMins           Int?
+  attemptLimit            Int            @default(1)
+  questionCount           Int?
+  randomQuestionSelection Boolean        @default(false)
+  shuffleQuestions        Boolean        @default(false)
+  shuffleOptions          Boolean        @default(false)
+  negativeMarking         Boolean        @default(false)
+  showResultsImmediately  Boolean        @default(true)
+  lockOnExhausted         Boolean        @default(true)
+  dueDate                 DateTime?
+  status                  String         @default("ACTIVE")
+  createdBy               String?
+  questions               LearningAssessmentQuestion[]
+  submissions             LearningAssessmentSubmission[]
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
   @@index([companyId, courseId])
   @@map("learning_assessments")
+}
+
+model LearningAssessmentQuestion {
+  id             String               @id @default(uuid())
+  companyId      String?
+  assessment     LearningAssessment   @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentId   String
+  questionBank   LearningQuestionBank @relation(fields: [questionBankId], references: [id], onDelete: Cascade)
+  questionBankId String
+  sortOrder      Int                  @default(0)
+  marks          Int?
+  negativeMarks  Float?
+  isRequired     Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+
+  @@unique([assessmentId, questionBankId])
+  @@index([companyId])
+  @@index([questionBankId])
+  @@map("learning_assessment_questions")
 }
 
 model LearningAssessmentSubmission {
@@ -2107,9 +2143,17 @@ model LearningAssessmentSubmission {
   fileUrl        String?
   status         String             @default("SUBMITTED")
   marks          Int?
+  percentage     Float?
+  totalMarks     Float?
+  autoScore      Float?
+  manualScore    Float?
+  answersJson    String?
+  questionSnapshotJson String?
   feedback       String?
   reviewedBy     String?
+  startedAt      DateTime?
   submittedAt    DateTime           @default(now())
+  completionMins Int?
   reviewedAt     DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -2130,6 +2174,7 @@ model LearningSkill {
   courseSkills   LearningCourseSkill[]
   employeeSkills EmployeeLearningSkill[]
   questionBank   LearningQuestionBank[]
+  kpaSkills      KpaSkill[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -2275,6 +2320,125 @@ model LearningAuditLog {
 
   @@index([companyId])
   @@map("learning_audit_logs")
+}
+
+model KpiDefinition {
+  id             String   @id @default(uuid())
+  companyId      String?
+  name           String
+  description    String?
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation    String?
+  targetValue    Float      @default(100)
+  unit           String     @default("PERCENTAGE")
+  weightage      Float      @default(0)
+  status         String     @default("ACTIVE")
+  version        Int        @default(1)
+  createdBy      String?
+  assignments    EmployeeKpiAssignment[]
+  versions       KpiVersion[]
+  kpas           KpiKpa[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([companyId, status])
+  @@index([departmentId, designation])
+  @@map("kpi_definitions")
+}
+
+model KpiVersion {
+  id           String        @id @default(uuid())
+  kpiId        String
+  kpi          KpiDefinition @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+  version      Int
+  snapshotJson String
+  changedBy    String?
+  createdAt    DateTime      @default(now())
+
+  @@unique([kpiId, version])
+  @@map("kpi_versions")
+}
+
+model KpaDefinition {
+  id          String   @id @default(uuid())
+  companyId   String?
+  name        String
+  description String?
+  status      String   @default("ACTIVE")
+  version     Int      @default(1)
+  createdBy   String?
+  skills      KpaSkill[]
+  courses     KpaCourse[]
+  kpis        KpiKpa[]
+  versions    KpaVersion[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@map("kpa_definitions")
+}
+
+model KpaVersion {
+  id           String        @id @default(uuid())
+  kpaId        String
+  kpa          KpaDefinition @relation(fields: [kpaId], references: [id], onDelete: Cascade)
+  version      Int
+  snapshotJson String
+  changedBy    String?
+  createdAt    DateTime      @default(now())
+
+  @@unique([kpaId, version])
+  @@map("kpa_versions")
+}
+
+model KpaSkill {
+  id        String        @id @default(uuid())
+  kpaId    String
+  kpa       KpaDefinition @relation(fields: [kpaId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     LearningSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  @@unique([kpaId, skillId])
+  @@map("kpa_skills")
+}
+
+model KpaCourse {
+  id        String        @id @default(uuid())
+  kpaId    String
+  kpa       KpaDefinition @relation(fields: [kpaId], references: [id], onDelete: Cascade)
+  courseId String
+  course   LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  @@unique([kpaId, courseId])
+  @@map("kpa_courses")
+}
+
+model KpiKpa {
+  id    String        @id @default(uuid())
+  kpiId String
+  kpi   KpiDefinition @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+  kpaId String
+  kpa   KpaDefinition @relation(fields: [kpaId], references: [id], onDelete: Cascade)
+  @@unique([kpiId, kpaId])
+  @@map("kpi_kpas")
+}
+
+model EmployeeKpiAssignment {
+  id             String        @id @default(uuid())
+  companyId      String?
+  employeeId     String
+  employee       Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kpiId          String
+  kpi            KpiDefinition @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+  completionPct  Float         @default(0)
+  score          Float         @default(0)
+  inherited      Boolean       @default(true)
+  lastCalculated DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([employeeId, kpiId])
+  @@index([companyId, employeeId])
+  @@map("employee_kpi_assignments")
 }
 
 model HelpdeskTicket {
