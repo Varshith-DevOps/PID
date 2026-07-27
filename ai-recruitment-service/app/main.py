@@ -33,14 +33,54 @@ async def health() -> dict:
     }
 
 
+import logging
+import traceback
+
+logger = logging.getLogger(__name__)
+
+
 @app.post("/api/v1/screenings", dependencies=[Depends(require_service_auth)])
 async def create_screening(request: ScreeningRequest) -> dict:
     settings = get_settings()
+    
+    # Verify LLM API key configuration. Fall back to deterministic screening if enabled but missing API key.
+    provider = settings.llm_provider.lower() if settings.llm_provider else "disabled"
+    if provider != "disabled":
+        has_key = True
+        if provider == "openai" and not settings.openai_api_key:
+            has_key = False
+        elif provider == "anthropic" and not settings.anthropic_api_key:
+            has_key = False
+        elif provider == "google" and not settings.google_api_key:
+            has_key = False
+        elif provider == "azure" and not settings.azure_openai_api_key:
+            has_key = False
+        
+        if not has_key:
+            logger.warning(
+                "LLM provider '%s' is enabled, but its API key is not configured. "
+                "Automatically falling back to deterministic/rule-based screening.",
+                provider
+            )
+            settings.llm_provider = "disabled"
+
     hrms = HrmsClient(settings)
     try:
         return await run_candidate_screening(request, settings, hrms)
     except HrmsClientError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)}) from exc
+        logger.exception("HrmsClientError occurred during candidate screening")
+        status_code = 503 if exc.code == "HRMS_API_UNAVAILABLE" else 400
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": exc.code, "message": str(exc)}
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unhandled exception occurred during candidate screening")
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "AI_SCREENING_FAILED", "message": f"An unexpected error occurred: {str(exc)}"}
+        ) from exc
+
 
 
 @app.get("/api/v1/screenings/{workflow_id}", dependencies=[Depends(require_service_auth)])
