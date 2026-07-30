@@ -14,6 +14,7 @@ import {
   createLearningQuiz,
   evaluateLearningAssessment,
   generateLearningCertificate,
+  downloadLearningCertificate,
   getLearningCourse,
   getLearningEnrollments,
   publishLearningCourse,
@@ -559,6 +560,29 @@ export default function CourseWorkspacePage() {
     }
   };
 
+  const handleDownloadCertificate = async () => {
+    if (!enrollment?.certificate?.id) return setError('Certificate not found.');
+    setSaving(true);
+    setError('');
+    try {
+      const blob = await downloadLearningCertificate(enrollment.certificate.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${enrollment.certificate.certificateNumber || 'certificate'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      setSuccess('Certificate downloaded successfully!');
+    } catch (err: any) {
+      console.error(err);
+      setError('Failed to download certificate PDF.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading && !course) {
     return (
       <div className="app-layout">
@@ -788,21 +812,80 @@ export default function CourseWorkspacePage() {
                     </Button>
                   </div>
 
-                  {(selectedLesson.contentType === 'VIDEO' || selectedLesson.lessonType === 'VIDEO') && (selectedLesson.contentUrl || selectedLesson.embedUrl) ? (
-                    <div style={{ marginBottom: '1.5rem', background: '#000', borderRadius: '8px', padding: '1rem', textAlign: 'center' }}>
-                      <p style={{ color: '#fff', margin: '0 0 0.5rem 0' }}>Video Media Player</p>
-                      <a href={selectedLesson.contentUrl || selectedLesson.embedUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>
-                        Open External Video Link ({selectedLesson.contentUrl || selectedLesson.embedUrl})
-                      </a>
-                    </div>
-                  ) : selectedLesson.contentUrl ? (
-                    <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                      <p style={{ margin: '0 0 0.5rem 0' }}>External Attachment / Document</p>
-                      <a href={selectedLesson.contentUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-primary)' }}>
-                        Download / View Document Source
-                      </a>
-                    </div>
-                  ) : null}
+                  {(selectedLesson.contentType === 'VIDEO' || selectedLesson.lessonType === 'VIDEO') && (selectedLesson.contentUrl || selectedLesson.embedUrl) ? (() => {
+                    const url = selectedLesson.contentUrl || selectedLesson.embedUrl || '';
+                    const youtubeMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                    if (youtubeMatch) {
+                      return (
+                        <div style={{ marginBottom: '1.5rem', borderRadius: '8px', overflow: 'hidden', position: 'relative', paddingTop: '56.25%', background: '#000' }}>
+                          <iframe
+                            src={`https://www.youtube.com/embed/${youtubeMatch[1]}?rel=0`}
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            title={selectedLesson.title}
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <div style={{ marginBottom: '1.5rem', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
+                        <video
+                          controls
+                          style={{ width: '100%', maxHeight: '480px', display: 'block' }}
+                          src={url}
+                        >
+                          Your browser does not support the video tag.
+                        </video>
+                      </div>
+                    );
+                  })() : selectedLesson.contentUrl ? (() => {
+                    const url = selectedLesson.contentUrl || '';
+                    const isPdf = url.toLowerCase().endsWith('.pdf');
+                    const isSlides = url.toLowerCase().match(/\.(pptx?|key|odp)$/);
+                    if (isPdf) {
+                      return (
+                        <div style={{ marginBottom: '1.5rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                          <iframe
+                            src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+                            style={{ width: '100%', height: '600px', border: 'none' }}
+                            title={`PDF: ${selectedLesson.title}`}
+                          />
+                          <div style={{ padding: '0.5rem 1rem', background: 'var(--bg-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>PDF Document</span>
+                            <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-primary)', fontSize: '0.75rem' }}>
+                              Open in New Tab ↗
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (isSlides) {
+                      return (
+                        <div style={{ marginBottom: '1.5rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                          <iframe
+                            src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+                            style={{ width: '100%', height: '500px', border: 'none' }}
+                            title={`Slides: ${selectedLesson.title}`}
+                          />
+                          <div style={{ padding: '0.5rem 1rem', background: 'var(--bg-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Slide Deck</span>
+                            <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-primary)', fontSize: '0.75rem' }}>
+                              Download ↗
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
+                        <p style={{ margin: '0 0 0.5rem 0' }}>External Attachment / Document</p>
+                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-primary)' }}>
+                          Download / View Document Source ↗
+                        </a>
+                      </div>
+                    );
+                  })() : null}
 
                   <div style={{ lineHeight: '1.6', fontSize: '0.95rem', whiteSpace: 'pre-wrap', minHeight: '180px' }}>
                     {selectedLesson.contentBody || selectedLesson.richText || 'No text content provided for this lesson.'}
@@ -1264,7 +1347,7 @@ export default function CourseWorkspacePage() {
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <h2 style={{ color: '#0f766e', margin: '0 0 0.5rem 0' }}>Certificate Issued!</h2>
                 <p>Certificate Number: <strong>{enrollment.certificate.certificateNumber}</strong></p>
-                <Button variant="success" href={`/api/learning/certificates/${enrollment.certificate.id}/download`}>
+                <Button variant="success" loading={saving} onClick={handleDownloadCertificate}>
                   Download Official Certificate (PDF)
                 </Button>
               </div>

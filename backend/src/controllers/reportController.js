@@ -1165,11 +1165,83 @@ const exportReport = async (req, res) => {
   }
 };
 
+const exportEpfEcrChallan = async (req, res) => {
+  try {
+    const { runId } = req.params;
+    
+    // Find payroll run and its records
+    const payrollRun = await prisma.payrollRun.findFirst({
+      where: { id: runId },
+      include: {
+        records: {
+          include: {
+            employee: {
+              include: {
+                pfDetails: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!payrollRun) return res.status(404).json({ error: 'Payroll run not found.' });
+
+    // Build the ECR file rows
+    const rows = [];
+    payrollRun.records.forEach((rec) => {
+      const emp = rec.employee;
+      const uan = emp.pfDetails?.uanNumber;
+      if (!uan) return; // Skip employees without UAN
+
+      const memberName = `${emp.firstName} ${emp.lastName}`.substring(0, 80).toUpperCase();
+      const grossWages = Math.round(rec.grossEarnings || 0);
+      
+      const basicDa = rec.basicSalary + (rec.da || 0);
+      const epfWages = Math.min(basicDa, 15000);
+      const epsWages = Math.min(basicDa, 15000);
+      const edliWages = Math.min(basicDa, 15000);
+
+      const eeShare = Math.round(rec.pf || (epfWages * 0.12));
+      const erShareEps = Math.round(epsWages * 0.0833);
+      const erShareDiff = Math.max(0, eeShare - erShareEps);
+      const ncpDays = rec.unpaidLeaveDays || 0;
+      const refundAdvances = 0;
+
+      const line = [
+        uan,
+        memberName,
+        grossWages,
+        epfWages,
+        epsWages,
+        edliWages,
+        eeShare,
+        erShareDiff,
+        erShareEps,
+        ncpDays,
+        refundAdvances
+      ].join('#~#');
+
+      rows.push(line);
+    });
+
+    const fileContent = rows.join('\r\n');
+
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', `attachment; filename="EPF_ECR_${payrollRun.month}_${payrollRun.year}.txt"`);
+    res.send(fileContent);
+  } catch (error) {
+    console.error('[EPF ECR EXPORT ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to generate EPF ECR Challan file' });
+  }
+};
+
 module.exports = {
   queryEmployees,
   getStatutoryReport,
   getPayrollReport,
   getAnalyticsReport,
   getDashboardData,
-  exportReport
+  exportReport,
+  exportEpfEcrChallan
 };

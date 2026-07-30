@@ -26,10 +26,25 @@ model User {
   permissions        Permission[]        @relation("UserPermissions")
   employee           Employee?           @relation("UserEmployee")
   supportAssignments SupportAssignment[] @relation("SupportStaffAssignments")
+  authenticators     Authenticator[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
   @@map("users")
+}
+
+model Authenticator {
+  id           String   @id @default(uuid())
+  credentialId String   @unique
+  publicKey    String
+  counter      Int
+  transports   String   // transport list
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("authenticators")
 }
 
 /// Platform support/maintenance staff (role SUPPORT, no home company) granted
@@ -205,6 +220,17 @@ model Employee {
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
 
+  kudosBalance            Int                      @default(0)
+  monthlyKudosAllowance   Int                      @default(100)
+  lastKudosAllowanceReset DateTime?
+  sentKudos               Kudos[]                  @relation("SentKudos")
+  receivedKudos           Kudos[]                  @relation("ReceivedKudos")
+  perkPurchases           PerkPurchase[]
+  objectives              Objective[]
+  reviewsWritten          PerformanceReview9Box[]    @relation("ReviewsWritten")
+  performanceReviews      PerformanceReview9Box[]    @relation("EmployeeReviews")
+  assetRequests           AssetRequest[]
+
   isActive                    Boolean   @default(true)
   deactivatedAt               DateTime?
   deactivatedBy               String?
@@ -215,6 +241,7 @@ model Employee {
   reactivatedBy               String?
   reactivationRemarks         String?
   timezone                    String    @default("Asia/Kolkata")
+  biometricId                 String?
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
 
@@ -1120,6 +1147,8 @@ model AttendanceRegularization {
   status             String    @default("PENDING") // PENDING, APPROVED, REJECTED
   approvedBy         String?
   managerRemarks     String?
+  isFailsafeRegularization Boolean @default(false)
+  gpsCoordinates     String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -1383,9 +1412,19 @@ model Company {
   payments           PaymentTransaction[]
   supportAssignments SupportAssignment[]
   notifications      Notification[]
+  whitelistedWifis   WhiteListedWiFi[]
+  biometricRawLogs   BiometricRawLog[]
   notificationTemplates NotificationTemplate[]
   notificationPreferences NotificationPreference[]
   notificationSettings NotificationSetting?
+  kudos                  Kudos[]
+  perkStoreItems         PerkStoreItem[]
+  perkPurchases          PerkPurchase[]
+  pulseSurveys           PulseSurvey[]
+  pulseResponses         PulseResponse[]
+  objectives             Objective[]
+  performanceReviews     PerformanceReview9Box[]
+  assetRequests          AssetRequest[]
   customModules      CustomModule[]
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
@@ -1444,6 +1483,23 @@ model PolicyDefinition {
 
   @@index([policyType, status])
   @@map("policy_definitions")
+}
+
+model AgentFeedback {
+  id            String   @id @default(uuid())
+  agentName     String   // "Priya" | "Sherlock" | "Jarvis" | "Winston" | "Atlas"
+  companyId     String?
+  userId        String?
+  question      String
+  response      String
+  rating        Int?     // 1 to 5, or 1/-1
+  feedbackText  String?  // Text correction/comment
+  isCorrected   Boolean  @default(false)
+  correctedText String?  // Human correction content
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("agent_feedback")
 }
 
 model WorkflowDefinition {
@@ -1599,6 +1655,7 @@ model Asset {
   returnedAt     DateTime?
   recoveryStatus String    @default("NOT_APPLICABLE")
   notes          String?
+  requests       AssetRequest[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -2630,4 +2687,223 @@ model ContactRequest {
   updatedAt   DateTime @updatedAt
 
   @@map("contact_requests")
+}
+
+model WhiteListedWiFi {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ssid      String
+  bssid     String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, bssid])
+  @@index([companyId])
+  @@map("whitelisted_wifis")
+}
+
+model BiometricRawLog {
+  id            String   @id @default(uuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  deviceSerial  String
+  biometricId   String
+  timestamp     DateTime
+  direction     String   // IN | OUT
+  processed     Boolean  @default(false)
+  failureReason String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([biometricId])
+  @@map("biometric_raw_logs")
+}
+
+model Kudos {
+  id          String   @id @default(uuid())
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      Employee @relation("SentKudos", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  String
+  receiver    Employee @relation("ReceivedKudos", fields: [receiverId], references: [id], onDelete: Cascade)
+  points      Int
+  message     String
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("kudos")
+}
+
+model PerkStoreItem {
+  id          String   @id @default(uuid())
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  cost        Int
+  stock       Int      @default(-1) // -1 for unlimited
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  purchases   PerkPurchase[]
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+  @@map("perk_store_items")
+}
+
+model PerkPurchase {
+  id            String        @id @default(uuid())
+  companyId     String?
+  company       Company?      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId    String
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  perkItemId    String
+  perkItem      PerkStoreItem @relation(fields: [perkItemId], references: [id], onDelete: Cascade)
+  pointsSpent   Int
+  status        String        @default("PENDING") // PENDING | DELIVERED
+  redeemedAt    DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@map("perk_purchases")
+}
+
+model PulseSurvey {
+  id          String   @id @default(uuid())
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  isActive    Boolean  @default(true)
+  responses   PulseResponse[]
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+  @@map("pulse_surveys")
+}
+
+model PulseResponse {
+  id          String      @id @default(uuid())
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  surveyId    String
+  survey      PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  score       Int         // e.g. 1-5 mood score
+  feedback    String?
+  createdAt   DateTime    @default(now())
+
+  @@index([companyId])
+  @@index([surveyId])
+  @@map("pulse_responses")
+}
+
+model Objective {
+  id                String       @id @default(uuid())
+  companyId         String?
+  company           Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId        String
+  employee          Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?
+  startDate         DateTime
+  endDate           DateTime
+  status            String       @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | ABANDONED
+  progress          Float        @default(0.0) // 0 to 100
+  parentId          String?
+  parent            Objective?   @relation("ObjectiveHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  alignedObjectives Objective[]  @relation("ObjectiveHierarchy")
+  keyResults        KeyResult[]
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@map("objectives")
+}
+
+model KeyResult {
+  id           String    @id @default(uuid())
+  objectiveId  String
+  objective    Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  startValue   Float     @default(0.0)
+  targetValue  Float
+  currentValue Float     @default(0.0)
+  unit         String    @default("%")
+  weight       Float     @default(1.0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([objectiveId])
+  @@map("key_results")
+}
+
+model PerformanceReview9Box {
+  id                String    @id @default(uuid())
+  companyId         String?
+  company           Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId        String
+  employee          Employee  @relation("EmployeeReviews", fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewerId        String
+  reviewer          Employee  @relation("ReviewsWritten", fields: [reviewerId], references: [id], onDelete: Cascade)
+  cycleName         String
+  performanceRating Int       @default(1) // 1 = Low, 2 = Medium, 3 = High
+  potentialRating   Int       @default(1) // 1 = Low, 2 = Medium, 3 = High
+  boxPlacement      Int       @default(1) // 1 to 9
+  selfRatingScore   Float?
+  selfComments      String?
+  managerRatingScore Float?
+  managerComments   String?
+  hrRemarks         String?
+  overrideBoxPlacement Int?
+  reviewNotes       String?
+  status            String    @default("PENDING") // PENDING | SELF_SUBMITTED | COMPLETED
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([reviewerId])
+  @@map("performance_reviews_9box")
+}
+
+model AssetRequest {
+  id               String    @id @default(uuid())
+  companyId        String?
+  company          Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assetId          String?
+  asset            Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  assetType        String
+  reason           String
+  status           String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewerComments String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@map("asset_requests")
+}
+
+model SsoAccessRequest {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  fullName      String
+  department    String?
+  justification String?
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("sso_access_requests")
 }

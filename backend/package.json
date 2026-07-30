@@ -30,6 +30,7 @@
     "@aws-sdk/client-s3": "^3.1075.0",
     "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "@prisma/client": "^6.19.0",
+    "@simplewebauthn/server": "^13.3.2",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.79.1",
     "compression": "^1.8.1",

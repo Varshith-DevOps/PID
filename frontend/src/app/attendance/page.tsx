@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
+import { useToast } from '@/lib/toastContext';
 import {
   getTodayAttendance,
   getMonthlyReport,
@@ -82,6 +83,7 @@ const CLOCK_ICON = (
 export default function AttendancePage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { showToast } = useToast();
   const [attendance, setAttendance] = useState<AttendanceRec[]>([]);
   const [myAttendance, setMyAttendance] = useState<AttendanceRec[]>([]);
   const [regularizations, setRegularizations] = useState<any[]>([]);
@@ -95,6 +97,9 @@ export default function AttendancePage() {
   const [clockLoading, setClockLoading] = useState(false);
   const [regAction, setRegAction] = useState<{ id: string; status: 'APPROVED' | 'REJECTED' } | null>(null);
   const [regActionLoading, setRegActionLoading] = useState(false);
+  const [showFailsafeModal, setShowFailsafeModal] = useState(false);
+  const [failsafeReason, setFailsafeReason] = useState('');
+  const [gpsCoords, setGpsCoords] = useState('');
 
   const [regForm, setRegForm] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -136,7 +141,10 @@ export default function AttendancePage() {
     try {
       const profile = await getProfile();
       setEmployeeId(profile.id);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load profile details.', 'error');
+    }
   };
 
   const loadRegularizations = async () => {
@@ -145,20 +153,57 @@ export default function AttendancePage() {
       setRegularizations(data || []);
     } catch (err) {
       console.error(err);
+      showToast('Failed to load attendance correction requests.', 'error');
     }
   };
 
-  const loadTodayAttendance = async () => { setLoading(true); try { const data = await getTodayAttendance(); setAttendance(data); } catch (err) { console.error(err); } finally { setLoading(false); } };
-  const loadMonthlyReport = async () => { setLoading(true); try { const data = await getMonthlyReport(dateFilter); setMonthlyData(data); } catch (err) { console.error(err); } finally { setLoading(false); } };
-  const loadSettings = async () => { try { const data = await getAttendanceSettings(); setSettings(data); } catch (err) { console.error(err); } };
+  const loadTodayAttendance = async () => {
+    setLoading(true);
+    try {
+      const data = await getTodayAttendance();
+      setAttendance(data);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load today’s attendance records.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMonthlyReport = async () => {
+    setLoading(true);
+    try {
+      const data = await getMonthlyReport(dateFilter);
+      setMonthlyData(data);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load monthly attendance report.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSettings = async () => {
+    try {
+      const data = await getAttendanceSettings();
+      setSettings(data);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load attendance configurations.', 'error');
+    }
+  };
 
   const loadMyAttendance = async () => {
     setLoading(true);
     try {
       const data = await getMyAttendanceHistory(employeeId, {});
       setMyAttendance(data.attendances || []);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load attendance logs.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const reloadEmployeeAttendance = async () => {
@@ -173,9 +218,58 @@ export default function AttendancePage() {
     try {
       await checkIn(employeeId);
       await reloadEmployeeAttendance();
-      alert('Checked in successfully');
+      showToast('Checked in successfully.', 'success');
     } catch (err: any) {
-      alert(err?.response?.data?.error || 'Check-in failed');
+      const errMsg = err?.response?.data?.error || 'Check-in failed.';
+      showToast(errMsg, 'error');
+      if (errMsg.toLowerCase().includes('wi-fi') || errMsg.toLowerCase().includes('geofencing') || errMsg.toLowerCase().includes('corporate')) {
+        triggerFailsafeGPS();
+      }
+    } finally {
+      setClockLoading(false);
+    }
+  };
+
+  const triggerFailsafeGPS = () => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported by your browser.', 'error');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsCoords(`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`);
+        setShowFailsafeModal(true);
+      },
+      (err) => {
+        showToast('Unable to capture location coordinates. Please enable GPS permissions.', 'error');
+        setGpsCoords('0.000000, 0.000000');
+        setShowFailsafeModal(true);
+      }
+    );
+  };
+
+  const handleSaveFailsafe = async () => {
+    if (!failsafeReason) {
+      showToast('Justification reason is required.', 'error');
+      return;
+    }
+    setClockLoading(true);
+    try {
+      await submitRegularization({
+        date: new Date().toISOString(),
+        requestType: 'MISSING_PUNCH_IN',
+        reason: `[FAILSAFE GPS BYPASS]: ${failsafeReason}`,
+        isFailsafeRegularization: true,
+        gpsCoordinates: gpsCoords,
+        checkInCorrection: new Date().toISOString()
+      });
+      showToast('Failsafe regularization request submitted to manager review.', 'success');
+      setShowFailsafeModal(false);
+      setFailsafeReason('');
+      setView('regularization');
+      loadRegularizations();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || 'Failed to submit regularization.', 'error');
     } finally {
       setClockLoading(false);
     }
@@ -187,15 +281,22 @@ export default function AttendancePage() {
     try {
       await checkOut(employeeId);
       await reloadEmployeeAttendance();
-      alert('Checked out successfully');
+      showToast('Checked out successfully.', 'success');
     } catch (err: any) {
-      alert(err?.response?.data?.error || 'Check-out failed');
+      showToast(err?.response?.data?.error || 'Check-out failed.', 'error');
     } finally {
       setClockLoading(false);
     }
   };
 
-  const handleSaveSettings = async () => { try { await updateAttendanceSettings(settings); alert('Settings updated'); } catch (err) { alert('Failed to update settings'); } };
+  const handleSaveSettings = async () => {
+    try {
+      await updateAttendanceSettings(settings);
+      showToast('Attendance settings updated successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to update attendance configurations.', 'error');
+    }
+  };
 
   const handleSubmitRegularization = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,7 +313,7 @@ export default function AttendancePage() {
     }
     const { isValid, firstError } = validateForm(values, rules);
     if (!isValid) {
-      alert(firstError || 'Please correct the highlighted fields.');
+      showToast(firstError || 'Please correct the highlighted fields.', 'error');
       return;
     }
     try {
@@ -232,9 +333,9 @@ export default function AttendancePage() {
       });
       setRegSubmitted(false);
       loadRegularizations();
-      alert('Correction request submitted for approval!');
+      showToast('Correction request submitted for approval.', 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to submit correction request');
+      showToast(err.response?.data?.error || 'Failed to submit correction request.', 'error');
     }
   };
 
@@ -246,10 +347,10 @@ export default function AttendancePage() {
       await actionRegularization(id, { status, managerRemarks: reason ?? '' });
       loadRegularizations();
       if (view === 'today') loadTodayAttendance();
-      alert(`Request ${status.toLowerCase()} successfully!`);
+      showToast(`Request ${status.toLowerCase()} successfully!`, 'success');
       setRegAction(null);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Action failed');
+      showToast(err.response?.data?.error || 'Action failed.', 'error');
     } finally {
       setRegActionLoading(false);
     }
@@ -341,7 +442,18 @@ export default function AttendancePage() {
       ),
     } as Column<any>] : []),
     { key: 'date', header: 'Date', render: (reg) => <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{new Date(reg.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span> },
-    { key: 'type', header: 'Correction Type', render: (reg) => <Badge tone="neutral">{reg.requestType.replace(/_/g, ' ')}</Badge> },
+    { key: 'type', header: 'Correction Type', render: (reg) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <Badge tone={reg.isFailsafeRegularization ? 'warning' : 'neutral'}>
+          {reg.requestType.replace(/_/g, ' ')}
+        </Badge>
+        {reg.isFailsafeRegularization && (
+          <span style={{ fontSize: '0.62rem', color: '#ffcc00', fontWeight: 'bold' }}>
+            🛰️ Failsafe GPS Bypass
+          </span>
+        )}
+      </div>
+    ) },
     {
       key: 'value', header: 'Correction Value', render: (reg) => (
         <span style={{ fontSize: '0.78rem', color: 'var(--text-primary)' }}>
@@ -353,7 +465,18 @@ export default function AttendancePage() {
       ),
     },
     { key: 'statusTo', header: 'Status To Be', render: (reg) => <AttendanceStatus status={reg.statusCorrection} /> },
-    { key: 'reason', header: 'Reason / Justification', render: (reg) => <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'inline-block', maxWidth: '200px', wordBreak: 'break-word' }}>{reg.reason || '—'}</span> },
+    { key: 'reason', header: 'Reason / Justification', render: (reg) => (
+      <div>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'inline-block', maxWidth: '200px', wordBreak: 'break-word' }}>
+          {reg.reason || '—'}
+        </span>
+        {reg.gpsCoordinates && (
+          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            GPS: <a href={`https://www.google.com/maps?q=${reg.gpsCoordinates}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>{reg.gpsCoordinates}</a>
+          </div>
+        )}
+      </div>
+    ) },
     { key: 'auditStatus', header: 'Auditing Status', render: (reg) => <StatusChip status={reg.status} /> },
     {
       key: 'actions', header: 'Actions / Audit Trails', render: (reg) => (
@@ -554,6 +677,35 @@ export default function AttendancePage() {
                   <Button type="submit" variant="primary">Submit Request</Button>
                 </div>
               </form>
+            </Modal>
+
+            {/* Submission Modal for Failsafe GPS regularization */}
+            <Modal
+              open={showFailsafeModal}
+              onClose={() => setShowFailsafeModal(false)}
+              title="Failsafe GPS Clock-In Regularization"
+              width={460}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Clock-in blocked by Corporate Wi-Fi geofencing constraint. You can bypass this block by submitting a regularization request tagged with your captured physical GPS coordinates for manager verification.
+                </p>
+                <div style={{ padding: '0.6rem', backgroundColor: '#1d1d22', border: '1px solid #333', borderRadius: '6px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Captured Location Coordinates: <strong>{gpsCoords}</strong>
+                </div>
+                <Field label="Regularization Justification / Reason" required>
+                  <textarea
+                    placeholder="Enter justification (e.g., Office router down, working from remote branch, router SSID modified)..."
+                    value={failsafeReason}
+                    onChange={(e) => setFailsafeReason(e.target.value)}
+                    style={{ width: '100%', minHeight: '80px', padding: '8px', backgroundColor: '#1d1d22', border: '1px solid #333', borderRadius: '6px', color: '#fff', fontSize: '0.8rem', resize: 'vertical' }}
+                  />
+                </Field>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                  <Button type="button" variant="ghost" onClick={() => setShowFailsafeModal(false)}>Cancel</Button>
+                  <Button type="button" variant="primary" loading={clockLoading} onClick={handleSaveFailsafe}>Submit GPS Bypass</Button>
+                </div>
+              </div>
             </Modal>
 
             {/* Approve / Reject confirmation with required remarks */}

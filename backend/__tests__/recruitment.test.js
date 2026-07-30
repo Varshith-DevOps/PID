@@ -520,7 +520,7 @@ describe('Recruitment / ATS pipeline', () => {
     const res = await request(app).post(`/api/recruitment/interviews/${interviewId}/resend-email`).set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.emailStatus).toBe('FAILED');
+    expect(res.body.emailStatus).toBe('QUEUED');
 
     const after = await prisma.interview.count({ where: { applicantId } });
     expect(after).toBe(before);

@@ -380,6 +380,7 @@ const getJobOpeningById = async (req, res) => {
           include: {
             interviews: true,
             jobOffer: true,
+            aiAssessments: true,
           },
           orderBy: { createdAt: 'desc' },
         },
@@ -683,6 +684,7 @@ const applyForJob = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Application submitted successfully.',
+      ...applicant,
       application: {
         id: applicant.id,
         candidateName: applicant.fullName,

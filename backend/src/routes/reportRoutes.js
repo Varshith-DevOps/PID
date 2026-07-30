@@ -13,7 +13,8 @@ const {
   getPayrollReport,
   getAnalyticsReport,
   getDashboardData,
-  exportReport
+  exportReport,
+  exportEpfEcrChallan
 } = require('../controllers/reportController');
 const {
   getAuditReportCatalog,
@@ -49,5 +50,8 @@ router.get('/dashboards/:role', getDashboardData);
 
 /** POST /api/reports/export — Stream excel document downloads */
 router.post('/export', rbacMiddleware('REPORTS', 'EXPORT'), exportReport);
+
+/** GET /api/reports/epf-ecr/:runId — Export monthly ECR challan text file */
+router.get('/epf-ecr/:runId', rbacMiddleware('REPORTS', 'EXPORT'), exportEpfEcrChallan);
 
 module.exports = router;

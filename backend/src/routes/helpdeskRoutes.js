@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
-const { rbacMiddleware } = require('../rbac/rbacMiddleware');
-const { listTickets, createTicket, updateTicket } = require('../controllers/helpdeskController');
+const helpdeskController = require('../controllers/helpdeskController');
 
 router.use(authenticate);
 
-router.get('/tickets', rbacMiddleware('HELPDESK', 'VIEW'), listTickets);
-router.post('/tickets', rbacMiddleware('HELPDESK', 'CREATE'), createTicket);
-router.put('/tickets/:id', rbacMiddleware('HELPDESK', 'EDIT'), updateTicket);
+router.post('/', helpdeskController.createTicket);
+router.post('/tickets', helpdeskController.createTicket);
+router.get('/employee', helpdeskController.getEmployeeTickets);
+router.get('/admin', helpdeskController.getAdminTickets);
+router.put('/:id/resolve', helpdeskController.resolveTicket);
 
 module.exports = router;

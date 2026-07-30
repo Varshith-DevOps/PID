@@ -11,6 +11,7 @@ const {
   markAttendance,
   getSettingsHandler,
   updateSettings,
+  syncBiometricLogs,
 } = require('../controllers/attendanceController');
 
 router.get('/settings', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), getSettingsHandler);
@@ -22,6 +23,7 @@ const { syncBiometricPunches, syncUniversalDevicePunch } = require('../controlle
 router.post('/check-in', authenticate, validateAttendancePunch, checkIn);
 router.post('/check-out', authenticate, validateAttendancePunch, checkOut);
 router.post('/sync', authenticate, syncBiometricPunches);
+router.post('/sync/biometric-webhook', syncBiometricLogs);
 
 // Universal device webhook (supports M2M API key authentication)
 router.post('/device-push/universal', (req, res, next) => {

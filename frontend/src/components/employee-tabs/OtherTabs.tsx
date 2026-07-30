@@ -97,6 +97,13 @@ export function ExitTab({ employee, canEdit, onReload }: any) {
       { noticePeriodDays: optional(integer('Notice period')), fnfAmount: optional(nonNegative('F&F amount')) }
     );
     if (!isValid) { alert('Please correct the highlighted fields.'); return; }
+    
+    // Block finalization of F&F if the employee still has assigned assets
+    if ((form.fnfStatus === 'PROCESSED' || form.fnfStatus === 'PAID') && employee.assetAssignments?.length > 0) {
+      alert(`Cannot mark F&F as ${form.fnfStatus} while the employee still holds ${employee.assetAssignments.length} unreturned assets. Recover the assets first.`);
+      return;
+    }
+    
     setConfirmOpen(true);
   };
 
@@ -109,6 +116,14 @@ export function ExitTab({ employee, canEdit, onReload }: any) {
     return (
       <div>
         <div className="section-header"><h2 className="section-title">Exit Details</h2></div>
+        
+        {employee.assetAssignments && employee.assetAssignments.length > 0 && (
+          <div style={{ marginBottom: '1rem', padding: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', color: '#f87171', fontSize: '0.8rem' }}>
+            <strong>⚠️ Outstanding Assets Block:</strong> This employee has {employee.assetAssignments.length} active physical assets (e.g. {employee.assetAssignments.map((a: any) => `${a.name} (${a.assetTag})`).join(', ')}). 
+            You must return these assets in the helpdesk dashboard before setting F&F status to Processed or Paid.
+          </div>
+        )}
+
         <div className="form-grid">
           <Select label="Exit Type" value={form.exitType} onChange={v => setForm({ ...form, exitType: v })} placeholder="Select" options={[{ value: 'RESIGNATION', label: 'Resignation' }, { value: 'TERMINATION', label: 'Termination' }, { value: 'RETIREMENT', label: 'Retirement' }, { value: 'ABSCONDING', label: 'Absconding' }]} />
           <DateField label="Resignation Date" value={form.resignationDate} onChange={v => setForm({ ...form, resignationDate: v })} />

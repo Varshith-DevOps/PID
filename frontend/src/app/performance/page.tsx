@@ -13,6 +13,9 @@ import {
   getEmployees,
 } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import OkrDashboard from '@/components/OkrDashboard';
+import AppraisalForm from '@/components/AppraisalForm';
+import Talent9BoxGrid from '@/components/Talent9BoxGrid';
 import { validateForm, required, percentage } from '@/lib/validators';
 import {
   Banner,
@@ -73,6 +76,8 @@ export default function PerformanceDashboard() {
   // Modals & Drawers
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [activeViewTab, setActiveViewTab] = useState<'kras' | 'okrs' | 'appraisal' | '9box'>('kras');
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'HR';
 
   // Validation states
   const [submitted, setSubmitted] = useState(false);
@@ -222,18 +227,30 @@ export default function PerformanceDashboard() {
             </>
           }
         />
+        
+        {/* Tab Headers */}
+        <div style={{ display: 'flex', gap: '1.5rem', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1.5rem', paddingBottom: '0.5rem' }}>
+          <button onClick={() => setActiveViewTab('kras')} style={{ background: 'transparent', border: 'none', color: activeViewTab === 'kras' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === 'kras' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>KRA & Feedback</button>
+          <button onClick={() => setActiveViewTab('okrs')} style={{ background: 'transparent', border: 'none', color: activeViewTab === 'okrs' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === 'okrs' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>OKR Goals</button>
+          <button onClick={() => setActiveViewTab('appraisal')} style={{ background: 'transparent', border: 'none', color: activeViewTab === 'appraisal' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === 'appraisal' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>Self/Manager Appraisal</button>
+          {isAdmin && (
+            <button onClick={() => setActiveViewTab('9box')} style={{ background: 'transparent', border: 'none', color: activeViewTab === '9box' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === '9box' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>HR 9-Box Grid</button>
+          )}
+        </div>
 
-        {!user?.employeeId && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <Banner tone="info" title="Viewing as an administrator">
-              This account isn&apos;t linked to an employee profile, so personal KRAs and 360° reviews aren&apos;t shown here.
-              Open an employee from the directory to review their performance.
-            </Banner>
-          </div>
-        )}
+        {activeViewTab === 'kras' && (
+          <>
+            {!user?.employeeId && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <Banner tone="info" title="Viewing as an administrator">
+                  This account isn&apos;t linked to an employee profile, so personal KRAs and 360° reviews aren&apos;t shown here.
+                  Open an employee from the directory to review their performance.
+                </Banner>
+              </div>
+            )}
 
-        {/* Aggregate Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            {/* Aggregate Stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
           <StatCard
             label="KRA Target Weightage"
             value={
@@ -361,8 +378,21 @@ export default function PerformanceDashboard() {
               </div>
             )}
           </div>
-
         </div>
+        </>
+      )}
+
+        {activeViewTab === 'okrs' && (
+          <OkrDashboard />
+        )}
+
+        {activeViewTab === 'appraisal' && (
+          <AppraisalForm />
+        )}
+
+        {activeViewTab === '9box' && (
+          <Talent9BoxGrid />
+        )}
 
         {/* Define Goal Modal */}
         <Modal

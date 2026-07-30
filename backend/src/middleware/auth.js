@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../config/database');
 const { runWithCompanyId } = require('../utils/tenantContext');
 const { paidThroughFor, assessBilling } = require('../services/dunningService');
+const { isTokenBlacklisted } = require('../utils/tokenBlacklist');
 
 /**
  * Middleware to authenticate requests via JWT Bearer token.
@@ -48,10 +49,35 @@ const authenticate = async (req, res, next) => {
       return res.status(403).json({ error: 'Your account has been deactivated. Contact HR.' });
     }
 
+    // Token revocation: check if token is blacklisted (e.g. after logout)
+    if (await isTokenBlacklisted(token)) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+
     // Token revocation: a token is invalid once the user's tokenVersion advances
     // (on logout, password change, or admin reset).
     if ((decoded.tv ?? 0) !== (user.tokenVersion ?? 0)) {
       return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+
+    // Sliding expiration: if access token has < 15 minutes remaining, slide it forward
+    const now = Math.floor(Date.now() / 1000);
+    const timeRemaining = decoded.exp - now;
+    if (timeRemaining > 0 && timeRemaining < 15 * 60) {
+      const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || '30m';
+      const newToken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role, purpose: 'ACCESS', tv: user.tokenVersion ?? 0 },
+        process.env.JWT_SECRET,
+        { expiresIn: ACCESS_TOKEN_TTL }
+      );
+      res.cookie('token', newToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'Lax',
+        domain: process.env.COOKIE_DOMAIN || undefined,
+        maxAge: 24 * 60 * 60 * 1000
+      });
+      res.setHeader('x-new-token', newToken);
     }
 
     // Check Subscription Guard for tenant companies (ignore for global SUPER_ADMIN)

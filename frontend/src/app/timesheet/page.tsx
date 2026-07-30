@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
+import { useToast } from '@/lib/toastContext';
 import { logTimesheet, getEmployeeTimesheets, getAllTimesheets, getDailySummary, generateAttendanceFromTimesheet, getTasks, getEmployees } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import {
@@ -38,6 +39,7 @@ const PENCIL_ICON = (
 export default function TimesheetPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { showToast } = useToast();
   const [myTimesheets, setMyTimesheets] = useState<TimesheetEntry[]>([]);
   const [allTimesheets, setAllTimesheets] = useState<any[]>([]);
   const [dailySummary, setDailySummary] = useState<any>(null);
@@ -71,7 +73,10 @@ export default function TimesheetPage() {
     try {
       const data = await getEmployeeTimesheets(user?.employeeId || user?.id || '', {});
       setMyTimesheets(data.timesheets);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load your timesheets. Please try again.', 'error');
+    }
     finally { setLoading(false); }
   };
 
@@ -80,7 +85,10 @@ export default function TimesheetPage() {
     try {
       const data = await getAllTimesheets({});
       setAllTimesheets(Object.values(data.aggregated));
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load administrative timesheets.', 'error');
+    }
     finally { setLoading(false); }
   };
 
@@ -89,7 +97,10 @@ export default function TimesheetPage() {
     try {
       const data = await getDailySummary();
       setDailySummary(data);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load daily attendance summary.', 'error');
+    }
     finally { setLoading(false); }
   };
 
@@ -97,14 +108,20 @@ export default function TimesheetPage() {
     try {
       const data = await getTasks({});
       setTasks(data);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load tasks list.', 'error');
+    }
   };
 
   const loadEmployees = async () => {
     try {
       const data = await getEmployees({ limit: 100 });
       setEmployees(data.employees);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load employee list.', 'error');
+    }
   };
 
   const handleLogHours = async () => {
@@ -119,8 +136,10 @@ export default function TimesheetPage() {
       await logTimesheet(payload);
       setForm({ taskId: '', date: new Date().toISOString().split('T')[0], hoursWorked: 8, description: '' });
       loadMyTimesheets();
-      alert('Hours logged successfully');
-    } catch (err) { alert('Failed to log hours'); }
+      showToast('Hours logged successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to log timesheet hours. Please check inputs.', 'error');
+    }
   };
 
   const handleGenerateAttendance = async () => {
@@ -128,9 +147,9 @@ export default function TimesheetPage() {
     setGenerating(true);
     try {
       await generateAttendanceFromTimesheet();
-      alert('Attendance generated successfully');
+      showToast('Attendance records generated successfully.', 'success');
     } catch (err: any) {
-      alert(err?.response?.data?.error || 'Failed to generate');
+      showToast(err?.response?.data?.error || 'Failed to generate attendance records.', 'error');
     } finally {
       setGenerating(false);
     }

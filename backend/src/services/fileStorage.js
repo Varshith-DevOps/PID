@@ -28,7 +28,13 @@ if (S3_ENABLED) {
   const c = require('@aws-sdk/client-s3');
   ({ PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = c);
   ({ getSignedUrl } = require('@aws-sdk/s3-request-presigner'));
-  s3 = new c.S3Client({ region: process.env.AWS_REGION });
+  
+  const s3Config = { region: process.env.AWS_REGION };
+  if (process.env.AWS_S3_ENDPOINT) {
+    s3Config.endpoint = process.env.AWS_S3_ENDPOINT;
+    s3Config.forcePathStyle = true;
+  }
+  s3 = new c.S3Client(s3Config);
 }
 
 const isEnabled = () => S3_ENABLED;

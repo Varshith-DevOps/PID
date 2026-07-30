@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
-import { getAllPayrollRuns, getPayrollReport, getPayrollPreflight, downloadPayrollExport, runPayroll, getEmployees, getSalaryStructure, setSalaryStructure, calculateEmployeeSalary, getPayrollSettings, updatePayrollSettings } from '@/lib/api';
+import { getAllPayrollRuns, getPayrollReport, getPayrollPreflight, downloadPayrollExport, downloadEpfEcrChallan, runPayroll, getEmployees, getSalaryStructure, setSalaryStructure, calculateEmployeeSalary, getPayrollSettings, updatePayrollSettings } from '@/lib/api';
 import { CanView, CanCreate, CanEdit } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
+import TaxSandbox from '@/components/TaxSandbox';
 import {
   PageHeader, Tabs, Button, DataTable, StatCard, Card, Banner,
   StatusChip, Stepper, Checkbox, ConfirmDialog,
@@ -66,7 +67,7 @@ export default function PayrollPage() {
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [records, setRecords] = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'runs' | 'process' | 'report' | 'structure' | 'settings'>('runs');
+  const [view, setView] = useState<'runs' | 'process' | 'report' | 'structure' | 'settings' | 'tax-sandbox'>('runs');
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [structure, setStructure] = useState<any>(null);
@@ -635,6 +636,7 @@ export default function PayrollPage() {
     { key: 'runs', label: 'Runs' },
     ...(isAdmin ? [{ key: 'process', label: 'Process' }] : []),
     { key: 'structure', label: 'Salary Structure' },
+    { key: 'tax-sandbox', label: 'Tax Sandbox' },
     ...(isAdmin ? [{ key: 'settings', label: 'Settings' }] : []),
   ];
 
@@ -764,10 +766,11 @@ export default function PayrollPage() {
                 <div style={{ padding: '1.25rem 1.25rem 0' }}>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>{monthName(selectedRun.month)} {selectedRun.year} — {records.length} Employees</h3>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1.25rem 0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1.25rem 0.75rem', flexWrap: 'wrap' }}>
                   <Button variant="primary" size="sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'excel' })}>Excel</Button>
                   <Button variant="ghost" size="sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'csv' })}>CSV</Button>
                   <Button variant="ghost" size="sm" onClick={() => downloadPayrollExport({ month: selectedRun.month, year: selectedRun.year, format: 'pdf' })}>PDF</Button>
+                  <Button variant="warning" size="sm" onClick={() => downloadEpfEcrChallan(selectedRun.id, selectedRun.month, selectedRun.year)}>Download EPFO ECR Text Challan</Button>
                 </div>
                 <div style={{ padding: '0 1.25rem 1.25rem' }}>
                   <DataTable
@@ -1103,6 +1106,10 @@ export default function PayrollPage() {
               </Banner>
             </div>
           </div>
+        )}
+
+        {view === 'tax-sandbox' && (
+          <TaxSandbox />
         )}
 
         {/* Run payroll confirmation */}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { login, getPublicTenant } from '@/lib/api';
 import { useAuth } from '@/lib/authContext';
+import { useToast } from '@/lib/toastContext';
 import Link from 'next/link';
 import BrandLogo from '@/components/BrandLogo';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -23,6 +24,41 @@ export default function LoginPage() {
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const router = useRouter();
   const { login: authLogin } = useAuth();
+  const { showToast } = useToast();
+
+  const handleSsoSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      // Simulate SAML / OIDC callback validation. 
+      // If we attempt login with an unassigned user, it fails and redirects to the SSO request access form.
+      const payload = {
+        idToken: 'mock-token-azure',
+        email: email || 'jit.user@company.com',
+        name: 'JIT SSO User'
+      };
+
+      const res = await fetch('/api/auth/sso/callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        authLogin(data.token, data.user, data.permissions);
+        router.push('/dashboard');
+      } else {
+        showToast('SSO account is unassigned to any company workspace.', 'error');
+        router.push(`/sso-blocked?email=${encodeURIComponent(payload.email)}`);
+      }
+    } catch (err: any) {
+      setError('SSO Sign-in failed. Please try again or contact support.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Resolve the workspace from the host and fetch its public branding.
   useEffect(() => {
@@ -167,6 +203,21 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
+
+          <div style={{ position: 'relative', textAlign: 'center', margin: '1.25rem 0' }}>
+            <hr style={{ border: '0', borderTop: '1px solid var(--border-subtle)' }} />
+            <span style={{ position: 'absolute', top: '-10px', left: '50%', transform: 'translateX(-50%)', background: 'var(--surface-raised)', padding: '0 0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>OR</span>
+          </div>
+
+          <Button 
+            type="button" 
+            variant="ghost" 
+            fullWidth 
+            onClick={handleSsoSignIn}
+            leftIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M12 6V18"/><path d="M6 12H18"/></svg>}
+          >
+            Sign in with Corporate SSO (SAML)
+          </Button>
 
           <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>New to PID hcms? </span>

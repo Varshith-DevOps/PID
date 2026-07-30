@@ -63,9 +63,12 @@ const ensureLeaveQuotas = async (employeeId, year) => {
     orderBy: { leaveType: 'asc' },
   });
 
-  if (quotas.length === 0) {
+  const existingTypes = new Set(quotas.map((q) => q.leaveType));
+  const missingQuotas = DEFAULT_LEAVE_QUOTAS.filter((q) => !existingTypes.has(q.leaveType));
+
+  if (missingQuotas.length > 0) {
     await prisma.leaveQuota.createMany({
-      data: DEFAULT_LEAVE_QUOTAS.map((quota) => ({ ...quota, employeeId, year })),
+      data: missingQuotas.map((quota) => ({ ...quota, employeeId, year })),
     });
     quotas = await prisma.leaveQuota.findMany({
       where: { employeeId, year },
@@ -101,6 +104,73 @@ const buildLeaveBalance = async (employeeId, year) => {
   }));
 };
 
+const checkLeaveCollision = async (employeeId, startDate, endDate) => {
+  try {
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { department: true }
+    });
+    if (!employee || !employee.departmentId) return null;
+
+    const totalDeptEmployees = await prisma.employee.count({
+      where: { departmentId: employee.departmentId, isActive: true }
+    });
+    if (totalDeptEmployees === 0) return null;
+
+    const overlappingLeaves = await prisma.leave.findMany({
+      where: {
+        employee: { departmentId: employee.departmentId, isActive: true },
+        status: 'APPROVED',
+        startDate: { lte: new Date(endDate) },
+        endDate: { gte: new Date(startDate) }
+      },
+      select: {
+        startDate: true,
+        endDate: true,
+        employeeId: true
+      }
+    });
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    let maxAbsentPct = 0;
+    let maxAbsentCount = 0;
+
+    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+      const currentDay = new Date(d);
+      const absentEmployees = new Set();
+      
+      overlappingLeaves.forEach(leave => {
+        const leaveStart = new Date(leave.startDate);
+        const leaveEnd = new Date(leave.endDate);
+        if (currentDay >= leaveStart && currentDay <= leaveEnd) {
+          absentEmployees.add(leave.employeeId);
+        }
+      });
+      absentEmployees.add(employeeId);
+
+      const pct = (absentEmployees.size / totalDeptEmployees) * 100;
+      if (pct > maxAbsentPct) {
+        maxAbsentPct = pct;
+        maxAbsentCount = absentEmployees.size;
+      }
+    }
+
+    if (maxAbsentPct > 30) {
+      return {
+        warning: true,
+        message: `Warning: Absenteeism in the ${employee.department.name} department will reach ${Math.round(maxAbsentPct)}% (${maxAbsentCount} of ${totalDeptEmployees} employees) during this period.`,
+        percentage: Math.round(maxAbsentPct),
+        absentCount: maxAbsentCount,
+        totalCount: totalDeptEmployees
+      };
+    }
+  } catch (err) {
+    console.error('[COLLISION CHECKER ERROR]:', err.message);
+  }
+  return null;
+};
+
 const createLeaveRequest = async (req, res) => {
   try {
     const { employeeId, leaveType, startDate, endDate, reason } = req.body;
@@ -128,17 +198,25 @@ const createLeaveRequest = async (req, res) => {
       const year = start.getFullYear();
       const balances = await buildLeaveBalance(employeeId, year);
       const quota = balances.find(b => b.leaveType === leaveType);
-      if (quota && quota.remaining < days) {
+      if (!quota) {
+        return res.status(400).json({ error: `Leave type ${leaveType} is not configured for this employee.` });
+      }
+      if (quota.remaining < days) {
         return res.status(400).json({ error: `Insufficient leave balance. Remaining: ${quota.remaining} days, Requested: ${days} days.` });
       }
     }
+
+    const collisionWarning = await checkLeaveCollision(employeeId, start, end);
 
     const leave = await prisma.leave.create({
       data: { employeeId, leaveType, startDate: start, endDate: end, days, reason },
       include: { employee: { select: { id: true, firstName: true, lastName: true } } },
     });
 
-    res.status(201).json(leave);
+    res.status(201).json({
+      ...leave,
+      collisionWarning: collisionWarning || null
+    });
   } catch (error) {
     console.error('[CREATE LEAVE REQUEST ERROR]:', error);
     res.status(500).json({ error: 'Server error', message: error.message });
@@ -220,7 +298,14 @@ const approveLeave = async (req, res) => {
       include: { employee: { select: { id: true, firstName: true, lastName: true, department: true } } },
     }));
 
-    return leaveActionResponse(res, 'Leave request approved successfully.', updated);
+    const collisionWarning = await checkLeaveCollision(leave.employeeId, leave.startDate, leave.endDate);
+
+    return res.json({
+      success: true,
+      message: 'Leave request approved successfully.',
+      leaveRequest: updated,
+      collisionWarning: collisionWarning || null
+    });
   } catch (error) {
     return sendControllerError(res, error);
   }

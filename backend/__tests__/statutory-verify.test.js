@@ -20,10 +20,11 @@ describe('Indian Statutory Calculations Verification', () => {
     expect(ptHigh).toBe(200);
   });
 
-  test('Tamil Nadu PT: Pro-rated semi-annual division by 6', () => {
-    // Tamil Nadu semi-annual slabs: above 75,000 is 1250, divided by 6 => ~208.33
-    const ptTN = salaryService.calculatePT(80000, true, 'Tamil Nadu', 'Male', 4);
-    expect(ptTN).toBeCloseTo(1250 / 6, 2);
+  test('Tamil Nadu PT: Semi-annual deduction in March/September, 0 in other months', () => {
+    const ptTNApril = salaryService.calculatePT(80000, true, 'Tamil Nadu', 'Male', 4);
+    const ptTNSept = salaryService.calculatePT(80000, true, 'Tamil Nadu', 'Male', 9);
+    expect(ptTNApril).toBe(0);
+    expect(ptTNSept).toBe(1250);
   });
 
   test('Delhi/Haryana and Non-PT States: Fallback to 0', () => {

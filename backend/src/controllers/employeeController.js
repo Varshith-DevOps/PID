@@ -76,6 +76,7 @@ const employeeFullIncludes = {
   exitDetails: true,
   dependents: { orderBy: { createdAt: 'asc' } },
   changeHistory: { orderBy: { createdAt: 'desc' } },
+  assetAssignments: true,
 };
 
 const assertEmployeeAccess = async (req, res, employeeId, action = 'modify') => {
@@ -844,7 +845,7 @@ const upsertPFDetails = async (req, res) => {
 const upsertExitDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const { exitType, resignationDate, lastWorkingDate, noticePeriodDays, exitReason, exitInterview, rehireEligible, fnfStatus, fnfAmount, changeReason } = req.body;
+    const { exitType, resignationDate, lastWorkingDate, noticePeriodDays, exitReason, exitInterview, rehireEligible, fnfStatus, fnfAmount, remarks, changeReason } = req.body;
     if (!(await assertEmployeeAccess(req, res, id, 'update exit details for'))) return;
     if (resignationDate || lastWorkingDate) {
       await assertPayrollRangeOpen(resignationDate || lastWorkingDate, lastWorkingDate || resignationDate, 'Exit detail update');
@@ -862,6 +863,7 @@ const upsertExitDetails = async (req, res) => {
       rehireEligible: rehireEligible !== undefined ? rehireEligible : true,
       fnfStatus: fnfStatus || 'PENDING',
       fnfAmount: fnfAmount ? parseFloat(fnfAmount) : null,
+      remarks: remarks || null,
     };
 
     if (existing) {

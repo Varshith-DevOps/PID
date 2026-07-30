@@ -54,11 +54,13 @@ const tenantModels = [
   'Sprint',
   'JobOpening',
   'AiCandidateAssessment',
+  'AgentFeedback',
   'ShiftType',
   'ChecklistTemplate',
   'Holiday',
   'BiometricDevice',
   'Asset',
+  'AssetRequest',
   'LearningCourse',
   'LearningCategory',
   'CourseAssignment',
@@ -171,7 +173,29 @@ const prisma = basePrisma.$extends({
           const relWhere = buildRelationWhere(relationScopedModels[model], companyId);
           if (operation === 'findUnique') {
             const prismaModelName = model.charAt(0).toLowerCase() + model.slice(1);
-            args.where = { AND: [args.where || {}, relWhere] };
+            let flatWhere = {};
+            if (args.where) {
+              for (const key in args.where) {
+                if (args.where[key] && typeof args.where[key] === 'object' && !Array.isArray(args.where[key]) && !(args.where[key] instanceof Date)) {
+                  let isCompoundKey = true;
+                  const operators = ['lt', 'lte', 'gt', 'gte', 'equals', 'in', 'notIn', 'contains', 'startsWith', 'endsWith', 'not', 'mode'];
+                  for (const subKey in args.where[key]) {
+                    if (operators.includes(subKey)) {
+                      isCompoundKey = false;
+                      break;
+                    }
+                  }
+                  if (isCompoundKey) {
+                    Object.assign(flatWhere, args.where[key]);
+                  } else {
+                    flatWhere[key] = args.where[key];
+                  }
+                } else {
+                  flatWhere[key] = args.where[key];
+                }
+              }
+            }
+            args.where = { AND: [flatWhere, relWhere] };
             result = await basePrisma[prismaModelName].findFirst(args);
             return decryptReadResult(result);
           }
@@ -194,5 +218,20 @@ const prisma = basePrisma.$extends({
  * process signal handlers so the HTTP server can drain in-flight requests first.
  */
 prisma.$disconnectBase = () => basePrisma.$disconnect();
+
+/**
+ * Executes a callback within a PostgreSQL RLS transaction context,
+ * setting the session-level GUC app.current_company_id to isolate records.
+ */
+prisma.$withTenant = async (companyId, work) => {
+  return prisma.$transaction(async (tx) => {
+    const value = companyId || 'ALL';
+    const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql') || process.env.DATABASE_URL?.startsWith('postgres');
+    if (isPostgres) {
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_company_id = '${value}'`);
+    }
+    return work(tx);
+  });
+};
 
 module.exports = prisma;

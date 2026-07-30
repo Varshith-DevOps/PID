@@ -10,6 +10,19 @@ describe('Enterprise Access Control Hardening', () => {
   let otherEmployeeId;
 
   beforeAll(async () => {
+    // Clear login audit logs to prevent geo-velocity blocks from prior test suites
+    const empUser = await prisma.user.findUnique({ where: { email: 'rajesh.kumar@company.com' } });
+    const admUser = await prisma.user.findUnique({ where: { email: 'admin@hrms.com' } });
+    const mgrUser = await prisma.user.findUnique({ where: { email: 'manager@hrms.com' } });
+    for (const u of [empUser, admUser, mgrUser].filter(Boolean)) {
+      await prisma.auditLog.deleteMany({
+        where: {
+          userId: u.id,
+          action: { in: ['AUTH_LOGIN_SUCCESS', 'AUTH_PASSKEY_LOGIN_SUCCESS', 'AUTH_SSO_LOGIN_SUCCESS', 'AUTH_LOGIN_ANOMALOUS_GEO_VELOCITY'] }
+        }
+      });
+    }
+
     const empRes = await request(app)
       .post('/api/auth/login')
       .send({ email: 'rajesh.kumar@company.com', password: 'employee123' });

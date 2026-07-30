@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import PulseSurveyWidget from '@/components/PulseSurveyWidget';
+import SocialMilestonesWall from '@/components/SocialMilestonesWall';
 import { useAuth } from '@/lib/authContext';
 import { getPersonalizedDashboard } from '@/lib/api';
 import {
@@ -163,6 +165,9 @@ export default function DashboardPage() {
           ) : (
             <AdminHrDashboardView dashboard={dashboard} departmentData={departmentData} recruitmentData={recruitmentData} availabilityData={availabilityData} />
           )}
+
+          {/* Global Social Milestones & Kudos Wall */}
+          <SocialMilestonesWall />
         </div>
       </main>
     </div>
@@ -225,9 +230,12 @@ function EmployeeDashboardView({ dashboard }: { dashboard: any }) {
           )}
         </Card>
 
-        <Card title="Team availability">
-          <AvailabilityList rows={cards.teamAvailability || []} />
-        </Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+          <PulseSurveyWidget />
+          <Card title="Team availability">
+            <AvailabilityList rows={cards.teamAvailability || []} />
+          </Card>
+        </div>
       </section>
 
       <section className="three-col">

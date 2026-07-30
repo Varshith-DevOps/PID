@@ -115,9 +115,63 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsOnline(window.navigator.onLine);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      showToast('Back online! Reconnecting to HRMS server...', 'success');
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast('You are offline. Some features may not be available.', 'error');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
+
+      {!isOnline && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 100001,
+            backgroundColor: 'rgba(239, 68, 68, 0.95)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+            padding: '8px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: '0 8px 32px rgba(239, 68, 68, 0.25)',
+            color: '#fff',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            backdropFilter: 'blur(8px)',
+            animation: 'fadeInDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            pointerEvents: 'none'
+          }}
+        >
+          <span className="pulse-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#fff', display: 'inline-block' }} />
+          Connection lost. Working offline...
+        </div>
+      )}
 
       {/* Floating Toast Container */}
       <div
@@ -334,6 +388,33 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
           0%   { transform: translateX(-100%) scaleX(0.6); }
           50%  { transform: translateX(60%) scaleX(1); }
           100% { transform: translateX(260%) scaleX(0.6); }
+        }
+        @keyframes fadeInDown {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -20px);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, 0);
+          }
+        }
+        @keyframes pulse-dot {
+          0% {
+            transform: scale(0.9);
+            opacity: 0.6;
+          }
+          50% {
+            transform: scale(1.2);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(0.9);
+            opacity: 0.6;
+          }
+        }
+        .pulse-dot {
+          animation: pulse-dot 1.5s infinite ease-in-out;
         }
       `}</style>
     </ToastContext.Provider>

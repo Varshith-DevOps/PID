@@ -109,6 +109,7 @@ interface Applicant {
   updatedAt?: string;
   interviews: Interview[];
   jobOffer?: JobOffer;
+  aiAssessments?: any[];
   createdAt: string;
 }
 
@@ -985,6 +986,29 @@ export default function JobBoardPage({ params }: { params: Promise<{ id: string 
                             {new Date(app.createdAt).toLocaleDateString()}
                           </div>
                         </div>
+
+                        {app.aiAssessments && app.aiAssessments.length > 0 && (() => {
+                          const latestAssessment = app.aiAssessments[0];
+                          const parsedMatched = typeof latestAssessment.matchedSkills === 'string'
+                            ? JSON.parse(latestAssessment.matchedSkills || '[]')
+                            : (latestAssessment.matchedSkills || []);
+                          const parsedMissing = typeof latestAssessment.missingRequiredSkills === 'string'
+                            ? JSON.parse(latestAssessment.missingRequiredSkills || '[]')
+                            : (latestAssessment.missingRequiredSkills || []);
+                          return (
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed var(--border-subtle)' }}>
+                              <Badge tone={latestAssessment.overallScore >= 75 ? 'success' : latestAssessment.overallScore >= 50 ? 'warning' : 'danger'} style={{ fontSize: '0.62rem', padding: '1px 5px' }}>
+                                AI: {latestAssessment.overallScore}%
+                              </Badge>
+                              <span 
+                                title={`Matched: ${parsedMatched.slice(0, 5).join(', ') || 'None'}\nMissing Required: ${parsedMissing.slice(0, 5).join(', ') || 'None'}`}
+                                style={{ fontSize: '0.62rem', color: 'var(--text-muted)', cursor: 'help', textDecoration: 'underline dotted' }}
+                              >
+                                Skills: {parsedMatched.length}/{parsedMatched.length + parsedMissing.length} matched
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))
                   )}

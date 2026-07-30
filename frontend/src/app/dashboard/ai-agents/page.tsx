@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import {
   askAthenaPolicy,
+  askPriyaHR,
+  submitAgentFeedback,
   askAtlasProject,
   askNovaRecruitment,
   auditPayrollCompliance,
@@ -19,7 +21,7 @@ type AgentKey = 'athena' | 'jarvis' | 'sherlock' | 'winston' | 'atlas' | 'nova';
 type SimpleChatMessage = { sender: 'user' | 'agent'; text: string };
 
 const AGENTS: { key: AgentKey; name: string; role: string; icon: string; accent: string }[] = [
-  { key: 'athena', name: 'Athena', role: 'Policy & RAG Coordinator', icon: '💬', accent: 'var(--accent)' },
+  { key: 'athena', name: 'Priya', role: 'Conversational HR Advisor', icon: '💬', accent: 'var(--accent)' },
   { key: 'jarvis', name: 'Jarvis', role: 'Statutory Payroll Auditor', icon: '📊', accent: 'var(--success-fg)' },
   { key: 'sherlock', name: 'Sherlock', role: 'TDS Document Assessor', icon: '🔍', accent: 'var(--warning-fg)' },
   { key: 'winston', name: 'Winston', role: 'Roster & Attendance Arbiter', icon: '⚡', accent: 'var(--danger-fg)' },
@@ -116,9 +118,36 @@ export default function AIAgentsPage() {
   // Athena state
   const [athenaQuestion, setAthenaQuestion] = useState('');
   const [athenaChat, setAthenaChat] = useState<{ sender: 'user' | 'athena'; text: string; citations?: string[] }[]>([
-    { sender: 'athena', text: "Hello! I am Athena, your Policy Copilot. You can ask me about maternity benefits, gratuity calculations, provident fund caps, or local leave policies." }
+    { sender: 'athena', text: "Hello! I am Priya, your Conversational HR Advisor. I am here to help you and your team with instant, policy-compliant answers. Ask me anything about leaves, notice periods, travel reimbursements, upcoming holidays, team attendance alerts, or appraisals!" }
   ]);
   const [athenaLoading, setAthenaLoading] = useState(false);
+
+  // Priya / Agent feedback states
+  const [feedbackRates, setFeedbackRates] = useState<Record<number, number>>({});
+  const [feedbackText, setFeedbackText] = useState<Record<number, string>>({});
+  const [showCorrectionInput, setShowCorrectionInput] = useState<Record<number, boolean>>({});
+  const [feedbackSaved, setFeedbackSaved] = useState<Record<number, boolean>>({});
+
+  const handleFeedbackSubmit = async (msgIndex: number, rating: number, correctedAnswer?: string) => {
+    // Find the corresponding user question (usually the preceding message)
+    const userMsg = msgIndex > 0 ? athenaChat[msgIndex - 1]?.text : 'General Q&A';
+    const agentMsg = athenaChat[msgIndex]?.text || '';
+    
+    try {
+      await submitAgentFeedback({
+        agentName: 'Priya',
+        question: userMsg,
+        response: agentMsg,
+        rating,
+        correctedText: correctedAnswer || undefined
+      });
+      setFeedbackRates(prev => ({ ...prev, [msgIndex]: rating }));
+      setFeedbackSaved(prev => ({ ...prev, [msgIndex]: true }));
+      setShowCorrectionInput(prev => ({ ...prev, [msgIndex]: false }));
+    } catch (err) {
+      console.error('Error submitting feedback:', err);
+    }
+  };
 
   // Jarvis state
   const [jarvisMonth, setJarvisMonth] = useState(6);
@@ -170,10 +199,10 @@ export default function AIAgentsPage() {
     setAthenaLoading(true);
 
     try {
-      const res = await askAthenaPolicy(userMsg);
+      const res = await askPriyaHR(userMsg);
       setAthenaChat(prev => [...prev, { sender: 'athena', text: res.answer, citations: res.citations }]);
     } catch (err) {
-      setAthenaChat(prev => [...prev, { sender: 'athena', text: "Sorry, I had trouble parsing the policy database." }]);
+      setAthenaChat(prev => [...prev, { sender: 'athena', text: "Sorry, Priya had trouble accessing the HR database." }]);
     } finally {
       setAthenaLoading(false);
     }
@@ -346,13 +375,13 @@ export default function AIAgentsPage() {
 
       {/* Main Agent Interface Console */}
         <Card>
-        {/* Tab 1: Athena */}
+        {/* Tab 1: Priya */}
         {activeAgent === 'athena' && (
           <div>
             <div style={sectionHeaderStyle}>
-              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>Athena: Policy Copilot Console</h2>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-primary)' }}>Priya: Conversational HR Console</h2>
               <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                Ask Athena semantic questions regarding maternity benefits, gratuity clauses, or organizational policies.
+                Ask Priya questions regarding leaves, notice periods, travel reimbursements, upcoming holidays, team attendance alerts, or appraisal schedules.
               </p>
             </div>
 
@@ -393,6 +422,70 @@ export default function AIAgentsPage() {
                       ))}
                     </div>
                   )}
+
+                  {/* Feedback Mechanism for Priya Agent Responses */}
+                  {msg.sender === 'athena' && (
+                    <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {feedbackSaved[index] ? (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--success-fg)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          ✓ Feedback recorded. Thank you for helping Priya learn!
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Was this helpful?</span>
+                          <button
+                            onClick={() => handleFeedbackSubmit(index, 1)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', padding: '2px 4px', borderRadius: '4px' }}
+                            title="Helpful"
+                          >
+                            👍
+                          </button>
+                          <button
+                            onClick={() => setShowCorrectionInput(prev => ({ ...prev, [index]: true }))}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', padding: '2px 4px', borderRadius: '4px' }}
+                            title="Incorrect / Needs Correction"
+                          >
+                            👎
+                          </button>
+                        </div>
+                      )}
+
+                      {showCorrectionInput[index] && (
+                        <div style={{ background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)', padding: '0.75rem', borderRadius: 'var(--radius-sm)', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>Suggest a correction for Priya:</span>
+                          <input
+                            type="text"
+                            value={feedbackText[index] || ''}
+                            onChange={(e) => setFeedbackText(prev => ({ ...prev, [index]: e.target.value }))}
+                            placeholder="Type the correct policy answer here..."
+                            style={{
+                              padding: '0.4rem 0.6rem',
+                              fontSize: '0.85rem',
+                              borderRadius: 'var(--radius-sm)',
+                              border: '1px solid var(--border-subtle)',
+                              background: 'var(--surface-sunken)',
+                              color: 'var(--text-primary)',
+                              width: '100%'
+                            }}
+                          />
+                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => setShowCorrectionInput(prev => ({ ...prev, [index]: false }))}
+                              style={{ padding: '0.35rem 0.65rem', border: '1px solid var(--border-subtle)', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-primary)' }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleFeedbackSubmit(index, -1, feedbackText[index])}
+                              style={{ padding: '0.35rem 0.65rem', border: 'none', background: 'var(--accent)', color: 'var(--text-on-accent)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '0.8rem' }}
+                            >
+                              Submit Correction
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               {athenaLoading && (
@@ -407,7 +500,7 @@ export default function AIAgentsPage() {
                     fontSize: '0.85rem',
                   }}
                 >
-                  Athena is searching policy guides…
+                  Priya is compiling policy guidelines and live metrics…
                 </div>
               )}
             </div>
@@ -419,7 +512,7 @@ export default function AIAgentsPage() {
                   label=""
                   value={athenaQuestion}
                   onChange={setAthenaQuestion}
-                  placeholder="Ask Athena e.g. How is gratuity calculated or what is our leave policy?"
+                  placeholder="Ask Priya e.g. How many leaves do I have? or Show employees with low attendance"
                 />
               </div>
               <Button type="submit" loading={athenaLoading} disabled={athenaLoading}>Send</Button>

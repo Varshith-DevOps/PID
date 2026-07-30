@@ -16,7 +16,7 @@ class SalaryCalculator {
     this.pfRate = STATUTORY_CONSTANTS.PF.EMPLOYEE_RATE;
     this.maxPf = STATUTORY_CONSTANTS.PF.WAGE_CEILING * STATUTORY_CONSTANTS.PF.EMPLOYEE_RATE; // 1800
     this.gratuityRate = STATUTORY_CONSTANTS.GRATUITY.FORMULA_MULTIPLIER;
-    this.otMultiplier = 1.5;
+    this.otMultiplier = 2.0;
     this.standardHours = 176;
     this.ptRate = STATUTORY_CONSTANTS.PT.DEFAULT_RATE;
     this.esiRateEmployee = STATUTORY_CONSTANTS.ESI.EMPLOYEE_RATE;
@@ -172,6 +172,13 @@ class SalaryCalculator {
     const currentMonth = month || (new Date().getMonth() + 1);
     const upperGender = gender.toUpperCase();
 
+    if (stateKey === 'TAMIL_NADU') {
+      const deductionMonths = [3, 9]; // March and September
+      if (!deductionMonths.includes(currentMonth)) {
+        return 0;
+      }
+    }
+
     for (const slab of slabs) {
       const checkGross = stateKey === 'TAMIL_NADU' ? grossEarnings * 6 : grossEarnings;
       if (checkGross > slab.min && checkGross <= slab.max) {
@@ -185,10 +192,6 @@ class SalaryCalculator {
           rate = slab.febRate;
         }
 
-        // Tamil Nadu semi-annual rate pro-rating (divided by 6)
-        if (stateKey === 'TAMIL_NADU') {
-          return Math.round((rate / 6) * 100) / 100;
-        }
         return rate;
       }
     }

@@ -188,6 +188,11 @@ export const login = async (email: string, password: string) => {
   return data;
 };
 
+export const submitSsoAccessRequest = async (payload: { email: string; fullName: string; department?: string; justification?: string }) => {
+  const { data } = await api.post('/auth/sso/request-access', payload);
+  return data;
+};
+
 export const getProfile = async () => {
   const { data } = await api.get('/auth/profile');
   return data;
@@ -1253,6 +1258,8 @@ export const submitRegularization = async (payload: {
   checkOutCorrection?: string;
   statusCorrection?: string;
   reason: string;
+  isFailsafeRegularization?: boolean;
+  gpsCoordinates?: string;
 }) => {
   const { data } = await api.post('/regularizations', payload);
   return data;
@@ -1579,6 +1586,23 @@ export const upsertLearningSkill = async (courseId: string, payload: Record<stri
 export const generateLearningCertificate = async (enrollmentId: string) => {
   const { data } = await api.post(`/learning/certificates/${enrollmentId}/generate`);
   return data;
+};
+
+export const downloadLearningCertificate = async (certificateId: string): Promise<Blob> => {
+  const { data } = await api.get(`/learning/certificates/${certificateId}/download`, { responseType: 'blob' });
+  return data;
+};
+
+export const downloadEpfEcrChallan = async (runId: string, month: number, year: number) => {
+  const response = await api.get(`/reports/epf-ecr/${runId}`, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `EPF_ECR_${year}_${String(month).padStart(2, '0')}.txt`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 };
 
 export const getEmployeeLearningSummary = async (employeeId: string) => {
@@ -1913,6 +1937,23 @@ export const regularizeAttendanceWinston = async (payload: { dateStr: string; ti
 
 export const askAthenaPolicy = async (question: string) => {
   const { data } = await api.post('/ai/athena/ask', { question });
+  return data;
+};
+
+export const askPriyaHR = async (question: string) => {
+  const { data } = await api.post('/ai/priya/ask', { question });
+  return data;
+};
+
+export const submitAgentFeedback = async (payload: {
+  agentName: string;
+  question: string;
+  response: string;
+  rating?: number;
+  feedbackText?: string;
+  correctedText?: string;
+}) => {
+  const { data } = await api.post('/ai/feedback', payload);
   return data;
 };
 

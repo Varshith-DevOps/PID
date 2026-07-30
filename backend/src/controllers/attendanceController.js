@@ -62,6 +62,25 @@ const checkIn = async (req, res) => {
     const employee = req.attendanceContext?.employee || await prisma.employee.findUnique({ where: { id: employeeId } });
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
 
+    // Whitelisted Wi-Fi verification
+    if (employee.companyId) {
+      const whitelisted = await prisma.whiteListedWiFi.findMany({
+        where: { companyId: employee.companyId }
+      });
+      if (whitelisted.length > 0) {
+        const { ssid, bssid } = req.body;
+        if (!ssid || !bssid) {
+          return res.status(403).json({ error: 'Access denied. You must be connected to a corporate Wi-Fi network to check in.' });
+        }
+        const match = whitelisted.find(
+          wifi => wifi.ssid.toLowerCase() === ssid.toLowerCase() && wifi.bssid.toLowerCase() === bssid.toLowerCase()
+        );
+        if (!match) {
+          return res.status(403).json({ error: 'Access denied. You are not connected to a whitelisted corporate Wi-Fi network.' });
+        }
+      }
+    }
+
     const timezone = employee.timezone || 'Asia/Kolkata';
     const zonedNow = toZonedTime(currentTime, timezone);
     const localDayString = format(zonedNow, 'yyyy-MM-dd', { timeZone: timezone });
@@ -534,6 +553,61 @@ const updateSettings = async (req, res) => {
   }
 };
 
+const syncBiometricLogs = async (req, res) => {
+  try {
+    const apiKey = req.query.apiKey || req.headers['x-api-key'];
+    const expectedKey = process.env.BIOMETRIC_API_KEY || 'TEST_SECRET';
+    if (!apiKey || apiKey !== expectedKey) {
+      return res.status(401).json({ error: 'Unauthorized biometric webhook access' });
+    }
+
+    const { companyId, logs } = req.body;
+    if (!companyId || !Array.isArray(logs)) {
+      return res.status(400).json({ error: 'Missing companyId or logs array' });
+    }
+
+    const company = await prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    const { processBiometricLog } = require('../utils/attendanceSync');
+    const createdLogs = [];
+    for (const item of logs) {
+      const { deviceSerial, biometricId, timestamp, direction } = item;
+      if (!deviceSerial || !biometricId || !timestamp || !direction) {
+        continue;
+      }
+
+      const log = await prisma.biometricRawLog.create({
+        data: {
+          companyId,
+          deviceSerial,
+          biometricId: String(biometricId),
+          timestamp: new Date(timestamp),
+          direction,
+          processed: false
+        }
+      });
+
+      createdLogs.push(log);
+      
+      processBiometricLog(log.id).catch(err => {
+        console.error(`Error processing biometric log ${log.id}:`, err.message);
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Received ${createdLogs.length} biometric logs successfully.`,
+      logsReceived: createdLogs.length
+    });
+  } catch (error) {
+    console.error('[SYNC BIOMETRIC LOGS ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   checkIn,
   checkOut,
@@ -543,4 +617,5 @@ module.exports = {
   markAttendance,
   getSettingsHandler,
   updateSettings,
+  syncBiometricLogs,
 };

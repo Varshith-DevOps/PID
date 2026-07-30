@@ -637,50 +637,6 @@ export default function LearningPage() {
                         {course.title}
                       </label>
                     ))}
-
-                    {activeTab === 'kpi' && (
-                      <div className="grid grid-2">
-                        {canManageKpi && (
-                          <>
-                            <Card title="Configure KPI">
-                              <div className="form-grid">
-                                <TextField label="KPI Name" value={kpiForm.name} onChange={(v) => setKpiForm({ ...kpiForm, name: v })} />
-                                <Select label="Department" value={kpiForm.departmentId} onChange={(v) => setKpiForm({ ...kpiForm, departmentId: v })} options={[{ value: '', label: 'All departments' }, ...departments.map((item) => ({ value: item.id, label: item.name }))]} />
-                                <TextField label="Designation" value={kpiForm.designation} onChange={(v) => setKpiForm({ ...kpiForm, designation: v })} />
-                                <TextField label="Target Value" value={kpiForm.targetValue} restrict="decimal" onChange={(v) => setKpiForm({ ...kpiForm, targetValue: v })} />
-                                <TextField label="Weightage" value={kpiForm.weightage} restrict="decimal" onChange={(v) => setKpiForm({ ...kpiForm, weightage: v })} />
-                                <div style={{ gridColumn: '1 / -1' }}><Textarea label="Description" value={kpiForm.description} onChange={(v) => setKpiForm({ ...kpiForm, description: v })} /></div>
-                              </div>
-                              <div style={{ marginTop: '0.75rem' }}><strong>Map to KPAs</strong>{kpas.length ? kpas.map((kpa) => <label key={kpa.id} className="checkbox-label"><input type="checkbox" checked={kpiForm.kpaIds.includes(kpa.id)} onChange={(event) => setKpiForm({ ...kpiForm, kpaIds: event.target.checked ? [...kpiForm.kpaIds, kpa.id] : kpiForm.kpaIds.filter((id) => id !== kpa.id) })} />{kpa.name}</label>) : <p style={{ color: 'var(--text-muted)' }}>Create a KPA first.</p>}</div>
-                              <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateKpi}>Save KPI</Button>
-                            </Card>
-                            <Card title="Configure KPA">
-                              <div className="form-grid">
-                                <TextField label="KPA Name" value={kpaForm.name} onChange={(v) => setKpaForm({ ...kpaForm, name: v })} />
-                                <div style={{ gridColumn: '1 / -1' }}><Textarea label="Description" value={kpaForm.description} onChange={(v) => setKpaForm({ ...kpaForm, description: v })} /></div>
-                              </div>
-                              <strong>Map to Courses</strong>
-                              {courses.map((course) => <label key={course.id} className="checkbox-label"><input type="checkbox" checked={kpaForm.courseIds.includes(course.id)} onChange={(event) => setKpaForm({ ...kpaForm, courseIds: event.target.checked ? [...kpaForm.courseIds, course.id] : kpaForm.courseIds.filter((id) => id !== course.id) })} />{course.title}</label>)}
-                              <strong style={{ display: 'block', marginTop: '0.75rem' }}>Map to Skills</strong>
-                              {skills.length ? skills.map((skill) => <label key={skill.id} className="checkbox-label"><input type="checkbox" checked={kpaForm.skillIds.includes(skill.id)} onChange={(event) => setKpaForm({ ...kpaForm, skillIds: event.target.checked ? [...kpaForm.skillIds, skill.id] : kpaForm.skillIds.filter((id) => id !== skill.id) })} />{skill.name}</label>) : <p style={{ color: 'var(--text-muted)' }}>No Learning skills configured yet.</p>}
-                              <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateKpa}>Save KPA</Button>
-                            </Card>
-                          </>
-                        )}
-                        <Card title="KPI Performance Dashboard" style={{ gridColumn: canManageKpi ? '1 / -1' : undefined }}>
-                          <div className="stat-grid">
-                            <StatCard label="Configured KPIs" value={kpiDashboard.summary?.totalKpis || 0} />
-                            <StatCard label="Employees Inherited" value={kpiDashboard.summary?.assignedEmployees || 0} />
-                            <StatCard label="Average KPI Score" value={`${kpiDashboard.summary?.averageScore || 0}%`} />
-                            <StatCard label="KPI Completion" value={`${kpiDashboard.summary?.averageCompletion || 0}%`} />
-                          </div>
-                          {kpiDashboard.assignments?.length ? <DataTable columns={[{ key: 'employee', header: 'Employee', render: (row: any) => row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '-' }, { key: 'kpi', header: 'KPI', render: (row: any) => row.kpi?.name || '-' }, { key: 'department', header: 'Department', render: (row: any) => row.employee?.department?.name || row.kpi?.department?.name || 'All' }, { key: 'completion', header: 'Completion', render: (row: any) => <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ProgressBar value={row.completionPct || 0} height={6} /><span>{Math.round(row.completionPct || 0)}%</span></div> }, { key: 'score', header: 'Score', render: (row: any) => `${Math.round(row.score || 0)}%` }]} rows={kpiDashboard.assignments} rowKey={(row: any) => row.id} emptyTitle="No KPI assignments" /> : <EmptyState title="No KPI performance data" />}
-                        </Card>
-                        <Card title="KPA Catalogue" style={{ gridColumn: canManageKpi ? '1 / -1' : undefined }}>
-                          {kpas.length ? kpas.map((kpa) => <div key={kpa.id} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)' }}><strong>{kpa.name}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{(kpa.courses || []).map((item: any) => item.course?.title).filter(Boolean).join(', ') || 'No courses mapped'}{(kpa.skills || []).length ? ` | ${(kpa.skills || []).map((item: any) => item.skill?.name).filter(Boolean).join(', ')}` : ''}</div><div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Version {kpa.version || 1}</div></div>) : <EmptyState title="No KPAs configured" />}
-                        </Card>
-                      </div>
-                    )}
                   </div>
                   <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreatePath}>Create Path</Button>
                 </>
@@ -693,6 +649,50 @@ export default function LearningPage() {
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 4 }}>{(path.courses || []).map((item: any) => item.course?.title).filter(Boolean).join(' -> ') || 'No courses linked'}</div>
                 </div>
               )) : <EmptyState title="No learning paths" />}
+            </Card>
+          </div>
+        )}
+
+        {activeTab === 'kpi' && (
+          <div className="grid grid-2">
+            {canManageKpi && (
+              <>
+                <Card title="Configure KPI">
+                  <div className="form-grid">
+                    <TextField label="KPI Name" value={kpiForm.name} onChange={(v) => setKpiForm({ ...kpiForm, name: v })} />
+                    <Select label="Department" value={kpiForm.departmentId} onChange={(v) => setKpiForm({ ...kpiForm, departmentId: v })} options={[{ value: '', label: 'All departments' }, ...departments.map((item) => ({ value: item.id, label: item.name }))]} />
+                    <TextField label="Designation" value={kpiForm.designation} onChange={(v) => setKpiForm({ ...kpiForm, designation: v })} />
+                    <TextField label="Target Value" value={kpiForm.targetValue} restrict="decimal" onChange={(v) => setKpiForm({ ...kpiForm, targetValue: v })} />
+                    <TextField label="Weightage" value={kpiForm.weightage} restrict="decimal" onChange={(v) => setKpiForm({ ...kpiForm, weightage: v })} />
+                    <div style={{ gridColumn: '1 / -1' }}><Textarea label="Description" value={kpiForm.description} onChange={(v) => setKpiForm({ ...kpiForm, description: v })} /></div>
+                  </div>
+                  <div style={{ marginTop: '0.75rem' }}><strong>Map to KPAs</strong>{kpas.length ? kpas.map((kpa) => <label key={kpa.id} className="checkbox-label"><input type="checkbox" checked={kpiForm.kpaIds.includes(kpa.id)} onChange={(event) => setKpiForm({ ...kpiForm, kpaIds: event.target.checked ? [...kpiForm.kpaIds, kpa.id] : kpiForm.kpaIds.filter((id) => id !== kpa.id) })} />{kpa.name}</label>) : <p style={{ color: 'var(--text-muted)' }}>Create a KPA first.</p>}</div>
+                  <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateKpi}>Save KPI</Button>
+                </Card>
+                <Card title="Configure KPA">
+                  <div className="form-grid">
+                    <TextField label="KPA Name" value={kpaForm.name} onChange={(v) => setKpaForm({ ...kpaForm, name: v })} />
+                    <div style={{ gridColumn: '1 / -1' }}><Textarea label="Description" value={kpaForm.description} onChange={(v) => setKpaForm({ ...kpaForm, description: v })} /></div>
+                  </div>
+                  <strong>Map to Courses</strong>
+                  {courses.map((course) => <label key={course.id} className="checkbox-label"><input type="checkbox" checked={kpaForm.courseIds.includes(course.id)} onChange={(event) => setKpaForm({ ...kpaForm, courseIds: event.target.checked ? [...kpaForm.courseIds, course.id] : kpaForm.courseIds.filter((id) => id !== course.id) })} />{course.title}</label>)}
+                  <strong style={{ display: 'block', marginTop: '0.75rem' }}>Map to Skills</strong>
+                  {skills.length ? skills.map((skill) => <label key={skill.id} className="checkbox-label"><input type="checkbox" checked={kpaForm.skillIds.includes(skill.id)} onChange={(event) => setKpaForm({ ...kpaForm, skillIds: event.target.checked ? [...kpaForm.skillIds, skill.id] : kpaForm.skillIds.filter((id) => id !== skill.id) })} />{skill.name}</label>) : <p style={{ color: 'var(--text-muted)' }}>No Learning skills configured yet.</p>}
+                  <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateKpa}>Save KPA</Button>
+                </Card>
+              </>
+            )}
+            <Card title="KPI Performance Dashboard" style={{ gridColumn: canManageKpi ? '1 / -1' : undefined }}>
+              <div className="stat-grid">
+                <StatCard label="Configured KPIs" value={kpiDashboard.summary?.totalKpis || 0} />
+                <StatCard label="Employees Inherited" value={kpiDashboard.summary?.assignedEmployees || 0} />
+                <StatCard label="Average KPI Score" value={`${kpiDashboard.summary?.averageScore || 0}%`} />
+                <StatCard label="KPI Completion" value={`${kpiDashboard.summary?.averageCompletion || 0}%`} />
+              </div>
+              {kpiDashboard.assignments?.length ? <DataTable columns={[{ key: 'employee', header: 'Employee', render: (row: any) => row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '-' }, { key: 'kpi', header: 'KPI', render: (row: any) => row.kpi?.name || '-' }, { key: 'department', header: 'Department', render: (row: any) => row.employee?.department?.name || row.kpi?.department?.name || 'All' }, { key: 'completion', header: 'Completion', render: (row: any) => <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ProgressBar value={row.completionPct || 0} height={6} /><span>{Math.round(row.completionPct || 0)}%</span></div> }, { key: 'score', header: 'Score', render: (row: any) => `${Math.round(row.score || 0)}%` }]} rows={kpiDashboard.assignments} rowKey={(row: any) => row.id} emptyTitle="No KPI assignments" /> : <EmptyState title="No KPI performance data" />}
+            </Card>
+            <Card title="KPA Catalogue" style={{ gridColumn: canManageKpi ? '1 / -1' : undefined }}>
+              {kpas.length ? kpas.map((kpa) => <div key={kpa.id} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)' }}><strong>{kpa.name}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{(kpa.courses || []).map((item: any) => item.course?.title).filter(Boolean).join(', ') || 'No courses mapped'}{(kpa.skills || []).length ? ` | ${(kpa.skills || []).map((item: any) => item.skill?.name).filter(Boolean).join(', ')}` : ''}</div><div style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Version {kpa.version || 1}</div></div>) : <EmptyState title="No KPAs configured" />}
             </Card>
           </div>
         )}

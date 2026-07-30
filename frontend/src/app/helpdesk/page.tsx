@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import AssetRequestDashboard from '@/components/AssetRequestDashboard';
 import { useAuth } from '@/lib/authContext';
 import { createHelpdeskTicket, getHelpdeskTickets } from '@/lib/api';
 import { required } from '@/lib/validators';
@@ -53,6 +54,8 @@ export default function HelpdeskPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'tickets' | 'assets'>('tickets');
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'HR';
 
   useEffect(() => {
     if (!authLoading && !user) router.push('/');
@@ -108,73 +111,86 @@ export default function HelpdeskPage() {
           subtitle="Raise and track support tickets"
           icon={<div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #06b6d4, #3b82f6)' }}>{HELPDESK_ICON}</div>}
         />
-        <div className="grid grid-2">
-          <Card title="New Ticket">
-            {formError && <Banner tone="danger" title={formError} />}
-            <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: formError ? '0.75rem' : 0 }}>
-              <Select
-                label="Category"
-                value={form.category}
-                onChange={(v) => setForm({ ...form, category: v })}
-                options={[
-                  { value: 'HR', label: 'HR' },
-                  { value: 'Payroll', label: 'Payroll' },
-                  { value: 'IT', label: 'IT' },
-                  { value: 'Admin', label: 'Admin' },
-                ]}
-              />
-              <Select
-                label="Priority"
-                value={form.priority}
-                onChange={(v) => setForm({ ...form, priority: v })}
-                options={[
-                  { value: 'LOW', label: 'LOW' },
-                  { value: 'MEDIUM', label: 'MEDIUM' },
-                  { value: 'HIGH', label: 'HIGH' },
-                  { value: 'URGENT', label: 'URGENT' },
-                ]}
-              />
-              <TextField
-                label="Subject"
-                placeholder="Subject"
-                value={form.subject}
-                onChange={(v) => setForm({ ...form, subject: v })}
-                validator={required('Subject')}
-                forceError={submitted}
-                required
-              />
-              <Textarea
-                label="Description"
-                placeholder="Describe the issue"
-                value={form.description}
-                onChange={(v) => setForm({ ...form, description: v })}
-                validator={required('Description')}
-                forceError={submitted}
-                required
-              />
-              <div>
-                <Button type="submit" variant="primary" loading={saving}>Create Ticket</Button>
-              </div>
-            </form>
-          </Card>
-          <div>
-            <Card title="Tickets" padded={false}>
-              <DataTable
-                columns={columns}
-                rows={tickets}
-                loading={loading}
-                rowKey={(t) => t.id}
-                emptyTitle="No tickets"
-                emptyMessage="Submitted tickets will appear here."
-              />
-            </Card>
-            {error && !loading && (
-              <div style={{ marginTop: '0.75rem' }}>
-                <Banner tone="danger" title={error} action={<Button size="sm" variant="ghost" onClick={loadTickets}>Retry</Button>} />
-              </div>
-            )}
-          </div>
+
+        {/* Tab Headers */}
+        <div style={{ display: 'flex', gap: '1.5rem', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1.5rem', paddingBottom: '0.5rem' }}>
+          <button onClick={() => setActiveTab('tickets')} style={{ background: 'transparent', border: 'none', color: activeTab === 'tickets' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeTab === 'tickets' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>Support Tickets</button>
+          <button onClick={() => setActiveTab('assets')} style={{ background: 'transparent', border: 'none', color: activeTab === 'assets' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeTab === 'assets' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>Asset Requests</button>
         </div>
+
+        {activeTab === 'tickets' && (
+          <div className="grid grid-2">
+            <Card title="New Ticket">
+              {formError && <Banner tone="danger" title={formError} />}
+              <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: formError ? '0.75rem' : 0 }}>
+                <Select
+                  label="Category"
+                  value={form.category}
+                  onChange={(v) => setForm({ ...form, category: v })}
+                  options={[
+                    { value: 'HR', label: 'HR' },
+                    { value: 'Payroll', label: 'Payroll' },
+                    { value: 'IT', label: 'IT' },
+                    { value: 'Admin', label: 'Admin' },
+                  ]}
+                />
+                <Select
+                  label="Priority"
+                  value={form.priority}
+                  onChange={(v) => setForm({ ...form, priority: v })}
+                  options={[
+                    { value: 'LOW', label: 'LOW' },
+                    { value: 'MEDIUM', label: 'MEDIUM' },
+                    { value: 'HIGH', label: 'HIGH' },
+                    { value: 'URGENT', label: 'URGENT' },
+                  ]}
+                />
+                <TextField
+                  label="Subject"
+                  placeholder="Subject"
+                  value={form.subject}
+                  onChange={(v) => setForm({ ...form, subject: v })}
+                  validator={required('Subject')}
+                  forceError={submitted}
+                  required
+                />
+                <Textarea
+                  label="Description"
+                  placeholder="Describe the issue"
+                  value={form.description}
+                  onChange={(v) => setForm({ ...form, description: v })}
+                  validator={required('Description')}
+                  forceError={submitted}
+                  required
+                />
+                <div>
+                  <Button type="submit" variant="primary" loading={saving}>Create Ticket</Button>
+                </div>
+              </form>
+            </Card>
+            <div>
+              <Card title="Tickets" padded={false}>
+                <DataTable
+                  columns={columns}
+                  rows={tickets}
+                  loading={loading}
+                  rowKey={(t) => t.id}
+                  emptyTitle="No tickets"
+                  emptyMessage="Submitted tickets will appear here."
+                />
+              </Card>
+              {error && !loading && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <Banner tone="danger" title={error} action={<Button size="sm" variant="ghost" onClick={loadTickets}>Retry</Button>} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'assets' && (
+          <AssetRequestDashboard isAdmin={isAdmin} />
+        )}
       </main>
     </div>
   );

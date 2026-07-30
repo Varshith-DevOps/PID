@@ -11,6 +11,8 @@ const submitRegularization = async (req, res) => {
       statusCorrection,
       reason,
       superAdminOverrideReason,
+      isFailsafeRegularization,
+      gpsCoordinates,
     } = req.body;
 
     if (!date || !requestType || !reason) {
@@ -51,6 +53,8 @@ const submitRegularization = async (req, res) => {
         statusCorrection: statusCorrection || null,
         reason,
         status: 'PENDING',
+        isFailsafeRegularization: isFailsafeRegularization === true,
+        gpsCoordinates: gpsCoordinates || null,
       },
     });
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
+import { useToast } from '@/lib/toastContext';
 import { getProjects, getProjectById, createProject, updateProject, deleteProject, addProjectExpense, getTasks, createTask, updateTask, deleteTask, getEmployees } from '@/lib/api';
 import { CanCreate, CanEdit, CanDelete } from '@/components/PermissionGuard';
 import Sidebar from '@/components/Sidebar';
@@ -66,6 +67,7 @@ const PROJECTS_ICON = (
 export default function ProjectsPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { showToast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -101,7 +103,10 @@ export default function ProjectsPage() {
     try {
       const data = await getProjects({ limit: 50 });
       setProjects(data.projects);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load projects.', 'error');
+    }
     finally { setLoading(false); }
   };
 
@@ -110,7 +115,10 @@ export default function ProjectsPage() {
     try {
       const data = await getTasks();
       setTasks(data);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load tasks.', 'error');
+    }
     finally { setLoading(false); }
   };
 
@@ -118,7 +126,10 @@ export default function ProjectsPage() {
     try {
       const data = await getEmployees({ limit: 100 });
       setEmployees(data.employees);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load employees list.', 'error');
+    }
   };
 
   const loadProjectDetail = async (id: string) => {
@@ -126,7 +137,10 @@ export default function ProjectsPage() {
       const data = await getProjectById(id);
       setSelectedProject(data);
       setView('detail');
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load project details.', 'error');
+    }
   };
 
   const resetProjectForm = () => {
@@ -156,8 +170,10 @@ export default function ProjectsPage() {
       resetProjectForm();
       setView('projects');
       loadProjects();
-      alert('Project created');
-    } catch (err) { alert('Failed to create project'); }
+      showToast('Project created successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to create project.', 'error');
+    }
   };
 
   const beginEditProject = (project: Project) => {
@@ -197,8 +213,10 @@ export default function ProjectsPage() {
       resetProjectForm();
       setView('projects');
       loadProjects();
-      alert('Project updated');
-    } catch (err) { alert('Failed to update project'); }
+      showToast('Project updated successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to update project.', 'error');
+    }
   };
 
   const handleDeleteProject = async (project: Project) => {
@@ -207,8 +225,10 @@ export default function ProjectsPage() {
       if (selectedProject?.id === project.id) setSelectedProject(null);
       loadProjects();
       setView('projects');
-      alert('Project deactivated');
-    } catch (err) { alert('Failed to deactivate project'); }
+      showToast('Project deactivated successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to deactivate project.', 'error');
+    }
     finally { setDeleteTarget(null); }
   };
 
@@ -236,8 +256,10 @@ export default function ProjectsPage() {
       setView('tasks');
       loadTasks();
       if (targetProjectId) loadProjectDetail(targetProjectId);
-      alert('Task created');
-    } catch (err) { alert('Failed to create task'); }
+      showToast('Task created successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to create task.', 'error');
+    }
   };
 
   const handleAddExpense = async () => {
@@ -246,8 +268,10 @@ export default function ProjectsPage() {
       await addProjectExpense(selectedProject.id, expenseForm);
       setExpenseForm({ description: '', amount: 0 });
       loadProjectDetail(selectedProject.id);
-      alert('Expense added');
-    } catch (err) { alert('Failed to add expense'); }
+      showToast('Expense added successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to add project expense.', 'error');
+    }
   };
 
   const handleTaskStatusChange = async (taskId: string, newStatus: string) => {
@@ -255,7 +279,11 @@ export default function ProjectsPage() {
       await updateTask(taskId, { status: newStatus });
       loadTasks();
       if (selectedProject) loadProjectDetail(selectedProject.id);
-    } catch (err) { console.error(err); }
+      showToast('Task status updated.', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update task status.', 'error');
+    }
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -263,7 +291,10 @@ export default function ProjectsPage() {
       await deleteTask(taskId);
       loadTasks();
       if (selectedProject) loadProjectDetail(selectedProject.id);
-    } catch (err) { alert('Failed to delete task'); }
+      showToast('Task deleted successfully.', 'success');
+    } catch (err) {
+      showToast('Failed to delete task.', 'error');
+    }
     finally { setDeleteTaskId(null); }
   };
 

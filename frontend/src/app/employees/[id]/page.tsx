@@ -10,6 +10,7 @@ import { BankTab, PFTab } from '@/components/employee-tabs/FinanceTabs';
 import DocumentsTab from '@/components/employee-tabs/DocumentsTab';
 import { DependentsTab, ExitTab, AddressTab, HistoryTab } from '@/components/employee-tabs/OtherTabs';
 import LearningTab from '@/components/employee-tabs/LearningTab';
+import LifecycleTimeline from '@/components/employee-tabs/LifecycleTimeline';
 import {
   PageHeader, Button, Card, StatCard, Avatar, Badge, StatusChip,
   Tabs, DataTable, Field, Select, DateField, TextField, NumberField,
@@ -17,13 +18,13 @@ import {
 } from '@/components/ui';
 import type { Column, TabItem } from '@/components/ui';
 
-const TABS = ['personal', 'professional', 'bank', 'pf', 'documents', 'learning', 'dependents', 'exit', 'salary', 'address', 'access', 'history'];
+const TABS = ['personal', 'professional', 'timeline', 'bank', 'pf', 'documents', 'learning', 'dependents', 'exit', 'salary', 'address', 'access', 'history'];
 const TAB_ICONS: Record<string, string> = {
-  personal: '👤', professional: '💼', bank: '🏦', pf: '🛡️', documents: '📄',
+  personal: '👤', professional: '💼', timeline: '📈', bank: '🏦', pf: '🛡️', documents: '📄',
   dependents: '👨‍👩‍👧', exit: '🚪', salary: '💰', address: '🏠', access: '🔐', history: '📝',
 };
 const TAB_LABELS: Record<string, string> = {
-  personal: 'Personal', professional: 'Professional', bank: 'Bank Details', pf: 'PF Details',
+  personal: 'Personal', professional: 'Professional', timeline: 'Career Timeline', bank: 'Bank Details', pf: 'PF Details',
   documents: 'Documents', dependents: 'Dependents', exit: 'Exit Details', salary: 'Salary & CTC',
   address: 'Addresses', access: 'Access Control', history: 'Change History',
 };
@@ -309,6 +310,7 @@ export default function EmployeeDetailPage() {
         <div className="glass-card" style={{ padding: '2rem' }}>
           {activeTab === 'personal' && <PersonalTab employee={employee} canEdit={canEdit} onSave={handleFieldSave} shouldMask={shouldMask} />}
           {activeTab === 'professional' && <ProfessionalTab employee={employee} canEdit={canEdit} onSave={handleFieldSave} />}
+          {activeTab === 'timeline' && <LifecycleTimeline employee={employee} />}
           {activeTab === 'bank' && <BankTab employee={employee} canEdit={canEdit} shouldMask={shouldMask} onReload={loadEmployee} />}
           {activeTab === 'pf' && <PFTab employee={employee} canEdit={canEdit} shouldMask={shouldMask} onReload={loadEmployee} />}
           {activeTab === 'documents' && <DocumentsTab employee={employee} canEdit={canEdit} onReload={loadEmployee} />}

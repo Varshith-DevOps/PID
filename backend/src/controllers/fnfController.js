@@ -15,7 +15,23 @@ const getFNFCalculation = async (req, res) => {
   try {
     const { employeeId } = req.params;
     const calc = await calculateFNFSettlement(employeeId);
-    res.json(calc);
+    
+    // Query outstanding assets assigned to the employee
+    const outstandingAssets = await prisma.asset.findMany({
+      where: { assignedToId: employeeId }
+    });
+
+    res.json({
+      ...calc,
+      outstandingAssets: outstandingAssets.map(a => ({
+        id: a.id,
+        assetTag: a.assetTag,
+        name: a.name,
+        category: a.category,
+        condition: a.condition,
+        assignedAt: a.assignedAt
+      }))
+    });
   } catch (error) {
     console.error('FNF CALCULATION ERROR:', error.message);
     res.status(400).json({ error: error.message });
@@ -30,6 +46,18 @@ const finalizeFNFSettlement = async (req, res) => {
   try {
     const { employeeId } = req.params;
     const { remarks } = req.body;
+
+    // Reject finalization if employee holds unreturned physical assets
+    const outstandingAssets = await prisma.asset.findMany({
+      where: { assignedToId: employeeId }
+    });
+
+    if (outstandingAssets.length > 0) {
+      return res.status(400).json({
+        error: `Cannot finalize F&F settlement. Employee has ${outstandingAssets.length} outstanding assets that must be returned first.`,
+        outstandingAssets: outstandingAssets.map(a => ({ id: a.id, assetTag: a.assetTag, name: a.name }))
+      });
+    }
 
     const calc = await calculateFNFSettlement(employeeId);
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
+import { useToast } from '@/lib/toastContext';
 import {
   getProjects, getProjectById, getProjectBoard, moveTask, getProjectCosting,
   setResourceRate, getSprints, createSprint, getBurndown,
@@ -30,6 +31,7 @@ const BOARD_ICON = (
 export default function ProjectBoardPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { showToast } = useToast();
   const [projects, setProjects] = useState<any[]>([]);
   const [projectId, setProjectId] = useState<string>('');
   const [columns, setColumns] = useState<BoardColumn[]>([]);
@@ -51,21 +53,29 @@ export default function ProjectBoardPage() {
       const list = d.projects || d || [];
       setProjects(list);
       if (list.length && !projectId) setProjectId(list[0].id);
+    }).catch((err) => {
+      console.error(err);
+      showToast('Failed to load projects list.', 'error');
     }).finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadBoard = useCallback(async (pid: string) => {
     if (!pid) return;
-    const [board, cost, detail, sprintList] = await Promise.all([
-      getProjectBoard(pid), getProjectCosting(pid).catch(() => null),
-      getProjectById(pid).catch(() => null), getSprints(pid).catch(() => []),
-    ]);
-    setColumns(board.columns || []);
-    setCosting(cost);
-    setResources(detail?.resources || []);
-    setSprints(sprintList || []);
-    if ((sprintList || []).length) setSprintId((prev) => prev || sprintList[0].id);
-  }, []);
+    try {
+      const [board, cost, detail, sprintList] = await Promise.all([
+        getProjectBoard(pid), getProjectCosting(pid).catch(() => null),
+        getProjectById(pid).catch(() => null), getSprints(pid).catch(() => []),
+      ]);
+      setColumns(board.columns || []);
+      setCosting(cost);
+      setResources(detail?.resources || []);
+      setSprints(sprintList || []);
+      if ((sprintList || []).length) setSprintId((prev) => prev || sprintList[0].id);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to load project board details.', 'error');
+    }
+  }, [showToast]);
 
   useEffect(() => { if (projectId) loadBoard(projectId); }, [projectId, loadBoard]);
   useEffect(() => { if (sprintId) getBurndown(sprintId).then(setBurndown).catch(() => setBurndown(null)); }, [sprintId]);
@@ -81,7 +91,15 @@ export default function ProjectBoardPage() {
           : c.tasks.filter((t) => t.id !== taskId),
       }));
     });
-    try { await moveTask(taskId, { status: newStatus }); } finally { loadBoard(projectId); }
+    try {
+      await moveTask(taskId, { status: newStatus });
+      showToast('Task status updated.', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to move task.', 'error');
+    } finally {
+      loadBoard(projectId);
+    }
   };
 
   const openRates = () => {
@@ -91,18 +109,30 @@ export default function ProjectBoardPage() {
     setShowRates(true);
   };
   const saveRates = async () => {
-    await Promise.all(resources.map((r) =>
-      setResourceRate(projectId, { employeeId: r.employeeId, costRate: rateDraft[r.employeeId]?.costRate, billRate: rateDraft[r.employeeId]?.billRate }),
-    ));
-    setShowRates(false);
-    loadBoard(projectId);
+    try {
+      await Promise.all(resources.map((r) =>
+        setResourceRate(projectId, { employeeId: r.employeeId, costRate: rateDraft[r.employeeId]?.costRate, billRate: rateDraft[r.employeeId]?.billRate }),
+      ));
+      showToast('Resource rates saved successfully.', 'success');
+      setShowRates(false);
+      loadBoard(projectId);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update resource rates.', 'error');
+    }
   };
   const submitSprint = async () => {
     if (!newSprint.name || !newSprint.startDate || !newSprint.endDate) return;
-    await createSprint(projectId, newSprint);
-    setNewSprint({ name: '', startDate: '', endDate: '' });
-    setShowNewSprint(false);
-    loadBoard(projectId);
+    try {
+      await createSprint(projectId, newSprint);
+      setNewSprint({ name: '', startDate: '', endDate: '' });
+      setShowNewSprint(false);
+      loadBoard(projectId);
+      showToast('Sprint created successfully.', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to create new sprint.', 'error');
+    }
   };
 
   if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;

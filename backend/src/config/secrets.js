@@ -75,6 +75,10 @@ function validateStartupSecrets() {
   if (isProd) {
     if (!process.env.DATABASE_URL || process.env.DATABASE_URL.startsWith('file:')) {
       problems.push('DATABASE_URL must point to a production database; SQLite/file URLs are not allowed in production');
+    } else if (process.env.DATABASE_URL.startsWith('postgresql') || process.env.DATABASE_URL.startsWith('postgres')) {
+      if (!process.env.DATABASE_URL.includes('connection_limit=')) {
+        problems.push('DATABASE_URL must specify a connection_limit parameter in production (e.g. connection_limit=20) for connection pool limits configuration.');
+      }
     }
     if (!process.env.ALLOWED_ORIGINS) {
       problems.push('ALLOWED_ORIGINS must be set explicitly in production');

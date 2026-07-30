@@ -29,8 +29,10 @@ router.use(authenticate);
 router.post('/sherlock/audit-proof', upload.single('document'), aiController.auditProof);
 router.post('/jarvis/audit-payroll', aiController.auditPayroll);
 router.post('/winston/regularize', aiController.regularizeAttendance);
-router.post('/athena/ask', aiController.askQuestion);
+router.post('/athena/ask', aiController.askPriya); // Upgraded: Legacy Athena points to Priya
+router.post('/priya/ask', aiController.askPriya);
 router.post('/project', aiController.askProject);
 router.post('/recruitment', aiController.askRecruitment);
+router.post('/feedback', aiController.submitFeedback);
 
 module.exports = router;

@@ -14,6 +14,8 @@ const {
 } = require('../services/aiAgentService');
 const { askProjectQuestion } = require('../services/ai/projectAgent');
 const { askRecruitmentQuestion } = require('../services/ai/recruitmentAgent');
+const { askPriyaQuestion } = require('../services/ai/priyaAgent');
+const prisma = require('../config/database');
 
 const PROJECT_AI_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'MANAGER']);
 const RECRUITMENT_AI_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR', 'RECRUITER']);
@@ -135,5 +137,57 @@ exports.askRecruitment = async (req, res) => {
   } catch (error) {
     console.error('NOVA RECRUITMENT AI ERROR:', error);
     return res.status(500).json({ error: 'Nova failed to fetch recruitment answer.' });
+  }
+};
+
+/**
+ * Invokes Priya HR agent to answer employee and manager queries.
+ */
+exports.askPriya = async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question || question.trim() === '') {
+      return res.status(400).json({ error: 'Question parameter is required.' });
+    }
+
+    const result = await askPriyaQuestion(question, req.user);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('PRIYA HR AGENT ERROR:', error);
+    return res.status(500).json({ error: 'Priya failed to process the request.' });
+  }
+};
+
+/**
+ * Records user feedback (upvote, downvote, text comment, corrections) for any agent.
+ */
+exports.submitFeedback = async (req, res) => {
+  try {
+    const { agentName, question, response, rating, feedbackText, correctedText } = req.body;
+    if (!agentName || !question) {
+      return res.status(400).json({ error: 'agentName and question parameters are required.' });
+    }
+
+    const companyId = req.user?.companyId || null;
+    const userId = req.user?.id || null;
+
+    const feedback = await prisma.agentFeedback.create({
+      data: {
+        agentName,
+        companyId,
+        userId,
+        question,
+        response: response || '',
+        rating: rating !== undefined ? parseInt(rating) : null,
+        feedbackText: feedbackText || null,
+        isCorrected: Boolean(correctedText && correctedText.trim() !== ''),
+        correctedText: correctedText || null
+      }
+    });
+
+    return res.status(201).json({ success: true, feedback });
+  } catch (error) {
+    console.error('SUBMIT AGENT FEEDBACK ERROR:', error);
+    return res.status(500).json({ error: 'Failed to record agent feedback.' });
   }
 };
