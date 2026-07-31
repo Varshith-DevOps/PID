@@ -12,6 +12,16 @@ configure_logging()
 
 app = FastAPI(title="HRMS AI Recruitment Service")
 
+@app.on_event("startup")
+async def startup_event():
+    settings = get_settings()
+    if not settings.hrms_service_token:
+        logger.error(
+            "[AUTH] HRMS_SERVICE_TOKEN is not configured in ai-recruitment-service/.env. "
+            "The AI Recruitment Service will reject all requests from the backend. "
+            "Please run `npm run setup:tokens` from the backend directory to fix this."
+        )
+
 
 class ApprovalRequest(BaseModel):
     workflow_id: str | None = Field(default=None, alias="workflowId")

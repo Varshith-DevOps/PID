@@ -103,11 +103,20 @@ api.interceptors.response.use(
       || original.headers?.['x-skip-refresh']
       || url.includes('/auth/refresh')
       || url.includes('/auth/login');
-    if (status === 401 && !skipRefresh && typeof window !== 'undefined') {
-      original._retry = true;
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
-        return api(original); // replay the original request silently
+      
+    if (status === 401 && !url.includes('/auth/login') && typeof window !== 'undefined') {
+      if (!skipRefresh) {
+        original._retry = true;
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          return api(original); // replay the original request silently
+        }
+      }
+      // Session is permanently dead.
+      localStorage.clear();
+      sessionStorage.clear();
+      if (window.location.pathname !== '/' && window.location.pathname !== '/login') {
+        window.location.href = '/';
       }
     }
 
@@ -184,7 +193,9 @@ api.defaults.adapter = async (config: any) => {
 };
 
 export const login = async (email: string, password: string) => {
-  const { data } = await api.post('/auth/login', { email, password });
+  const { data } = await api.post('/auth/login', { email, password }, {
+    headers: { Authorization: undefined }
+  });
   return data;
 };
 
@@ -331,12 +342,12 @@ export const deleteDocument = async (id: string) => {
 };
 
 export const checkIn = async (employeeId: string) => {
-  const { data } = await api.post('/attendance/check-in', { employeeId });
+  const { data } = await api.post('/attendance/check-in', { employeeId, timestamp: new Date().toISOString() });
   return data;
 };
 
 export const checkOut = async (employeeId: string) => {
-  const { data } = await api.post('/attendance/check-out', { employeeId });
+  const { data } = await api.post('/attendance/check-out', { employeeId, timestamp: new Date().toISOString() });
   return data;
 };
 
@@ -765,6 +776,10 @@ export const logout = async () => {
     await api.post('/auth/logout');
   } catch {
     // Best-effort server-side revocation; local state is cleared regardless.
+  }
+  if (typeof window !== 'undefined') {
+    localStorage.clear();
+    sessionStorage.clear();
   }
 };
 

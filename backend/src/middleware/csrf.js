@@ -58,6 +58,9 @@ function csrfProtection(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) return next();
 
+  // Login route bootstraps the session, exempt from CSRF.
+  if (req.originalUrl.includes('/auth/login')) return next();
+
   // Only cookie-authenticated sessions are at risk.
   const sessionCookie = req.cookies && req.cookies.token;
   if (!sessionCookie) return next();

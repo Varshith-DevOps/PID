@@ -1,6 +1,7 @@
+import os
 from functools import lru_cache
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -24,9 +25,12 @@ class Settings(BaseSettings):
     llm_request_timeout_seconds: int = Field(60, alias="LLM_REQUEST_TIMEOUT_SECONDS")
     pii_logging_enabled: bool = Field(False, alias="PII_LOGGING_ENABLED")
 
-    class Config:
-        env_file = ".env"
-        populate_by_name = True
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        env_file_encoding="utf-8",
+        populate_by_name=True,
+        extra="ignore"
+    )
 
 
 @lru_cache

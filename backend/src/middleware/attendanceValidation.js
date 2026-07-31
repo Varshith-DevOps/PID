@@ -25,7 +25,7 @@ const getHaversineDistance = (lat1, lon1, lat2, lon2) => {
  */
 const validateAttendancePunch = async (req, res, next) => {
   try {
-    const {
+    let {
       employeeId,
       latitude,
       longitude,
@@ -39,52 +39,94 @@ const validateAttendancePunch = async (req, res, next) => {
       deviceId
     } = req.body;
 
-    // 1. Employee ID validation
-    if (!employeeId) {
-      return res.status(400).json({ error: 'Missing employeeId in request body.' });
+    const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'];
+    const isPrivileged = ADMIN_ROLES.includes(req.user?.role);
+
+    // Build a companyId filter that avoids the Prisma "IS NULL" trap.
+    // When companyId is undefined we omit it so Prisma doesn't filter on it.
+    const companyFilter = req.user.companyId ? { companyId: req.user.companyId } : {};
+
+    // 1. Employee resolution
+    let employee;
+
+    if (!isPrivileged || !employeeId) {
+      // EMPLOYEE role: always resolve from the authenticated user's own linked record.
+      // Admins/Managers without an explicit employeeId also fall through here.
+      employee = await prisma.employee.findFirst({
+        where: { userId: req.user.id, ...companyFilter },
+        include: { department: true }
+      });
+      if (!employee) {
+        return res.status(400).json({
+          error: 'Employee account is not linked to your login account. Please contact HR to fix this.'
+        });
+      }
+      employeeId = employee.id;
+      req.body.employeeId = employeeId;
+    } else {
+      // Privileged role with explicit employeeId — look up the target employee
+      employee = await prisma.employee.findFirst({
+        where: { id: employeeId, ...companyFilter },
+        include: { department: true }
+      });
+      if (!employee) {
+        return res.status(404).json({ error: 'Employee not found in your organization.' });
+      }
     }
 
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
-      include: { department: true }
-    });
-
-    if (!employee) {
-      return res.status(404).json({ error: 'Employee not found.' });
+    if (!employee.userId) {
+      return res.status(400).json({
+        error: 'This Employee profile is missing a linked User account. Please contact HR.'
+      });
     }
 
     if (!employee.isActive) {
       return res.status(403).json({ error: 'Forbidden: Employee profile is inactive.' });
     }
 
-    // Verify ownership: Non-admin/non-manager roles can only punch for themselves
-    if (req.user?.role !== 'SUPER_ADMIN' && req.user?.role !== 'ADMIN' && req.user?.role !== 'MANAGER') {
-      if (employee.userId !== req.user.id) {
-        return res.status(403).json({ error: 'Forbidden: You cannot punch attendance for another employee.' });
-      }
+    // Verify ownership: Non-privileged roles can only punch for themselves
+    if (!isPrivileged && employee.userId !== req.user.id) {
+      return res.status(403).json({
+        error: 'Forbidden: You cannot punch attendance for another employee.'
+      });
     }
 
-    // 2. Replay attack prevention: Timestamp nonce validation (within 2 minutes)
+    // 2. Timestamp handling
+    // Web clients may not send a timestamp; auto-generate one for them.
+    // Mobile clients MUST send a timestamp for replay-attack prevention.
+    const isMobileClient = req.headers['x-client-type'] === 'mobile';
+
     if (!timestamp) {
-      return res.status(400).json({ error: 'Security: Missing request timestamp.' });
+      if (isMobileClient) {
+        return res.status(400).json({ error: 'Security: Missing request timestamp.' });
+      }
+      // Web client: use server time as the request timestamp
+      timestamp = new Date().toISOString();
+      req.body.timestamp = timestamp;
     }
+
     const requestTime = new Date(timestamp).getTime();
     const serverTime = Date.now();
     if (isNaN(requestTime) || Math.abs(serverTime - requestTime) > 2 * 60 * 1000) {
-      return res.status(400).json({ error: 'Security: Request timestamp has expired or is invalid (stale request).' });
+      return res.status(400).json({
+        error: 'Security: Request timestamp has expired or is invalid (stale request).'
+      });
     }
 
     // 3. Signed mobile request validation (HMAC SHA-256)
-    if (req.headers['x-client-type'] === 'mobile') {
+    if (isMobileClient) {
       if (!signature || !deviceId) {
-        return res.status(400).json({ error: 'Security: Signed mobile requests require device ID and signature.' });
+        return res.status(400).json({
+          error: 'Security: Signed mobile requests require device ID and signature.'
+        });
       }
       let secret;
       try {
         secret = getMobileAppSecret();
       } catch (e) {
-        // Fail closed: never fall back to a default signing key.
-        return res.status(503).json({ error: 'Security: mobile signing is not configured on the server.' });
+        return res.status(503).json({
+          error: 'Security: mobile signing is not configured on the server.'
+        });
       }
       const expectedSignature = crypto
         .createHmac('sha256', secret)
@@ -92,7 +134,9 @@ const validateAttendancePunch = async (req, res, next) => {
         .digest('hex');
 
       if (signature !== expectedSignature) {
-        return res.status(403).json({ error: 'Security: Request signature mismatch (possible tampering).' });
+        return res.status(403).json({
+          error: 'Security: Request signature mismatch (possible tampering).'
+        });
       }
     }
 

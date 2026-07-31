@@ -79,11 +79,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setPermissions(userPermissions || []);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     // Revoke server-side (bumps tokenVersion) before clearing local state.
-    void apiLogout();
+    // Must be awaited so the network request completes before csrfToken is deleted locally.
+    await apiLogout();
     clearApiCache();
     document.cookie = 'csrfToken=; path=/; max-age=0';
+    document.cookie = 'token=; path=/; max-age=0';
+    if (typeof window !== 'undefined') {
+      localStorage.clear();
+      sessionStorage.clear();
+    }
     setUser(null);
     setPermissions([]);
   }, []);

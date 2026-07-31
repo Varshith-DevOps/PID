@@ -36,7 +36,7 @@ router.post('/refresh', loginLimiter, refresh);
 router.post('/register', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), registerLimiter, register);
 router.get('/profile', authenticate, getProfile);
 router.get('/csrf-token', authenticate, getCsrfToken);
-router.post('/logout', authenticate, logout);
+router.post('/logout', logout);
 router.put('/change-password', authenticate, sensitiveLimiter, validate(changePasswordSchema), changePassword);
 router.put('/reset-password/:userId', authenticate, requireRole('SUPER_ADMIN', 'ADMIN'), sensitiveLimiter, validate(resetPasswordSchema), resetPasswordForUser);
 router.post('/mfa/setup', authenticate, sensitiveLimiter, setupMfa);

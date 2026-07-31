@@ -797,35 +797,44 @@ const signup = async (req, res) => {
  */
 const logout = async (req, res) => {
   try {
-    let token = null;
+    // Attempt best-effort server-side revocation without requiring a valid token
+    let token = req.cookies?.token;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
-    } else if (req.cookies && req.cookies.token) {
+    } else if (!token && req.cookies && req.cookies.token) {
       token = req.cookies.token;
     }
 
     if (token) {
       try {
-        const decoded = jwt.decode(token);
-        if (decoded && decoded.exp) {
-          const now = Math.floor(Date.now() / 1000);
-          const remaining = decoded.exp - now;
-          if (remaining > 0) {
-            await blacklistToken(token, remaining);
+        const decoded = jwt.decode(token); // Decode without verifying signature/expiry
+        if (decoded) {
+          if (decoded.exp) {
+            const now = Math.floor(Date.now() / 1000);
+            const remaining = decoded.exp - now;
+            if (remaining > 0) {
+              await blacklistToken(token, remaining);
+            }
+          }
+          const userId = req.user?.id || decoded.id;
+          if (userId) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { tokenVersion: { increment: 1 } },
+            }).catch(() => {});
           }
         }
       } catch (err) {
         console.error('[LOGOUT BLACKLIST WARNING]:', err.message);
       }
-    }
-
-    if (req.user?.id) {
+    } else if (req.user?.id) {
       await prisma.user.update({
         where: { id: req.user.id },
         data: { tokenVersion: { increment: 1 } },
       }).catch(() => {});
     }
+
     res.clearCookie('token', { domain: COOKIE_DOMAIN });
     res.clearCookie('csrfToken', { domain: COOKIE_DOMAIN });
     res.clearCookie('refreshToken', { domain: COOKIE_DOMAIN, path: REFRESH_COOKIE_PATH });

@@ -140,7 +140,7 @@ export default function AttendancePage() {
   const loadProfile = async () => {
     try {
       const profile = await getProfile();
-      setEmployeeId(profile.id);
+      setEmployeeId(profile.employeeId || '');
     } catch (err) {
       console.error(err);
       showToast('Failed to load profile details.', 'error');

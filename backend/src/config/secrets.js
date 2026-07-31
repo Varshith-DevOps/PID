@@ -109,6 +109,14 @@ function validateStartupSecrets() {
     problems.push('FIELD_ENCRYPTION_KEY is set but does not decode to 32 bytes; field encryption will be disabled');
   }
 
+  // Validate AI Service Tokens
+  const aiToken = process.env.AI_RECRUITMENT_SERVICE_TOKEN || process.env.HRMS_SERVICE_TOKEN;
+  if (!aiToken) {
+    problems.push('AI_RECRUITMENT_SERVICE_TOKEN or HRMS_SERVICE_TOKEN must be set to authenticate with the AI service. Run `npm run setup:tokens` to fix.');
+  } else if (isWeakSecret(aiToken)) {
+    problems.push(`AI_RECRUITMENT_SERVICE_TOKEN is set but weak; must be >= ${MIN_SECRET_LENGTH} chars and not a known-weak default.`);
+  }
+
   if (problems.length === 0) return;
 
   const message = `❌ Insecure secret configuration:\n  - ${problems.join('\n  - ')}`;
