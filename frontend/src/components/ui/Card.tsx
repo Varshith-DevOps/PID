@@ -2,20 +2,22 @@
 
 import React from 'react';
 
-interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title' | 'action'> {
   title?: React.ReactNode;
   actions?: React.ReactNode;
+  action?: React.ReactNode; // Alias for actions
   padded?: boolean;
 }
 
-export function Card({ title, actions, padded = true, children, style, ...rest }: CardProps) {
+export function Card({ title, actions, action, padded = true, children, style, ...rest }: CardProps) {
+  const finalActions = actions || action;
   return (
     <div
       className="card"
       style={{ padding: padded ? '1.25rem' : 0, ...style }}
       {...rest}
     >
-      {(title || actions) && (
+      {(title || finalActions) && (
         <div
           style={{
             display: 'flex',
@@ -30,7 +32,7 @@ export function Card({ title, actions, padded = true, children, style, ...rest }
               {title}
             </h2>
           )}
-          {actions && <div style={{ display: 'flex', gap: '0.5rem' }}>{actions}</div>}
+          {finalActions && <div style={{ display: 'flex', gap: '0.5rem' }}>{finalActions}</div>}
         </div>
       )}
       {children}

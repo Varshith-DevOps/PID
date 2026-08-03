@@ -1397,18 +1397,49 @@ export const getAssets = async (params?: { status?: string; assignedToId?: strin
   return data;
 };
 
-export const createAsset = async (payload: { assetTag: string; name: string; category: string; serialNumber?: string; condition?: string; notes?: string }) => {
+export const getAssetDashboard = async () => {
+  const { data } = await api.get('/assets/dashboard');
+  return data;
+};
+
+export const getAssetHistory = async (id: string) => {
+  const { data } = await api.get(`/assets/${id}/history`);
+  return data;
+};
+
+export const createAsset = async (payload: { 
+  assetTag: string; 
+  name: string; 
+  category: string; 
+  serialNumber?: string; 
+  condition?: string; 
+  notes?: string;
+  location?: string;
+  purchaseDate?: string;
+  purchaseCost?: number;
+  warrantyExpiry?: string;
+}) => {
   const { data } = await api.post('/assets', payload);
   return data;
 };
 
-export const assignAsset = async (id: string, employeeId: string) => {
-  const { data } = await api.put(`/assets/${id}/assign`, { employeeId });
+export const assignAsset = async (id: string, payload: { employeeId: string; assignedAt?: string; notes?: string }) => {
+  const { data } = await api.put(`/assets/${id}/assign`, payload);
   return data;
 };
 
-export const returnAsset = async (id: string, payload?: { condition?: string; notes?: string }) => {
+export const returnAsset = async (id: string, payload?: { condition?: string; notes?: string; returnedAt?: string }) => {
   const { data } = await api.put(`/assets/${id}/return`, payload || {});
+  return data;
+};
+
+export const maintenanceAsset = async (id: string, payload: { action: 'SEND_MAINTENANCE' | 'FINISH_MAINTENANCE'; vendor?: string; cost?: number; notes?: string }) => {
+  const { data } = await api.put(`/assets/${id}/maintenance`, payload);
+  return data;
+};
+
+export const retireAsset = async (id: string, payload: { reason: string; notes?: string }) => {
+  const { data } = await api.put(`/assets/${id}/retire`, payload);
   return data;
 };
 
