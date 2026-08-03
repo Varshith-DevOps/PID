@@ -101,7 +101,9 @@ export default function LoginPage() {
         setWrongWorkspace({ subdomain: resp.subdomain });
         setError(resp.error || 'This account does not belong to this workspace.');
       } else {
-        setError('Invalid credentials. Please try again.');
+        // Show the backend's descriptive error (e.g. "Incorrect password",
+        // "Account deactivated", "Too many attempts") instead of a generic message.
+        setError(resp?.error || 'Login failed. Please check your credentials and try again.');
       }
     } finally {
       setLoading(false);

@@ -11,6 +11,8 @@ export const metadata = {
   description: 'Human capital management system with authentication, RBAC, workforce intelligence, and core people operations.',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>

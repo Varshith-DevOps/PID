@@ -1,4 +1,4 @@
-﻿const prisma = require('../config/database');
+const prisma = require('../config/database');
 const { sendMail } = require('../services/emailService');
 
 const createTicket = async (req, res) => {
@@ -98,9 +98,23 @@ const resolveTicket = async (req, res) => {
   }
 };
 
+const getTickets = async (req, res) => {
+  try {
+    const role = req.user.role;
+    if (['SUPER_ADMIN', 'ADMIN', 'HR'].includes(role)) {
+      return getAdminTickets(req, res);
+    }
+    return getEmployeeTickets(req, res);
+  } catch (err) {
+    console.error('[GET TICKETS ERROR]:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   createTicket,
   getEmployeeTickets,
   getAdminTickets,
-  resolveTicket
+  resolveTicket,
+  getTickets
 };

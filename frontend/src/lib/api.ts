@@ -192,7 +192,31 @@ api.defaults.adapter = async (config: any) => {
   return res;
 };
 
+/**
+ * Thoroughly clear all auth cookies from the browser.
+ * Covers all possible path/domain combinations the backend might have set.
+ */
+function clearAuthCookies() {
+  if (typeof document === 'undefined') return;
+  const cookieNames = ['token', 'csrfToken', 'refreshToken'];
+  const paths = ['/', '/api/auth', '/api'];
+  for (const name of cookieNames) {
+    for (const path of paths) {
+      document.cookie = `${name}=; path=${path}; max-age=0`;
+      document.cookie = `${name}=; path=${path}; max-age=0; domain=${window.location.hostname}`;
+    }
+  }
+}
+
 export const login = async (email: string, password: string) => {
+  // Clear any stale auth state before attempting login. This prevents
+  // expired/revoked cookies from interfering with the login request.
+  clearAuthCookies();
+  clearApiCache();
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('pid_support_company_id');
+    sessionStorage.clear();
+  }
   const { data } = await api.post('/auth/login', { email, password }, {
     headers: { Authorization: undefined }
   });
@@ -777,6 +801,8 @@ export const logout = async () => {
   } catch {
     // Best-effort server-side revocation; local state is cleared regardless.
   }
+  // Thoroughly clear all auth artifacts from the browser.
+  clearAuthCookies();
   if (typeof window !== 'undefined') {
     localStorage.clear();
     sessionStorage.clear();
@@ -1857,8 +1883,33 @@ export const getContactRequests = async () => {
   return data;
 };
 
+export const updateContactRequest = async (id: string, payload: any) => {
+  const { data } = await api.put(`/contact/${id}`, payload);
+  return data;
+};
+
+export const deleteContactRequest = async (id: string) => {
+  const { data } = await api.delete(`/contact/${id}`);
+  return data;
+};
+
 export const getPlatformCompanies = async () => {
   const { data } = await api.get('/platform-admin/companies');
+  return data;
+};
+
+export const createPlatformCompany = async (payload: any) => {
+  const { data } = await api.post('/platform-admin/companies', payload);
+  return data;
+};
+
+export const updatePlatformCompany = async (id: string, payload: any) => {
+  const { data } = await api.put(`/platform-admin/companies/${id}`, payload);
+  return data;
+};
+
+export const deletePlatformCompany = async (id: string) => {
+  const { data } = await api.delete(`/platform-admin/companies/${id}`);
   return data;
 };
 

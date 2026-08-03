@@ -131,6 +131,8 @@ export default function OnOffboardingDashboard() {
     if (!authLoading && !user) router.push('/');
   }, [user, authLoading]);
 
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'HR';
+
   useEffect(() => {
     if (user) {
       loadData();
@@ -555,42 +557,44 @@ export default function OnOffboardingDashboard() {
             </svg>
           }
           actions={
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              {activeTab === 'onboarding' && (
+            isAdmin && (
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                {activeTab === 'onboarding' && (
+                  <Button
+                    variant="success"
+                    onClick={() => {
+                      if (departmentsList.length > 0) {
+                        setOnboardingForm(prev => ({ ...prev, departmentId: departmentsList[0].id }));
+                      }
+                      setShowOnboardingModal(true);
+                    }}
+                  >
+                    Start Onboarding
+                  </Button>
+                )}
+                {activeTab === 'offboarding' && (
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      setSelectedOffboardEmployeeId('');
+                      setShowOffboardingModal(true);
+                    }}
+                  >
+                    Initiate Offboarding
+                  </Button>
+                )}
                 <Button
-                  variant="success"
+                  variant="ghost"
                   onClick={() => {
-                    if (departmentsList.length > 0) {
-                      setOnboardingForm(prev => ({ ...prev, departmentId: departmentsList[0].id }));
-                    }
-                    setShowOnboardingModal(true);
+                    setEditingTemplateId(null);
+                    setTemplateForm({ name: '', type: 'ONBOARDING', description: '', tasks: [] });
+                    setShowTemplateModal(true);
                   }}
                 >
-                  Start Onboarding
+                  Build Custom Template
                 </Button>
-              )}
-              {activeTab === 'offboarding' && (
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    setSelectedOffboardEmployeeId('');
-                    setShowOffboardingModal(true);
-                  }}
-                >
-                  Initiate Offboarding
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setEditingTemplateId(null);
-                  setTemplateForm({ name: '', type: 'ONBOARDING', description: '', tasks: [] });
-                  setShowTemplateModal(true);
-                }}
-              >
-                Build Custom Template
-              </Button>
-            </div>
+              </div>
+            )
           }
         />
 
@@ -599,7 +603,7 @@ export default function OnOffboardingDashboard() {
           items={[
             { key: 'onboarding', label: 'Onboarding Path' },
             { key: 'offboarding', label: 'Offboarding Clearances' },
-            { key: 'templates', label: 'Reusable Templates' },
+            ...(isAdmin ? [{ key: 'templates', label: 'Reusable Templates' } as any] : []),
           ]}
           value={activeTab}
           onChange={(k) => setActiveTab(k as typeof activeTab)}

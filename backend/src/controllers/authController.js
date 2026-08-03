@@ -24,12 +24,18 @@ const loginGuard = require('../utils/loginGuard');
 const { BCRYPT_ROUNDS } = require('../utils/password');
 const { normalizeSubdomain, slugifySubdomain } = require('../utils/subdomain');
 const { isPlatformAccount } = require('../rbac/platformRoles');
-const {
-  generateRegistrationOptions,
-  verifyRegistrationResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse,
-} = require('@simplewebauthn/server');
+// Lazy-load WebAuthn: the package may not be installed in every environment.
+// WebAuthn features degrade gracefully; all other auth flows continue to work.
+let _webauthn = null;
+try {
+  _webauthn = require('@simplewebauthn/server');
+} catch (e) {
+  console.warn('[AUTH] @simplewebauthn/server not installed — passkey features disabled.');
+}
+const generateRegistrationOptions = _webauthn?.generateRegistrationOptions || (() => { throw new Error('WebAuthn not available'); });
+const verifyRegistrationResponse = _webauthn?.verifyRegistrationResponse || (() => { throw new Error('WebAuthn not available'); });
+const generateAuthenticationOptions = _webauthn?.generateAuthenticationOptions || (() => { throw new Error('WebAuthn not available'); });
+const verifyAuthenticationResponse = _webauthn?.verifyAuthenticationResponse || (() => { throw new Error('WebAuthn not available'); });
 const { blacklistToken } = require('../utils/tokenBlacklist');
 const { checkGeoVelocity } = require('../utils/geoVelocity');
 
@@ -100,6 +106,26 @@ const signRefreshToken = (user) => jwt.sign(
 // Set COOKIE_DOMAIN=.yourdomain.com in production so the session is shared across
 // all tenant subdomains and the API host. Left unset locally (host-only cookie).
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
+
+/**
+ * Clear ALL auth cookies with the exact options used to set them.
+ * Called before login (to remove stale sessions) and during logout.
+ * Express clearCookie requires matching path + domain to actually delete.
+ */
+const clearAllAuthCookies = (res) => {
+  // token cookie — set with implicit path '/' + COOKIE_DOMAIN
+  res.clearCookie('token', { path: '/', domain: COOKIE_DOMAIN });
+  // csrfToken cookie — set with implicit path '/' + COOKIE_DOMAIN
+  res.clearCookie('csrfToken', { path: '/', domain: COOKIE_DOMAIN });
+  // refreshToken cookie — set with explicit path '/api/auth' + COOKIE_DOMAIN
+  res.clearCookie('refreshToken', { path: REFRESH_COOKIE_PATH, domain: COOKIE_DOMAIN });
+  // Also clear without domain for local dev (cookies set without domain attr)
+  if (COOKIE_DOMAIN) {
+    res.clearCookie('token', { path: '/' });
+    res.clearCookie('csrfToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: REFRESH_COOKIE_PATH });
+  }
+};
 
 const setRefreshCookie = (res, token) => {
   res.cookie('refreshToken', token, {
@@ -215,6 +241,11 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Clear any stale auth cookies from a previous session BEFORE processing
+    // the login. This prevents expired/revoked token cookies from triggering
+    // CSRF validation failures on the login request itself.
+    clearAllAuthCookies(res);
+
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
@@ -236,11 +267,13 @@ const login = async (req, res) => {
 
     if (!user) {
       loginGuard.recordFailure(email, ip);
+      console.info(`[AUTH] Login failed: no account found for ${email}`);
       await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userEmail: email, details: { reason: 'unknown_user' } });
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'No account found with this email address.' });
     }
     if (!user.isActive) {
       loginGuard.recordFailure(email, ip);
+      console.info(`[AUTH] Login failed: deactivated account ${email}`);
       await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: email, details: { reason: 'deactivated_account' } });
       return res.status(403).json({ error: 'Your account has been deactivated. Contact HR.' });
     }
@@ -248,8 +281,9 @@ const login = async (req, res) => {
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
       loginGuard.recordFailure(email, ip);
+      console.info(`[AUTH] Login failed: incorrect password for ${email}`);
       await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: email, details: { reason: 'bad_password' } });
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
     // Strict workspace binding: tenant users only on their subdomain, owners on apex.
@@ -835,9 +869,7 @@ const logout = async (req, res) => {
       }).catch(() => {});
     }
 
-    res.clearCookie('token', { domain: COOKIE_DOMAIN });
-    res.clearCookie('csrfToken', { domain: COOKIE_DOMAIN });
-    res.clearCookie('refreshToken', { domain: COOKIE_DOMAIN, path: REFRESH_COOKIE_PATH });
+    clearAllAuthCookies(res);
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('[LOGOUT ERROR]:', error.message);

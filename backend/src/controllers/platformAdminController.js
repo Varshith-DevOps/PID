@@ -2,6 +2,7 @@ const prisma = require('../config/database');
 const { isValidSubdomain, normalizeSubdomain } = require('../utils/subdomain');
 const { runDunningSweep } = require('../services/dunningService');
 const { logPlatformAction } = require('../services/platformAudit');
+const bcrypt = require('bcryptjs');
 
 /**
  * Record a (manual/offline) payment for a tenant: extends the active subscription,
@@ -135,6 +136,176 @@ const getCompanies = async (req, res) => {
   } catch (error) {
     console.error('[ADMIN GET COMPANIES ERROR]:', error.message);
     res.status(500).json({ error: 'Failed to retrieve tenant companies' });
+  }
+};
+
+/**
+ * Create a new tenant company manually.
+ * POST /api/platform-admin/companies
+ */
+const createCompany = async (req, res) => {
+  try {
+    const { 
+      name, email, phone, address, industry, companySize, 
+      planId, durationDays, billingCycle, status,
+      adminName, adminEmail, adminPassword, code: inputCode, subdomain: inputSubdomain
+    } = req.body;
+    
+    if (!name) return res.status(400).json({ error: 'Company name is required.' });
+    if (!adminEmail || !adminPassword || !adminName) return res.status(400).json({ error: 'Admin name, email, and password are required.' });
+
+    // Check if admin email already exists globally
+    const existingUser = await prisma.user.findUnique({ where: { email: adminEmail } });
+    if (existingUser) return res.status(409).json({ error: 'A user with the admin email already exists.' });
+
+    // Auto-generate code and subdomain if not provided
+    const code = inputCode ? inputCode.toUpperCase().replace(/[^A-Z0-9]/g, '') : name.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, '') + Math.floor(1000 + Math.random() * 9000);
+    const subdomain = inputSubdomain ? normalizeSubdomain(inputSubdomain) : code.toLowerCase();
+    
+    if (!isValidSubdomain(subdomain)) {
+      return res.status(400).json({ error: 'Invalid subdomain format.' });
+    }
+
+    // Default plan logic
+    let defaultPlanId = planId;
+    if (!defaultPlanId) {
+      const plan = await prisma.plan.findFirst();
+      if (plan) defaultPlanId = plan.id;
+    }
+
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
+    // Run creation in a sequential manner (since Company is required for the rest)
+    const company = await prisma.company.create({
+      data: {
+        name,
+        code,
+        subdomain,
+        email,
+        phone,
+        address,
+        industry,
+        companySize,
+        kycStatus: 'APPROVED',
+        status: status || 'ACTIVE'
+      }
+    });
+
+    let subscription;
+    if (defaultPlanId) {
+      const duration = durationDays ? parseInt(durationDays, 10) : (billingCycle === 'ANNUAL' ? 365 : 30);
+      const endDate = new Date(Date.now() + duration * 24 * 60 * 60 * 1000);
+      subscription = await prisma.subscription.create({
+        data: {
+          companyId: company.id,
+          planId: defaultPlanId,
+          status: 'ACTIVE',
+          startDate: new Date(),
+          endDate
+        }
+      });
+      await prisma.company.update({
+        where: { id: company.id },
+        data: { subscriptionId: subscription.id }
+      });
+    }
+
+    // Create a default department
+    const defaultDepartment = await prisma.department.create({
+      data: {
+        name: 'Administration',
+        company: { connect: { id: company.id } }
+      }
+    });
+
+    // Extract names for Admin User
+    const nameParts = adminName.split(' ');
+    const firstName = nameParts[0];
+    // Create Company Admin user
+    const adminUser = await prisma.user.create({
+      data: {
+        email: adminEmail,
+        password: hashedPassword,
+        name: adminName,
+        role: 'ADMIN',
+        isActive: true,
+        company: { connect: { id: company.id } }
+      }
+    });
+
+    // Create employee record for admin
+    await prisma.employee.create({
+      data: {
+        employeeId: `EMP-${code}-001`,
+        firstName,
+        lastName: nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Admin',
+        email: adminEmail,
+        jobTitle: 'Administrator',
+        salary: 0,
+        joinDate: new Date(),
+        accountStage: 'ACTIVE',
+        user: { connect: { id: adminUser.id } },
+        company: { connect: { id: company.id } },
+        department: { connect: { id: defaultDepartment.id } }
+      }
+    });
+
+    await logPlatformAction(req.user, { action: 'CREATE_TENANT', entity: 'Company', entityId: company.id, newDetails: { name, code, subdomain, adminEmail }, ipAddress: req.ip });
+    res.status(201).json(company);
+  } catch (error) {
+    console.error('[ADMIN CREATE COMPANY ERROR]:', error.message);
+    if (error.code === 'P2002') return res.status(409).json({ error: 'Code or subdomain conflict, please try again.' });
+    res.status(500).json({ error: 'Failed to create tenant company' });
+  }
+};
+
+/**
+ * Edit an existing tenant company.
+ * PUT /api/platform-admin/companies/:id
+ */
+const updateCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, phone, address, industry, companySize, kycStatus } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined) updateData.phone = phone;
+    if (address !== undefined) updateData.address = address;
+    if (industry !== undefined) updateData.industry = industry;
+    if (companySize !== undefined) updateData.companySize = companySize;
+    if (kycStatus !== undefined) updateData.kycStatus = kycStatus;
+
+    const company = await prisma.company.update({
+      where: { id },
+      data: updateData
+    });
+    await logPlatformAction(req.user, { action: 'UPDATE_TENANT', entity: 'Company', entityId: id, newDetails: updateData, ipAddress: req.ip });
+    res.json(company);
+  } catch (error) {
+    console.error('[ADMIN UPDATE COMPANY ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to update tenant company' });
+  }
+};
+
+/**
+ * Delete a tenant company completely (hard cascade delete).
+ * DELETE /api/platform-admin/companies/:id
+ */
+const deleteCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const company = await prisma.company.findUnique({ where: { id } });
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    
+    // Delete company (cascades automatically because of schema relations)
+    await prisma.company.delete({ where: { id } });
+    await logPlatformAction(req.user, { action: 'DELETE_TENANT', entity: 'Company', entityId: id, oldDetails: { name: company.name, code: company.code }, ipAddress: req.ip });
+    res.json({ message: 'Tenant company successfully deleted.' });
+  } catch (error) {
+    console.error('[ADMIN DELETE COMPANY ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to delete tenant company' });
   }
 };
 
@@ -453,6 +624,9 @@ const verifyCompanyKYC = async (req, res) => {
 
 module.exports = {
   getCompanies,
+  createCompany,
+  updateCompany,
+  deleteCompany,
   updateCompanyStatus,
   getSubscriptions,
   updateSubscription,

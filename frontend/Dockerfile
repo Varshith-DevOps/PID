@@ -3,9 +3,11 @@
 
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm ci
-COPY . .
+COPY frontend ./
+# Copy the required backend config file to the absolute path it expects during build
+COPY backend/src/config/recruitmentStages.json /backend/src/config/recruitmentStages.json
 # NEXT_PUBLIC_* values are inlined at build time; override per environment.
 ARG NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL

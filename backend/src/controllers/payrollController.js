@@ -168,13 +168,15 @@ const getSalaryStructure = async (req, res) => {
 
 const setSalaryStructure = async (req, res) => {
   try {
+    const employeeId = req.params.employeeId;
     const { 
-      employeeId, basicSalary, hra, da, conveyance, conveyence, medical, specialAllowance, otherAllowance, 
+      basicSalary, hra, da, conveyance, conveyence, medical, specialAllowance, otherAllowance, 
       pfEnabled, pfRate, tdsEnabled, esiEnabled, professionalTaxEnabled, lwfEnabled, npsEnabled, npsRate,
       insurance, otherDeduction, usePercentSettings 
     } = req.body;
 
     if (!employeeId || basicSalary === undefined) {
+      console.warn(`[PAYROLL] Invalid payload for save structure:`, { employeeId, basicSalary });
       return res.status(400).json({ error: 'Employee ID and basic salary required' });
     }
 

@@ -1001,6 +1001,18 @@ const createAssessment = async (req, res) => {
     const invalidQuestion = config.questions.find((question) => !validateQuestionType(question.questionType));
     if (invalidQuestion) return res.status(400).json({ error: 'Unsupported question type' });
     const courseId = req.params.courseId || req.body.courseId;
+    
+    const existing = await prisma.learningAssessment.findFirst({
+      where: {
+        companyId: req.user.companyId,
+        courseId,
+        title: req.body.title.trim()
+      }
+    });
+    if (existing) {
+      return res.status(409).json({ error: 'An assessment with this title already exists for this course' });
+    }
+
     const linkedBankIds = [...new Set(config.questionBankIds.filter(Boolean))];
     const assessment = await prisma.$transaction(async (tx) => {
       const created = await tx.learningAssessment.create({

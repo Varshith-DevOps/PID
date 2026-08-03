@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/authContext';
 import BrandLogo from '@/components/BrandLogo';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -69,6 +69,7 @@ function Sidebar({ activePath: _activePath }: { activePath?: string }) {
   const { user, logout, hasPermission } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const navRef = useRef<HTMLElement>(null);
 
   const handleLogout = useCallback(() => {
@@ -93,8 +94,31 @@ function Sidebar({ activePath: _activePath }: { activePath?: string }) {
         const visibleItems = NAV_ITEMS
           .filter((item) => item.section === section.key)
           .filter((item) => {
-            if (item.adminOnly && !isAdmin) return false;
+            if (item.adminOnly && !isAdmin) {
+              // Specific exception: Employees need limited access to Payroll for salary structure/tax details
+              if (!(user.role === 'EMPLOYEE' && item.href === '/payroll')) {
+                return false;
+              }
+            }
             if (item.module && !hasPermission(item.module, 'VIEW')) return false;
+
+            if (user.role === 'EMPLOYEE') {
+              const allowedForEmployee = [
+                '/dashboard',
+                '/dashboard/ai-agents',
+                '/attendance',
+                '/leave',
+                '/learning',
+                '/performance',
+                '/payroll',
+                '/payslips',
+                '/expenses',
+                '/helpdesk',
+                '/org-chart',
+                '/checklists'
+              ];
+              if (!allowedForEmployee.includes(item.href)) return false;
+            }
 
             // KYC gating for tenant users. A newly created tenant can immediately do
             // employee data entry, attendance and leave (so they can start setting up);
@@ -184,7 +208,7 @@ function Sidebar({ activePath: _activePath }: { activePath?: string }) {
   //    further filtered per platform role (separation of duties) ──
   if (isOwner) {
     const currentTab = (typeof window !== 'undefined' && pathname.startsWith('/platform-admin'))
-      ? (new URLSearchParams(window.location.search).get('tab') || 'overview')
+      ? (searchParams?.get('tab') || 'overview')
       : null;
     const allowed = new Set(ownerTabsFor(user.role));
     const icon = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} />;

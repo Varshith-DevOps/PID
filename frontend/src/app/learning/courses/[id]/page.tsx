@@ -669,7 +669,12 @@ export default function CourseWorkspacePage() {
         {error && <Banner tone="danger" title={error} action={<Button size="sm" variant="ghost" onClick={() => setError('')}>Dismiss</Button>} />}
         {success && <Banner tone="success" title={success} action={<Button size="sm" variant="ghost" onClick={() => setSuccess('')}>Dismiss</Button>} />}
 
-        <Tabs items={workspaceTabs} value={activeTab} onChange={setActiveTab} style={{ marginBottom: '1.25rem' }} />
+        <Tabs items={workspaceTabs.filter((tab) => {
+          if (user?.role === 'EMPLOYEE') {
+            return ['overview', 'curriculum', 'quizzes', 'assessments', 'materials', 'feedback', 'certificate'].includes(tab.key);
+          }
+          return true;
+        })} value={activeTab} onChange={setActiveTab} style={{ marginBottom: '1.25rem' }} />
 
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
@@ -1354,9 +1359,11 @@ export default function CourseWorkspacePage() {
             ) : (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <p>Complete all mandatory lessons and pass quizzes to unlock your course completion certificate.</p>
-                <Button loading={saving} onClick={handleGenerateCertificate}>
-                  Generate Certificate Now
-                </Button>
+                {canAuthor && (
+                  <Button loading={saving} onClick={handleGenerateCertificate}>
+                    Generate Certificate Now
+                  </Button>
+                )}
               </div>
             )}
           </Card>

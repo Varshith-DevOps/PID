@@ -286,18 +286,31 @@ export default function LearningPage() {
   };
 
   useEffect(() => {
-    if (user) loadData();
+    if (user) {
+      if (user.role === 'EMPLOYEE' && activeTab === 'analytics') setActiveTab('courses');
+      loadData();
+    }
   }, [user]);
 
   const filteredCourses = useMemo(() => {
+    let baseCourses = courses;
+    if (user?.role === 'EMPLOYEE') {
+      baseCourses = enrollments.map(e => e.course).filter(Boolean) as Course[];
+    }
     const needle = query.trim().toLowerCase();
-    return courses.filter((course) => {
+    return baseCourses.filter((course) => {
       const matchesDifficulty = !difficulty || course.difficulty === difficulty;
       const matchesStatus = !status || course.status === status;
       const haystack = [course.title, course.courseCode, course.category, course.department, course.instructor].filter(Boolean).join(' ').toLowerCase();
       return matchesDifficulty && matchesStatus && (!needle || haystack.includes(needle));
     });
-  }, [courses, difficulty, query, status]);
+  }, [courses, difficulty, query, status, enrollments, user]);
+
+  const filteredAssessments = useMemo(() => {
+    if (user?.role !== 'EMPLOYEE') return assessments;
+    const enrolledCourseIds = new Set(enrollments.map(e => e.course?.id));
+    return assessments.filter(a => enrolledCourseIds.has(a.courseId));
+  }, [assessments, enrollments, user]);
 
   const completed = enrollments.filter((row) => row.status === 'COMPLETED');
   const certificateRows = enrollments.filter((row) => row.certificate || row.course?.certificateAvailable);
@@ -344,7 +357,8 @@ export default function LearningPage() {
   };
 
   const handleCreateAssessment = async () => {
-    if (!assessmentForm.courseId || !assessmentForm.title.trim()) return setError('Select a course and enter an assessment title.');
+    if (!assessmentForm.courseId) return setError('Please select a course.');
+    if (!assessmentForm.title.trim()) return setError('Please enter an assessment title.');
     if (!assessmentQuestions.length) return setError('Add at least one assessment question.');
     setSaving(true);
     setError('');
@@ -467,13 +481,35 @@ export default function LearningPage() {
       key: 'actions',
       header: '',
       align: 'right',
-      render: (course) => (
-        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          {canCreateCourse && course.status !== 'PUBLISHED' && <Button size="sm" variant="success" onClick={async () => { await publishLearningCourse(course.id); loadData(); }}>Publish</Button>}
-          <Button size="sm" variant="ghost" href={`/learning/courses/${course.id}`}>Workspace</Button>
-          {canCreateCourse && <Button size="sm" variant="danger" onClick={async () => { await deleteLearningCourse(course.id); loadData(); }}>Archive</Button>}
-        </div>
-      ),
+      render: (course) => {
+        if (user?.role === 'EMPLOYEE') {
+          const enrollment = enrollments.find(e => e.course?.id === course.id);
+          if (!enrollment) return null;
+          let buttonText = 'Start Learning';
+          let action = async () => { await updateLearningEnrollment(enrollment.id, { status: 'IN_PROGRESS', progress: Math.max(enrollment.progress || 0, 25) }); loadData(); };
+          if (enrollment.progress >= 100) buttonText = 'Review Course';
+          else if (enrollment.progress > 0) buttonText = 'Continue Learning';
+          
+          return (
+            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+              <Button size="sm" variant="ghost" href={`/learning/courses/${course.id}`}>Workspace</Button>
+              {enrollment.status === 'COMPLETED' ? (
+                 <Button size="sm" variant="success" disabled>Completed</Button>
+              ) : (
+                 <Button size="sm" onClick={action}>{buttonText}</Button>
+              )}
+            </div>
+          );
+        }
+        
+        return (
+          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            {canCreateCourse && course.status !== 'PUBLISHED' && <Button size="sm" variant="success" onClick={async () => { await publishLearningCourse(course.id); loadData(); }}>Publish</Button>}
+            <Button size="sm" variant="ghost" href={`/learning/courses/${course.id}`}>Workspace</Button>
+            {canCreateCourse && <Button size="sm" variant="danger" onClick={async () => { await deleteLearningCourse(course.id); loadData(); }}>Archive</Button>}
+          </div>
+        );
+      },
     },
   ];
 
@@ -484,7 +520,26 @@ export default function LearningPage() {
     { key: 'progress', header: 'Progress', render: (row) => <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 160 }}><ProgressBar value={row.progress || 0} height={6} /><span style={{ minWidth: 36 }}>{row.progress || 0}%</span></div> },
     { key: 'hours', header: 'Hours', render: (row) => ((row.timeSpentMins || 0) / 60).toFixed(1) },
     { key: 'dueDate', header: 'Due Date', render: (row) => row.dueDate ? new Date(row.dueDate).toLocaleDateString() : '-' },
-    { key: 'actions', header: '', align: 'right', render: (row) => <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}><Button size="sm" variant="ghost" href={row.course?.id ? `/learning/courses/${row.course.id}` : '/learning'}>Learn</Button>{row.status !== 'COMPLETED' && <Button size="sm" onClick={async () => { await updateLearningEnrollment(row.id, { status: 'IN_PROGRESS', progress: Math.max(row.progress || 0, 25) }); loadData(); }}>Start</Button>}</div> },
+    { key: 'actions', header: '', align: 'right', render: (row) => {
+      let buttonText = 'Start Learning';
+      let action = async () => { await updateLearningEnrollment(row.id, { status: 'IN_PROGRESS', progress: Math.max(row.progress || 0, 25) }); loadData(); };
+      if (row.progress >= 100) {
+        buttonText = 'Review Course';
+      } else if (row.progress > 0) {
+        buttonText = 'Continue Learning';
+      }
+
+      return (
+        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+          <Button size="sm" variant="ghost" href={row.course?.id ? `/learning/courses/${row.course.id}` : '/learning'}>Workspace</Button>
+          {row.status === 'COMPLETED' ? (
+            <Button size="sm" variant="success" disabled>Completed</Button>
+          ) : (
+            <Button size="sm" onClick={action}>{buttonText}</Button>
+          )}
+        </div>
+      );
+    } },
   ];
 
   return (
@@ -499,7 +554,11 @@ export default function LearningPage() {
 
         {error && <Banner tone="danger" title={error} action={<Button size="sm" variant="ghost" onClick={() => setError('')}>Dismiss</Button>} />}
         {success && <Banner tone="success" title={success} action={<Button size="sm" variant="ghost" onClick={() => setSuccess('')}>Dismiss</Button>} />}
-        <Tabs items={tabs.filter((tab) => canReport || tab.key !== 'reports')} value={activeTab} onChange={setActiveTab} style={{ margin: '1rem 0 1.25rem' }} />
+        <Tabs items={tabs.filter((tab) => {
+          if (user?.role === 'EMPLOYEE') return ['courses', 'assessments', 'progress', 'certificates'].includes(tab.key);
+          if (!canReport && tab.key === 'reports') return false;
+          return true;
+        })} value={activeTab} onChange={setActiveTab} style={{ margin: '1rem 0 1.25rem' }} />
 
         {activeTab === 'analytics' && (
           <>
@@ -540,7 +599,7 @@ export default function LearningPage() {
             {canCreateCourse && (
               <Card title="Create Assessment">
                 <div className="form-grid">
-                  <Select label="Course" value={assessmentForm.courseId} onChange={(v) => setAssessmentForm({ ...assessmentForm, courseId: v })} options={publishedCourses.map((course) => ({ value: course.id, label: course.title }))} />
+                  <Select label="Course" placeholder="Select a course" value={assessmentForm.courseId} onChange={(v) => setAssessmentForm({ ...assessmentForm, courseId: v })} options={publishedCourses.map((course) => ({ value: course.id, label: course.title }))} />
                   <TextField label="Assessment Title" value={assessmentForm.title} onChange={(v) => setAssessmentForm({ ...assessmentForm, title: v })} />
                   <TextField label="Passing Percentage" value={assessmentForm.passingScore} restrict="digits" onChange={(v) => setAssessmentForm({ ...assessmentForm, passingScore: v })} />
                   <TextField label="Duration (minutes)" value={assessmentForm.durationMinutes} restrict="digits" onChange={(v) => setAssessmentForm({ ...assessmentForm, durationMinutes: v })} />
@@ -566,19 +625,34 @@ export default function LearningPage() {
                 <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateAssessment}>Create Assessment</Button>
               </Card>
             )}
-            <Card title="Assessment History" padded={false} style={{ gridColumn: canCreateCourse ? undefined : '1 / -1' }}>
+            <Card title={user?.role === 'EMPLOYEE' ? 'My Assessments' : 'Assessment History'} padded={false} style={{ gridColumn: canCreateCourse ? undefined : '1 / -1' }}>
               <DataTable
                 columns={[
                   { key: 'assessment', header: 'Assessment', render: (row: LearningAssessment) => <div><strong>{row.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{row.course?.title || '-'}</div></div> },
                   { key: 'settings', header: 'Settings', render: (row: LearningAssessment) => { const config = parseAssessmentConfig(row.rubricJson); return `${config.passingScore || 70}% | ${config.timeLimitMins || 0} min | ${row.attemptLimit || 1} attempts`; } },
                   { key: 'attempts', header: 'Attempts', render: (row: LearningAssessment) => row.submissions?.length || 0 },
-                  { key: 'action', header: '', align: 'right', render: (row: LearningAssessment) => <Button size="sm" variant="ghost" href={`/learning/courses/${row.courseId}?tab=assessments`}>Open Assessment</Button> },
+                  { key: 'action', header: '', align: 'right', render: (row: LearningAssessment) => {
+                      if (user?.role === 'EMPLOYEE') {
+                        const enrollment = enrollments.find(e => e.course?.id === row.courseId);
+                        const progress = enrollment?.progress || 0;
+                        const isLocked = progress < 100 && !enrollment?.certificate;
+                        if (isLocked) {
+                          return <Button size="sm" disabled>Course Incomplete</Button>;
+                        }
+                        return (
+                          <Button size="sm" href={`/learning/courses/${row.courseId}?tab=assessments`}>
+                            Start Assessment
+                          </Button>
+                        );
+                      }
+                      return <Button size="sm" variant="ghost" href={`/learning/courses/${row.courseId}?tab=assessments`}>Open Assessment</Button>;
+                  } },
                 ]}
-                rows={assessments}
+                rows={filteredAssessments}
                 rowKey={(row: LearningAssessment) => row.id}
-                emptyTitle="No assessments configured"
+                emptyTitle={user?.role === 'EMPLOYEE' ? "No assessments assigned" : "No assessments configured"}
               />
-              {assessments.some((assessment) => assessment.submissions?.length) && <div style={{ padding: '1rem 1.25rem' }}><h4>Recent Attempts</h4>{assessments.flatMap((assessment) => (assessment.submissions || []).slice(0, 10).map((submission: any) => <div key={submission.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.5rem 0', borderBottom: '1px solid var(--border-subtle)' }}><span>{assessment.title} | {submission.employee ? `${submission.employee.firstName} ${submission.employee.lastName}` : 'Employee'}</span><span><StatusChip status={submission.status} /> {submission.marks ?? 'Pending'}</span></div>))}</div>}
+              {user?.role !== 'EMPLOYEE' && assessments.some((assessment) => assessment.submissions?.length) && <div style={{ padding: '1rem 1.25rem' }}><h4>Recent Attempts</h4>{assessments.flatMap((assessment) => (assessment.submissions || []).slice(0, 10).map((submission: any) => <div key={submission.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.5rem 0', borderBottom: '1px solid var(--border-subtle)' }}><span>{assessment.title} | {submission.employee ? `${submission.employee.firstName} ${submission.employee.lastName}` : 'Employee'}</span><span><StatusChip status={submission.status} /> {submission.marks ?? 'Pending'}</span></div>))}</div>}
             </Card>
           </div>
         )}
@@ -607,21 +681,23 @@ export default function LearningPage() {
                 <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreateCourse}>Create Course</Button>
               </Card>
             )}
-            <Card title="Course Catalogue" padded={false} style={{ gridColumn: canCreateCourse ? undefined : '1 / -1' }}>
-              <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
-                <SearchInput value={query} onChange={setQuery} placeholder="Search courses, instructors, departments..." />
-                <FilterSelect value={difficulty} onChange={setDifficulty} options={difficultyOptions} />
-                <FilterSelect value={status} onChange={setStatus} options={statusOptions} />
-              </div>
-              <DataTable columns={courseColumns} rows={filteredCourses} rowKey={(course) => course.id} emptyTitle="No courses found" />
-            </Card>
+            {canCreateCourse && (
+              <Card title="Course Catalogue" padded={false}>
+                <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem 1.25rem', flexWrap: 'wrap' }}>
+                  <SearchInput value={query} onChange={setQuery} placeholder="Search courses, instructors, departments..." />
+                  <FilterSelect value={difficulty} onChange={setDifficulty} options={difficultyOptions} />
+                  <FilterSelect value={status} onChange={setStatus} options={statusOptions} />
+                </div>
+                <DataTable columns={courseColumns} rows={filteredCourses} rowKey={(course) => course.id} emptyTitle="No courses found" />
+              </Card>
+            )}
           </div>
         )}
 
         {activeTab === 'paths' && (
-          <div className="grid grid-2">
-            <Card title="Create Learning Path">
-              {canAuthor ? (
+          <div className={canAuthor ? "grid grid-2" : ""}>
+            {canAuthor && (
+              <Card title="Create Learning Path">
                 <>
                   <div className="form-grid">
                     <TextField label="Path Name" value={pathForm.name} onChange={(v) => setPathForm({ ...pathForm, name: v })} />
@@ -640,9 +716,9 @@ export default function LearningPage() {
                   </div>
                   <Button style={{ marginTop: '1rem' }} loading={saving} onClick={handleCreatePath}>Create Path</Button>
                 </>
-              ) : <EmptyState title="Learning paths are restricted" />}
-            </Card>
-            <Card title="Active Paths">
+              </Card>
+            )}
+            <Card title="Active Paths" style={{ gridColumn: canAuthor ? undefined : '1 / -1' }}>
               {paths.length ? paths.map((path) => (
                 <div key={path.id} style={{ padding: '0.85rem 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}><strong>{path.name}</strong><StatusChip status={path.status || 'ACTIVE'} /></div>
@@ -768,7 +844,7 @@ export default function LearningPage() {
                 { key: 'employee', header: 'Employee', render: (row: Enrollment) => row.employee ? fullName(row.employee) : 'Me' },
                 { key: 'number', header: 'Certificate Number', render: (row: Enrollment) => row.certificate?.certificateNumber || 'Not issued' },
                 { key: 'status', header: 'Status', render: (row: Enrollment) => row.certificate ? <StatusChip status="ISSUED" /> : <StatusChip status="PENDING" /> },
-                { key: 'actions', header: '', align: 'right', render: (row: Enrollment) => row.certificate ? <Button size="sm" variant="ghost" href={`/api/learning/certificates/${row.certificate.id}/download`}>Download</Button> : <Button size="sm" onClick={async () => { try { await generateLearningCertificate(row.id); await loadData(); } catch (err: any) { setError(err?.response?.data?.error || 'Certificate generation failed.'); } }}>Generate</Button> },
+                { key: 'actions', header: '', align: 'right', render: (row: Enrollment) => row.certificate ? <Button size="sm" variant="ghost" href={`/api/learning/certificates/${row.certificate.id}/download`}>Download</Button> : canCreateCourse ? <Button size="sm" onClick={async () => { try { await generateLearningCertificate(row.id); await loadData(); } catch (err: any) { setError(err?.response?.data?.error || 'Certificate generation failed.'); } }}>Generate</Button> : null },
               ]}
               rows={certificateRows}
               rowKey={(row: Enrollment) => row.id}

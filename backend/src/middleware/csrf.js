@@ -58,8 +58,12 @@ function csrfProtection(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) return next();
 
-  // Login route bootstraps the session, exempt from CSRF.
-  if (req.originalUrl.includes('/auth/login')) return next();
+  // Auth endpoints that bootstrap, teardown, or renew a session are exempt.
+  // They don't have a valid CSRF token yet (login/signup), or the session may
+  // already be expired (logout/refresh). The login endpoint clears stale cookies
+  // itself; logout is idempotent.
+  const AUTH_CSRF_EXEMPT = ['/auth/login', '/auth/logout', '/auth/signup', '/auth/refresh', '/auth/mfa/verify-login'];
+  if (AUTH_CSRF_EXEMPT.some((path) => req.originalUrl.includes(path))) return next();
 
   // Only cookie-authenticated sessions are at risk.
   const sessionCookie = req.cookies && req.cookies.token;

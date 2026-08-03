@@ -237,7 +237,7 @@ export default function LeavePage() {
     }
     setSubmitting(true);
     try {
-      await createLeaveRequest({ ...form, employeeId: targetEmployeeId });
+      await createLeaveRequest({ ...form, employeeId: targetEmployeeId as string });
       setView('list');
       setForm({ employeeId: '', leaveType: 'ANNUAL', startDate: '', endDate: '', reason: '' });
       setSubmitted(false);
