@@ -1,6 +1,8 @@
+import os
 from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings
+
 
 
 class Settings(BaseSettings):
@@ -27,4 +29,14 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    
+    # Automatically detect and configure cloud fallback provider based on key presence
+    if settings.azure_key or os.environ.get("AZURE_OCR_KEY"):
+        settings.cloud_provider = "azure"
+    else:
+        # Default fallback to none if no key is present
+        if not settings.cloud_provider or settings.cloud_provider == "none":
+            settings.cloud_provider = "none"
+            
+    return settings

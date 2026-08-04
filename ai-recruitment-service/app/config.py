@@ -35,4 +35,37 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    
+    # 1. Check for Google Gemini keys
+    google_key = settings.google_api_key or os.environ.get("GEMINI_API_KEY")
+    # 2. Check for OpenAI keys
+    openai_key = settings.openai_api_key or os.environ.get("OPENAI_API_KEY")
+    # 3. Check for Anthropic keys
+    anthropic_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")
+    # 4. Check for Azure keys
+    azure_key = settings.azure_openai_api_key or os.environ.get("AZURE_OPENAI_API_KEY")
+
+    # Automatic provider and model selection based on provided API keys
+    if google_key:
+        settings.llm_provider = "google"
+        if not settings.llm_model:
+            settings.llm_model = os.environ.get("GEMINI_MODEL") or os.environ.get("LLM_MODEL") or "gemini-1.5-flash"
+    elif openai_key:
+        settings.llm_provider = "openai"
+        if not settings.llm_model:
+            settings.llm_model = os.environ.get("LLM_MODEL") or "gpt-4o"
+    elif anthropic_key:
+        settings.llm_provider = "anthropic"
+        if not settings.llm_model:
+            settings.llm_model = os.environ.get("LLM_MODEL") or "claude-3-5-sonnet"
+    elif azure_key:
+        settings.llm_provider = "azure"
+        if not settings.llm_model:
+            settings.llm_model = os.environ.get("LLM_MODEL") or "gpt-4o"
+    else:
+        # If no API key is provided, default to disabled
+        settings.llm_provider = "disabled"
+        settings.llm_model = ""
+
+    return settings
