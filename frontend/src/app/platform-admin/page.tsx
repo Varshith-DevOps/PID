@@ -14,11 +14,15 @@ import {
 import type { Column, TabItem } from '@/components/ui';
 import {
   getPlatformCompanies,
+  createPlatformCompany,
+  updatePlatformCompany,
+  deletePlatformCompany,
   updatePlatformCompanyStatus,
   getPlatformSubscriptions,
   updatePlatformSubscription,
   getPlatformMetrics,
   getContactRequests,
+  deleteContactRequest,
   createCustomPlan,
   verifyCompanyKYC,
   getSupportStaff,
@@ -30,6 +34,7 @@ import {
   recordTenantPayment,
   runDunningSweep,
   getPlatformAuditLogs,
+  getBillingPlans
 } from '@/lib/api';
 import { Modal } from '@/components/ui';
 import { BASE_DOMAIN } from '@/lib/tenant';
@@ -134,9 +139,10 @@ function PlatformAdminPanel() {
   useEffect(() => {
     if (tabParam && VALID_TABS.includes(tabParam) && tabParam !== activeTab) {
       setActiveTab(tabParam as TabKey);
+    } else if (!tabParam && activeTab !== 'overview') {
+      setActiveTab('overview');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabParam]);
+  }, [tabParam, activeTab]);
 
   const goTab = (key: TabKey) => {
     setActiveTab(key);
@@ -161,6 +167,17 @@ function PlatformAdminPanel() {
   const [auditAction, setAuditAction] = useState('');
   const [auditDays, setAuditDays] = useState('30');
   const [loadingAudit, setLoadingAudit] = useState(false);
+  const [showTenantModal, setShowTenantModal] = useState(false);
+  const [tenantForm, setTenantForm] = useState({ 
+    id: '', name: '', email: '', phone: '', address: '', industry: '', companySize: '', kycStatus: 'APPROVED',
+    adminName: '', adminEmail: '', adminPassword: '', code: '', subdomain: '', planId: '', billingCycle: 'MONTHLY', status: 'ACTIVE'
+  });
+  const [plans, setPlans] = useState<any[]>([]);
+
+  useEffect(() => {
+    getBillingPlans().then(setPlans).catch(() => {});
+  }, []);
+  const [tenantSaving, setTenantSaving] = useState(false);
   const [customPlanForm, setCustomPlanForm] = useState({
     name: '',
     description: '',
@@ -358,6 +375,63 @@ function PlatformAdminPanel() {
       const [cRes, sRes] = await Promise.all([getPlatformCompanies(), getPlatformSubscriptions()]);
       setCompanies(cRes); setSubscriptions(sRes);
     } catch { /* toast */ }
+  };
+
+  const handleSaveTenant = async () => {
+    setTenantSaving(true);
+    try {
+      if (tenantForm.id) {
+        await updatePlatformCompany(tenantForm.id, tenantForm);
+      } else {
+        await createPlatformCompany(tenantForm);
+      }
+      setShowTenantModal(false);
+      setTenantForm({ 
+        id: '', name: '', email: '', phone: '', address: '', industry: '', companySize: '', kycStatus: 'APPROVED',
+        adminName: '', adminEmail: '', adminPassword: '', code: '', subdomain: '', planId: '', billingCycle: 'MONTHLY', status: 'ACTIVE'
+      });
+      await refreshPlatform();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to save tenant');
+    } finally {
+      setTenantSaving(false);
+    }
+  };
+
+  const handleDeleteTenant = async (id: string) => {
+    if (!confirm('WARNING: This will permanently delete this tenant and ALL its data (employees, attendance, payroll, etc). Are you absolutely sure?')) return;
+    try {
+      await deletePlatformCompany(id);
+      await refreshPlatform();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete tenant');
+    }
+  };
+
+  const handleDeleteLead = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this lead?')) return;
+    try {
+      await deleteContactRequest(id);
+      setContacts(prev => prev.filter(c => c.id !== id));
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete lead');
+    }
+  };
+
+  const handleConvertLead = (lead: ContactRequest) => {
+    setTenantForm({
+      id: '',
+      name: lead.companyName || lead.name,
+      email: lead.email,
+      phone: lead.phone || '',
+      address: '',
+      industry: '',
+      companySize: '',
+      kycStatus: 'APPROVED'
+    });
+    setActiveTab('tenants');
+    setShowTenantModal(true);
+    // Optionally we can delete the lead after, but for now we just populate the form.
   };
 
   const handleRecordPayment = async () => {
@@ -559,6 +633,17 @@ function PlatformAdminPanel() {
     { key: 'companyName', header: 'Company', render: (c) => c.companyName || 'N/A' },
     { key: 'message', header: 'Message', render: (c) => <span style={{ color: 'var(--text-secondary)', maxWidth: 250, display: 'inline-block', whiteSpace: 'normal', wordBreak: 'break-word' }}>{c.message}</span> },
     { key: 'createdAt', header: 'Date', render: (c) => new Date(c.createdAt).toLocaleDateString() },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (c) => (
+        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+          <Button size="sm" variant="success" onClick={() => handleConvertLead(c)}>Convert to Tenant</Button>
+          <Button size="sm" variant="danger" onClick={() => handleDeleteLead(c.id)}>Delete</Button>
+        </div>
+      )
+    }
   ];
 
   function kycTone(status?: string | null): 'success' | 'danger' | 'warning' {
@@ -615,7 +700,14 @@ function PlatformAdminPanel() {
               {/* Tab 2: Tenants */}
               {activeTab === 'tenants' && (
                 <>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <Button variant="primary" size="sm" onClick={() => {
+                    setTenantForm({ 
+                      id: '', name: '', email: '', phone: '', address: '', industry: '', companySize: '', kycStatus: 'APPROVED',
+                      adminName: '', adminEmail: '', adminPassword: '', code: '', subdomain: '', planId: plans[0]?.id || '', billingCycle: 'MONTHLY', status: 'ACTIVE'
+                    });
+                    setShowTenantModal(true);
+                  }}>Create Tenant</Button>
                   <Button variant="ghost" size="sm" loading={sweeping} onClick={handleRunDunning}>Run dunning sweep</Button>
                 </div>
                 <DataTable<Company>
@@ -977,6 +1069,106 @@ function PlatformAdminPanel() {
               </div>
             )}
           </Modal>
+
+          <Modal
+            open={showTenantModal}
+              onClose={() => setShowTenantModal(false)}
+              title={tenantForm.id ? "Edit Tenant" : "Create Tenant"}
+              footer={
+                <>
+                  <Button variant="ghost" onClick={() => setShowTenantModal(false)}>Cancel</Button>
+                  <Button loading={tenantSaving} onClick={handleSaveTenant}>Save Tenant</Button>
+                </>
+              }
+            >
+              <div style={{ display: 'grid', gap: '1rem', maxHeight: '70vh', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                <h4 style={{ margin: 0, paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>Company Details</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="form-label">Company Name *</label>
+                    <input className="input-field" value={tenantForm.name} onChange={e => setTenantForm({ ...tenantForm, name: e.target.value })} placeholder="Acme Corp" />
+                  </div>
+                  <div>
+                    <label className="form-label">Company Size</label>
+                    <select className="select-field" value={tenantForm.companySize} onChange={e => setTenantForm({ ...tenantForm, companySize: e.target.value })}>
+                      <option value="">Select...</option>
+                      <option value="1-10">1-10</option>
+                      <option value="11-50">11-50</option>
+                      <option value="51-200">51-200</option>
+                      <option value="201-500">201-500</option>
+                      <option value="500+">500+</option>
+                    </select>
+                  </div>
+                </div>
+                {!tenantForm.id && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label className="form-label">Tenant Code</label>
+                      <input className="input-field" value={tenantForm.code} onChange={e => setTenantForm({ ...tenantForm, code: e.target.value })} placeholder="ACME" />
+                    </div>
+                    <div>
+                      <label className="form-label">Workspace Subdomain</label>
+                      <input className="input-field" value={tenantForm.subdomain} onChange={e => setTenantForm({ ...tenantForm, subdomain: e.target.value })} placeholder="acme" />
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="form-label">Company Email</label>
+                    <input className="input-field" type="email" value={tenantForm.email} onChange={e => setTenantForm({ ...tenantForm, email: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="form-label">Company Phone</label>
+                    <input className="input-field" type="tel" value={tenantForm.phone} onChange={e => setTenantForm({ ...tenantForm, phone: e.target.value })} />
+                  </div>
+                </div>
+                <div>
+                  <label className="form-label">Address</label>
+                  <input className="input-field" value={tenantForm.address} onChange={e => setTenantForm({ ...tenantForm, address: e.target.value })} />
+                </div>
+                <div>
+                  <label className="form-label">Industry</label>
+                  <input className="input-field" value={tenantForm.industry} onChange={e => setTenantForm({ ...tenantForm, industry: e.target.value })} />
+                </div>
+
+                {!tenantForm.id && (
+                  <>
+                    <h4 style={{ margin: '1rem 0 0 0', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>Company Admin Setup</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div>
+                        <label className="form-label">Admin Name *</label>
+                        <input className="input-field" value={tenantForm.adminName} onChange={e => setTenantForm({ ...tenantForm, adminName: e.target.value })} placeholder="Jane Doe" />
+                      </div>
+                      <div>
+                        <label className="form-label">Admin Email (Login) *</label>
+                        <input className="input-field" type="email" value={tenantForm.adminEmail} onChange={e => setTenantForm({ ...tenantForm, adminEmail: e.target.value })} placeholder="jane@acme.com" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="form-label">Admin Password *</label>
+                      <input className="input-field" type="password" value={tenantForm.adminPassword} onChange={e => setTenantForm({ ...tenantForm, adminPassword: e.target.value })} placeholder="••••••••" />
+                    </div>
+
+                    <h4 style={{ margin: '1rem 0 0 0', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>Subscription Setup</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div>
+                        <label className="form-label">Subscription Plan</label>
+                        <select className="select-field" value={tenantForm.planId} onChange={e => setTenantForm({ ...tenantForm, planId: e.target.value })}>
+                          {plans.map(p => <option key={p.id} value={p.id}>{p.name} - ₹{p.priceMonthly}/mo</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label">Billing Cycle</label>
+                        <select className="select-field" value={tenantForm.billingCycle} onChange={e => setTenantForm({ ...tenantForm, billingCycle: e.target.value })}>
+                          <option value="MONTHLY">Monthly</option>
+                          <option value="ANNUAL">Annual</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Modal>
         </main>
       </div>
     </ProtectedRoute>

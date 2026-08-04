@@ -49,7 +49,54 @@ const getContactRequests = async (req, res) => {
   }
 };
 
+/**
+ * Update a contact/demo request (e.g. status).
+ * PUT /api/contact/:id
+ */
+const updateContactRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, name, email, phone, companyName, message } = req.body;
+    
+    const updateData = {};
+    if (status !== undefined) updateData.status = status;
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (phone !== undefined) updateData.phone = phone;
+    if (companyName !== undefined) updateData.companyName = companyName;
+    if (message !== undefined) updateData.message = message;
+
+    const request = await prisma.contactRequest.update({
+      where: { id },
+      data: updateData
+    });
+    res.json(request);
+  } catch (error) {
+    console.error('[UPDATE CONTACT REQUEST ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to update contact request' });
+  }
+};
+
+/**
+ * Delete a contact/demo request.
+ * DELETE /api/contact/:id
+ */
+const deleteContactRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.contactRequest.delete({
+      where: { id }
+    });
+    res.json({ message: 'Contact request deleted successfully.' });
+  } catch (error) {
+    console.error('[DELETE CONTACT REQUEST ERROR]:', error.message);
+    res.status(500).json({ error: 'Failed to delete contact request' });
+  }
+};
+
 module.exports = {
   submitContactRequest,
-  getContactRequests
+  getContactRequests,
+  updateContactRequest,
+  deleteContactRequest
 };

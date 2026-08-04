@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const {
   getCompanies,
+  createCompany,
+  updateCompany,
+  deleteCompany,
   updateCompanyStatus,
   getSubscriptions,
   updateSubscription,
@@ -32,6 +35,9 @@ router.get('/subscriptions', authorize(...GROUPS.VIEW), getSubscriptions);
 router.get('/metrics', authorize(...GROUPS.AUDIT), getMetrics);
 router.get('/audit-logs', authorize(...GROUPS.AUDIT), getAuditLogs);
 // Tenant lifecycle (ops).
+router.post('/companies', authorize(...GROUPS.OPS), createCompany);
+router.put('/companies/:id', authorize(...GROUPS.OPS), updateCompany);
+router.delete('/companies/:id', authorize(...GROUPS.OPS), deleteCompany);
 router.put('/companies/:id/status', authorize(...GROUPS.OPS), updateCompanyStatus);
 router.put('/companies/:id/subdomain', authorize(...GROUPS.SUBDOMAIN), updateCompanySubdomain);
 // KYC (compliance).

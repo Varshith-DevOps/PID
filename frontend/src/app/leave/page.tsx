@@ -126,7 +126,7 @@ export default function LeavePage() {
   };
 
   useEffect(() => { if (!authLoading && !user) router.push('/'); }, [user, authLoading, router]);
-  useEffect(() => { loadEmployees(); }, []);
+  useEffect(() => { if (user && isAdminView) loadEmployees(); }, [user]);
   useEffect(() => {
     if (view === 'employee' && employees.length && !selectedEmployeeId) {
       setSelectedEmployeeId(employees[0].id);
@@ -155,6 +155,7 @@ export default function LeavePage() {
   };
 
   const loadEmployees = async () => {
+    if (!isAdminView) return;
     try {
       const data = await getEmployees({ limit: 500 });
       setEmployees(data.employees);
@@ -170,9 +171,12 @@ export default function LeavePage() {
       if (isAdminView) {
         const data = await getAllLeaveBalances(selectedYear);
         setAllBalances(data.employees);
-      } else if (selectedEmployeeId) {
-        const data = await getLeaveBalance(selectedEmployeeId, selectedYear);
-        setBalance(data);
+      } else {
+        const targetId = selectedEmployeeId || user?.employeeId;
+        if (targetId) {
+          const data = await getLeaveBalance(targetId, selectedYear);
+          setBalance(data);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -218,8 +222,9 @@ export default function LeavePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
+    const targetEmployeeId = isAdminView ? form.employeeId : user?.employeeId;
     const { isValid, firstError } = validateForm(
-      { employeeId: form.employeeId, startDate: form.startDate, endDate: form.endDate, reason: form.reason },
+      { employeeId: targetEmployeeId, startDate: form.startDate, endDate: form.endDate, reason: form.reason },
       { employeeId: required('Employee'), startDate: vDate('Start date'), endDate: vDate('End date'), reason: required('Reason') }
     );
     if (!isValid) {
@@ -232,7 +237,7 @@ export default function LeavePage() {
     }
     setSubmitting(true);
     try {
-      await createLeaveRequest(form);
+      await createLeaveRequest({ ...form, employeeId: targetEmployeeId as string });
       setView('list');
       setForm({ employeeId: '', leaveType: 'ANNUAL', startDate: '', endDate: '', reason: '' });
       setSubmitted(false);
@@ -443,14 +448,16 @@ export default function LeavePage() {
             <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>New Leave Request</h2>
             <form onSubmit={handleSubmit}>
               <div style={{ display: 'grid', gap: '1rem' }}>
-                <Select
-                  label="Employee"
-                  required
-                  value={form.employeeId}
-                  onChange={(value) => setForm({ ...form, employeeId: value })}
-                  placeholder="Select"
-                  options={employees.map((employee) => ({ value: employee.id, label: fullName(employee) }))}
-                />
+                {isAdminView && (
+                  <Select
+                    label="Employee"
+                    required
+                    value={form.employeeId}
+                    onChange={(value) => setForm({ ...form, employeeId: value })}
+                    placeholder="Select"
+                    options={employees.map((employee) => ({ value: employee.id, label: fullName(employee) }))}
+                  />
+                )}
                 <Select
                   label="Leave Type"
                   required

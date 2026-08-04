@@ -2,10 +2,8 @@
 # SQLite remains the default for quick local dev; use this to run the app against
 # PostgreSQL (the supported production database) before cutover.
 #
-#   docker compose up -d db
-#   # in backend/.env set:
-#   #   DATABASE_URL="postgresql://hrms:hrms@localhost:5432/hrms?schema=public"
-#   # then follow docs/07_PostgreSQL_Migration_Runbook.md
+#   docker compose up -d
+#
 version: "3.9"
 
 services:
@@ -27,6 +25,47 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+    container_name: hrms_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://hrms:hrms@db:5432/hrms?schema=public
+      DIRECT_URL: postgresql://hrms:hrms@db:5432/hrms?schema=public
+      JWT_SECRET: "DuxLsbL0OhdVoVMKI9ixN7lmbaabdBlsHiaPxqvOmSAUnm7JtmkNjIcolf6YUEhS"
+      JWT_EXPIRES_IN: 7d
+      PORT: 5000
+      AI_RECRUITMENT_SERVICE_URL: http://ai-recruitment-service:8001
+      AI_RECRUITMENT_SERVICE_TOKEN: "-VJ7Q62wE0OzZF91T1QFLtK7Iyxmb0YT6FnMeRfH1lf8YbXqlWgsydg45I3VJNp2"
+      HRMS_SERVICE_TOKEN: "-VJ7Q62wE0OzZF91T1QFLtK7Iyxmb0YT6FnMeRfH1lf8YbXqlWgsydg45I3VJNp2"
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma db push --schema=prisma/schema.postgres.prisma && node src/index.js"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5000/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000/api
+    container_name: hrms_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
   ai-recruitment-service:
     build:
       context: ./ai-recruitment-service
@@ -36,7 +75,7 @@ services:
       APP_ENV: production
       PORT: 8001
       HRMS_API_URL: http://backend:5000/api
-      HRMS_SERVICE_TOKEN: ${HRMS_SERVICE_TOKEN:-}
+      HRMS_SERVICE_TOKEN: "-VJ7Q62wE0OzZF91T1QFLtK7Iyxmb0YT6FnMeRfH1lf8YbXqlWgsydg45I3VJNp2"
       AI_DATABASE_URL: ${AI_DATABASE_URL:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
       LLM_MODEL: ${LLM_MODEL:-}
@@ -56,8 +95,6 @@ services:
     tmpfs:
       - /tmp/ai-recruitment
     read_only: true
-    profiles:
-      - ai
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
       interval: 30s

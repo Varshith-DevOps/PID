@@ -111,22 +111,25 @@ const callAiService = async (path, { method = 'GET', body } = {}) => {
 
     const data = await response.json().catch(() => ({}));
 
-    logger.info('[AI SCREENING] Response received', { method, url: targetUrl, status: response.status });
-
     if (!response.ok) {
       const code = data?.detail?.code || data?.code || httpStatusToCode(response.status);
-      const message = data?.detail?.message || data?.error || 'AI screening failed.';
+      const message = data?.detail?.message || data?.error || data?.detail || 'AI screening failed.';
       logger.warn('[AI SCREENING] Non-OK response from AI service', {
         method,
         url: targetUrl,
         status: response.status,
         code,
+        message,
+        payloadSent: body ? Object.keys(body) : null,
+        responseData: data
       });
-      const error = new Error(message);
+      const error = new Error(typeof message === 'string' ? message : JSON.stringify(message));
       error.code = code;
       error.status = response.status;
       throw error;
     }
+    
+    logger.info('[AI SCREENING] Response received', { method, url: targetUrl, status: response.status });
     return data;
   } catch (error) {
     if (error.name === 'AbortError') {

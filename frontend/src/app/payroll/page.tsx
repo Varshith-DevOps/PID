@@ -67,7 +67,13 @@ export default function PayrollPage() {
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [records, setRecords] = useState<PayrollRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'runs' | 'process' | 'report' | 'structure' | 'settings' | 'tax-sandbox'>('runs');
+  const [view, setView] = useState<'runs' | 'process' | 'structure' | 'tax-sandbox' | 'settings' | 'report'>('runs');
+
+  useEffect(() => {
+    if (user?.role === 'EMPLOYEE' && view === 'runs') {
+      setView('structure');
+    }
+  }, [user, view]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [structure, setStructure] = useState<any>(null);
@@ -93,14 +99,31 @@ export default function PayrollPage() {
   const [skipDialog, setSkipDialog] = useState<{ stage: string; fallback: string } | null>(null);
 
   useEffect(() => {
-    if (!authLoading && (!user || user.role === 'EMPLOYEE')) router.push('/');
+    if (!authLoading && !user) router.push('/');
   }, [user, authLoading]);
 
   useEffect(() => {
     if (user && view === 'runs') loadRuns();
     if (user && view === 'process') loadPreflight();
-    if (user && view === 'structure') loadEmployees();
   }, [user, view, processMonth, processYear]);
+
+  useEffect(() => {
+    if (user && view === 'structure') {
+      if (user.role === 'EMPLOYEE') {
+        const empRecord = {
+          id: user.employeeId || user.id,
+          firstName: user.name || 'My Profile',
+          lastName: '',
+          email: user.email,
+          department: ''
+        };
+        setEmployees([empRecord]);
+        setSelectedEmployee(empRecord);
+      } else {
+        loadEmployees();
+      }
+    }
+  }, [user, view]);
 
   useEffect(() => {
     if (user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN')) loadGlobalSettings();
@@ -630,10 +653,9 @@ export default function PayrollPage() {
   };
 
   if (authLoading || !user) return <div className="loading-container"><div className="loading-spinner" />Loading...</div>;
-  if (user.role === 'EMPLOYEE') return null;
 
   const tabItems: TabItem[] = [
-    { key: 'runs', label: 'Runs' },
+    ...(user.role !== 'EMPLOYEE' ? [{ key: 'runs', label: 'Runs' }] : []),
     ...(isAdmin ? [{ key: 'process', label: 'Process' }] : []),
     { key: 'structure', label: 'Salary Structure' },
     { key: 'tax-sandbox', label: 'Tax Sandbox' },
@@ -1014,7 +1036,9 @@ export default function PayrollPage() {
                     </Card>
                   )}
 
-                  <Button variant="primary" style={{ marginTop: '1rem' }} onClick={handleSaveStructure}>Save Structure</Button>
+                  {isAdmin && (
+                    <Button variant="primary" style={{ marginTop: '1rem' }} onClick={handleSaveStructure}>Save Structure</Button>
+                  )}
                 </>
               ) : (
                 <EmptyState title="Select an employee" message="Choose an employee to configure their salary structure." />

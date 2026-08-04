@@ -79,11 +79,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setPermissions(userPermissions || []);
   }, []);
 
-  const logout = useCallback(() => {
-    // Revoke server-side (bumps tokenVersion) before clearing local state.
-    void apiLogout();
+  const logout = useCallback(async () => {
+    // Clear auth cookies BEFORE the server call so the revocation request
+    // isn't blocked by a stale CSRF check, and AFTER so any server-set
+    // clear-cookie headers are supplemented on the client side.
+    const clearCookies = () => {
+      if (typeof document === 'undefined') return;
+      const names = ['token', 'csrfToken', 'refreshToken'];
+      const paths = ['/', '/api/auth', '/api'];
+      for (const name of names) {
+        for (const path of paths) {
+          document.cookie = `${name}=; path=${path}; max-age=0`;
+          document.cookie = `${name}=; path=${path}; max-age=0; domain=${window.location.hostname}`;
+        }
+      }
+    };
+    clearCookies();
+    // Revoke server-side (bumps tokenVersion).
+    await apiLogout();
+    clearCookies();
     clearApiCache();
-    document.cookie = 'csrfToken=; path=/; max-age=0';
+    if (typeof window !== 'undefined') {
+      localStorage.clear();
+      sessionStorage.clear();
+    }
     setUser(null);
     setPermissions([]);
   }, []);

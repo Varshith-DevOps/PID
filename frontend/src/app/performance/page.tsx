@@ -221,9 +221,11 @@ export default function PerformanceDashboard() {
               <Button variant="ghost" onClick={() => router.push('/performance/appraisals')}>
                 Appraisal Cycles
               </Button>
-              <Button variant="primary" onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }}>
-                + Define Goal KRA
-              </Button>
+              {isAdmin && (
+                <Button variant="primary" onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }}>
+                  + Define Goal KRA
+                </Button>
+              )}
             </>
           }
         />
@@ -231,7 +233,9 @@ export default function PerformanceDashboard() {
         {/* Tab Headers */}
         <div style={{ display: 'flex', gap: '1.5rem', borderBottom: '1px solid var(--border-subtle)', marginBottom: '1.5rem', paddingBottom: '0.5rem' }}>
           <button onClick={() => setActiveViewTab('kras')} style={{ background: 'transparent', border: 'none', color: activeViewTab === 'kras' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === 'kras' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>KRA & Feedback</button>
-          <button onClick={() => setActiveViewTab('okrs')} style={{ background: 'transparent', border: 'none', color: activeViewTab === 'okrs' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === 'okrs' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>OKR Goals</button>
+          {isAdmin && (
+            <button onClick={() => setActiveViewTab('okrs')} style={{ background: 'transparent', border: 'none', color: activeViewTab === 'okrs' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === 'okrs' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>OKR Goals</button>
+          )}
           <button onClick={() => setActiveViewTab('appraisal')} style={{ background: 'transparent', border: 'none', color: activeViewTab === 'appraisal' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === 'appraisal' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>Self/Manager Appraisal</button>
           {isAdmin && (
             <button onClick={() => setActiveViewTab('9box')} style={{ background: 'transparent', border: 'none', color: activeViewTab === '9box' ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', paddingBottom: '0.25rem', borderBottom: activeViewTab === '9box' ? '2px solid var(--accent)' : 'none', outline: 'none' }}>HR 9-Box Grid</button>
@@ -291,8 +295,8 @@ export default function PerformanceDashboard() {
             ) : kras.length === 0 ? (
               <EmptyState
                 title="No active goals defined"
-                message='Click "Define Goal KRA" to start.'
-                action={<Button variant="primary" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }}>+ Define Goal KRA</Button>}
+                message={isAdmin ? 'Click "Define Goal KRA" to start.' : 'You have no goals assigned.'}
+                action={isAdmin ? <Button variant="primary" size="sm" onClick={() => { setSubmitted(false); setFormError(''); setShowGoalModal(true); }}>+ Define Goal KRA</Button> : undefined}
               />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

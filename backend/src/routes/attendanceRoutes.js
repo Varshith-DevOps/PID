@@ -34,7 +34,7 @@ router.post('/device-push/universal', (req, res, next) => {
 }, syncUniversalDevicePunch);
 
 router.get('/today', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getTodayAttendance);
-router.get('/employee/:employeeId', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getEmployeeAttendance);
+router.get('/employee/:employeeId', authenticate, getEmployeeAttendance);
 router.get('/report/monthly', authenticate, rbacMiddleware('ATTENDANCE', 'VIEW'), getMonthlyReport);
 
 router.post('/mark', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'MANAGER'), markAttendance);

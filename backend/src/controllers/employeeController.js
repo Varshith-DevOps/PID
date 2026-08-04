@@ -238,12 +238,10 @@ const createEmployee = async (req, res) => {
     // Link or create a corresponding User login record
     const existingUser = await prisma.user.findUnique({ where: { email } });
     let userId = existingUser ? existingUser.id : null;
-    let temporaryPassword = null;
 
     if (!existingUser) {
       const { hashPassword } = require('../utils/password');
-      const { generateTempPassword } = require('../services/validators');
-      temporaryPassword = generateTempPassword();
+      const temporaryPassword = 'employee123';
       const hashedPassword = await hashPassword(temporaryPassword);
 
       const { getDefaultPermissions } = require('./permissionController');
@@ -254,6 +252,7 @@ const createEmployee = async (req, res) => {
           password: hashedPassword,
           name: `${firstName} ${lastName}`,
           role: 'EMPLOYEE',
+          companyId: req.user?.companyId || null,
           mustChangePassword: true,
           permissions: {
             create: getDefaultPermissions('EMPLOYEE'),
@@ -270,6 +269,7 @@ const createEmployee = async (req, res) => {
       data: {
         employeeId,
         userId,
+        companyId: req.user?.companyId || null,
         firstName,
         lastName,
         email,

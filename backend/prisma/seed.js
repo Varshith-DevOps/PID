@@ -176,7 +176,9 @@ async function main() {
   // Clear all data. Incremental `prisma db push` on SQLite can leave child foreign
   // keys non-cascading (table recreation drift), so disable FK enforcement for the
   // wipe (per-connection; does not affect the running server).
-  await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF');
+  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith('postgres')) {
+    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF');
+  }
   await prisma.customModule.deleteMany();
   await prisma.supportAssignment.deleteMany();
   await prisma.notification.deleteMany();
@@ -233,7 +235,9 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.attendanceSettings.deleteMany();
   await prisma.payrollSettings.deleteMany();
-  await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
+  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith('postgres')) {
+    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
+  }
   console.log('✅ Cleared existing data');
 
   console.log('🌱 Creating SaaS Plans...');

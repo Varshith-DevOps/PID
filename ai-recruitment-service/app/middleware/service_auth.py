@@ -11,11 +11,12 @@ async def require_service_auth(authorization: str | None = Header(default=None))
     if not expected:
         logger.error(
             "[AUTH] HRMS_SERVICE_TOKEN is not configured in ai-recruitment-service/.env — "
-            "set it to the same value as AI_RECRUITMENT_SERVICE_TOKEN in backend/.env"
+            "set it to the same value as AI_RECRUITMENT_SERVICE_TOKEN in backend/.env "
+            "or run `npm run setup:tokens` in the backend directory."
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "UNAUTHORIZED_SERVICE", "message": "Service token is not configured"},
+            detail={"code": "UNAUTHORIZED_SERVICE", "message": "Service token is not configured. Please run `npm run setup:tokens` in the backend directory."},
         )
     if authorization != f"Bearer {expected}":
         logger.warning(

@@ -103,11 +103,20 @@ api.interceptors.response.use(
       || original.headers?.['x-skip-refresh']
       || url.includes('/auth/refresh')
       || url.includes('/auth/login');
-    if (status === 401 && !skipRefresh && typeof window !== 'undefined') {
-      original._retry = true;
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
-        return api(original); // replay the original request silently
+      
+    if (status === 401 && !url.includes('/auth/login') && typeof window !== 'undefined') {
+      if (!skipRefresh) {
+        original._retry = true;
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          return api(original); // replay the original request silently
+        }
+      }
+      // Session is permanently dead.
+      localStorage.clear();
+      sessionStorage.clear();
+      if (window.location.pathname !== '/' && window.location.pathname !== '/login') {
+        window.location.href = '/';
       }
     }
 
@@ -183,8 +192,34 @@ api.defaults.adapter = async (config: any) => {
   return res;
 };
 
+/**
+ * Thoroughly clear all auth cookies from the browser.
+ * Covers all possible path/domain combinations the backend might have set.
+ */
+function clearAuthCookies() {
+  if (typeof document === 'undefined') return;
+  const cookieNames = ['token', 'csrfToken', 'refreshToken'];
+  const paths = ['/', '/api/auth', '/api'];
+  for (const name of cookieNames) {
+    for (const path of paths) {
+      document.cookie = `${name}=; path=${path}; max-age=0`;
+      document.cookie = `${name}=; path=${path}; max-age=0; domain=${window.location.hostname}`;
+    }
+  }
+}
+
 export const login = async (email: string, password: string) => {
-  const { data } = await api.post('/auth/login', { email, password });
+  // Clear any stale auth state before attempting login. This prevents
+  // expired/revoked cookies from interfering with the login request.
+  clearAuthCookies();
+  clearApiCache();
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('pid_support_company_id');
+    sessionStorage.clear();
+  }
+  const { data } = await api.post('/auth/login', { email, password }, {
+    headers: { Authorization: undefined }
+  });
   return data;
 };
 
@@ -331,12 +366,12 @@ export const deleteDocument = async (id: string) => {
 };
 
 export const checkIn = async (employeeId: string) => {
-  const { data } = await api.post('/attendance/check-in', { employeeId });
+  const { data } = await api.post('/attendance/check-in', { employeeId, timestamp: new Date().toISOString() });
   return data;
 };
 
 export const checkOut = async (employeeId: string) => {
-  const { data } = await api.post('/attendance/check-out', { employeeId });
+  const { data } = await api.post('/attendance/check-out', { employeeId, timestamp: new Date().toISOString() });
   return data;
 };
 
@@ -765,6 +800,12 @@ export const logout = async () => {
     await api.post('/auth/logout');
   } catch {
     // Best-effort server-side revocation; local state is cleared regardless.
+  }
+  // Thoroughly clear all auth artifacts from the browser.
+  clearAuthCookies();
+  if (typeof window !== 'undefined') {
+    localStorage.clear();
+    sessionStorage.clear();
   }
 };
 
@@ -1356,18 +1397,49 @@ export const getAssets = async (params?: { status?: string; assignedToId?: strin
   return data;
 };
 
-export const createAsset = async (payload: { assetTag: string; name: string; category: string; serialNumber?: string; condition?: string; notes?: string }) => {
+export const getAssetDashboard = async () => {
+  const { data } = await api.get('/assets/dashboard');
+  return data;
+};
+
+export const getAssetHistory = async (id: string) => {
+  const { data } = await api.get(`/assets/${id}/history`);
+  return data;
+};
+
+export const createAsset = async (payload: { 
+  assetTag: string; 
+  name: string; 
+  category: string; 
+  serialNumber?: string; 
+  condition?: string; 
+  notes?: string;
+  location?: string;
+  purchaseDate?: string;
+  purchaseCost?: number;
+  warrantyExpiry?: string;
+}) => {
   const { data } = await api.post('/assets', payload);
   return data;
 };
 
-export const assignAsset = async (id: string, employeeId: string) => {
-  const { data } = await api.put(`/assets/${id}/assign`, { employeeId });
+export const assignAsset = async (id: string, payload: { employeeId: string; assignedAt?: string; notes?: string }) => {
+  const { data } = await api.put(`/assets/${id}/assign`, payload);
   return data;
 };
 
-export const returnAsset = async (id: string, payload?: { condition?: string; notes?: string }) => {
+export const returnAsset = async (id: string, payload?: { condition?: string; notes?: string; returnedAt?: string }) => {
   const { data } = await api.put(`/assets/${id}/return`, payload || {});
+  return data;
+};
+
+export const maintenanceAsset = async (id: string, payload: { action: 'SEND_MAINTENANCE' | 'FINISH_MAINTENANCE'; vendor?: string; cost?: number; notes?: string }) => {
+  const { data } = await api.put(`/assets/${id}/maintenance`, payload);
+  return data;
+};
+
+export const retireAsset = async (id: string, payload: { reason: string; notes?: string }) => {
+  const { data } = await api.put(`/assets/${id}/retire`, payload);
   return data;
 };
 
@@ -1842,8 +1914,33 @@ export const getContactRequests = async () => {
   return data;
 };
 
+export const updateContactRequest = async (id: string, payload: any) => {
+  const { data } = await api.put(`/contact/${id}`, payload);
+  return data;
+};
+
+export const deleteContactRequest = async (id: string) => {
+  const { data } = await api.delete(`/contact/${id}`);
+  return data;
+};
+
 export const getPlatformCompanies = async () => {
   const { data } = await api.get('/platform-admin/companies');
+  return data;
+};
+
+export const createPlatformCompany = async (payload: any) => {
+  const { data } = await api.post('/platform-admin/companies', payload);
+  return data;
+};
+
+export const updatePlatformCompany = async (id: string, payload: any) => {
+  const { data } = await api.put(`/platform-admin/companies/${id}`, payload);
+  return data;
+};
+
+export const deletePlatformCompany = async (id: string) => {
+  const { data } = await api.delete(`/platform-admin/companies/${id}`);
   return data;
 };
 
