@@ -36,15 +36,15 @@ test.describe('Critical HRMS journeys', () => {
   test('admin can access the attendance workspace and see the main tabs', async ({ page }) => {
     await page.goto('/attendance');
     await expect(page.getByRole('heading', { name: 'Attendance' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Today' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Report' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Corrections/i })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Today' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Report' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Corrections/i })).toBeVisible();
   });
 
   test('admin can access leave management and open the new request view', async ({ page }) => {
     await page.goto('/leave');
     await expect(page.getByRole('heading', { name: 'Leave Management' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Requests' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'New Request' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Requests' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'New Request' })).toBeVisible();
   });
 });

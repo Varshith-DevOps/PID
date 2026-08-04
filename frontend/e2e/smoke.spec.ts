@@ -5,7 +5,7 @@ test.describe('Public smoke', () => {
     await page.goto('/login');
     await expect(page.getByText('Welcome Back')).toBeVisible();
     await expect(page.locator('input[type="email"]')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();
   });
 
   test('unauthenticated dashboard access is redirected away', async ({ page }) => {

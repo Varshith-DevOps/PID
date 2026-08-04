@@ -8,6 +8,10 @@ describe('Attendance Wi-Fi Verification & Biometric webhook Sync', () => {
   let company;
 
   beforeAll(async () => {
+    // The biometric webhook now fails closed unless BIOMETRIC_API_KEY is set;
+    // configure it for the duration of this suite so the flow can be validated.
+    process.env.BIOMETRIC_API_KEY = 'TEST_SECRET';
+
     // Get employee details
     employee = await prisma.employee.findFirst({
       where: { email: 'rajesh.kumar@company.com' }
@@ -52,6 +56,7 @@ describe('Attendance Wi-Fi Verification & Biometric webhook Sync', () => {
   });
 
   afterAll(async () => {
+    delete process.env.BIOMETRIC_API_KEY;
     await prisma.whiteListedWiFi.deleteMany({ where: { companyId: company.id } });
     await prisma.biometricRawLog.deleteMany({ where: { companyId: company.id } });
     await prisma.$disconnect();

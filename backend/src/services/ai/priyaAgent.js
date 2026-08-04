@@ -312,8 +312,9 @@ Always cite the exact numbers, policies, or names retrieved from the corporate c
 
     if (apiKey) {
       try {
+        const geminiModel = process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-1.5-flash';
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -329,9 +330,9 @@ Always cite the exact numbers, policies, or names retrieved from the corporate c
         if (response.ok) {
           const json = await response.json();
           finalAnswer = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          activeEngine = 'gemini-1.5-flash';
+          activeEngine = geminiModel;
         } else {
-          console.error('Gemini API call failed status:', response.status);
+          console.error(`Gemini API call to model ${geminiModel} failed status:`, response.status);
         }
       } catch (err) {
         console.error('Error invoking Gemini API:', err);

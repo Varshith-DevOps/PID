@@ -116,10 +116,9 @@ const getEmployeeTimesheets = async (req, res) => {
       if (startDate) where.date.gte = new Date(startDate);
       if (endDate) where.date.lte = new Date(endDate);
     }
-    if (!isHr(req.user)) {
-      const employeeIds = await getEmployeeScopeIds(req.user);
-      where.employeeId = { in: employeeIds.length ? employeeIds : ['__no_employee_scope__'] };
-    }
+    // No scope widening here: canAccessEmployee already confirmed the requested
+    // employee is inside the caller's scope, so we never replace the specific
+    // employee filter with the full scope list (which leaked other employees' data).
 
     const timesheets = await prisma.timesheet.findMany({
       where,
@@ -222,29 +221,35 @@ const generateAttendanceFromTimesheet = async (req, res) => {
   try {
     const { date, month, year } = req.body;
 
-    let targetDate;
+    let startDate;
+    let endDate;
+
     if (date) {
-      targetDate = new Date(date);
+      // Single-day generation
+      startDate = new Date(date);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(startDate);
+      endDate.setHours(23, 59, 59, 999);
     } else {
+      // Full-month generation: first day 00:00 -> last day 23:59:59
       const m = month || new Date().getMonth() + 1;
       const y = year || new Date().getFullYear();
-      targetDate = new Date(y, m - 1, 1);
-    }
+      startDate = new Date(y, m - 1, 1);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(y, m, 0, 23, 59, 59, 999); // last day of month
 
-    const startDate = new Date(targetDate);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(targetDate);
-    endDate.setHours(23, 59, 59, 999);
+      // Never fabricate attendance for future dates (they would be marked ABSENT
+      // incorrectly and would skew dashboards/reports). Cap at end of today.
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      if (endDate > todayEnd) {
+        endDate = todayEnd;
+      }
+    }
 
     const timesheets = await prisma.timesheet.findMany({
       where: { date: { gte: startDate, lte: endDate } },
     });
-
-    const employeeHours = {};
-    for (const t of timesheets) {
-      if (!employeeHours[t.employeeId]) employeeHours[t.employeeId] = 0;
-      employeeHours[t.employeeId] += t.hoursWorked;
-    }
 
     const employees = await prisma.employee.findMany({ where: { isActive: true } });
 
@@ -252,30 +257,56 @@ const generateAttendanceFromTimesheet = async (req, res) => {
     let created = 0;
     let updated = 0;
 
-    for (const emp of employees) {
-      const hours = employeeHours[emp.id] || 0;
-      let status = 'ABSENT';
-      if (hours === 0) status = 'ABSENT';
-      else if (hours < 8) status = 'HALF_DAY';
-      else if (hours >= 8) status = 'PRESENT';
+    // Pre-fetch existing attendance rows for the whole range once, keyed by
+    // employeeId + local-midnight timestamp. Avoids an N+1 findFirst per
+    // employee per day (~2 queries/day/employee -> 1 query total).
+    const existingRows = await prisma.attendance.findMany({
+      where: { employeeId: { in: employees.map((e) => e.id) }, date: { gte: startDate, lte: endDate } },
+      select: { id: true, employeeId: true, date: true },
+    });
+    const existingByKey = new Map(
+      existingRows.map((r) => [`${r.employeeId}|${new Date(r.date).getTime()}`, r.id]),
+    );
 
-      const existing = await prisma.attendance.findFirst({
-        where: { employeeId: emp.id, date: { gte: startDate, lte: endDate } },
-      });
+    // Iterate every day of the requested range
+    for (let cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
+      const dayStart = new Date(cursor);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(cursor);
+      dayEnd.setHours(23, 59, 59, 999);
+      const dayKey = dayStart.toISOString().split('T')[0];
 
-      if (existing) {
-        await prisma.attendance.update({
-          where: { id: existing.id },
-          data: { status, workHours: hours, updatedAt: new Date() },
-        });
-        updated++;
-      } else {
-        await prisma.attendance.create({
-          data: { employeeId: emp.id, date: startDate, status, workHours: hours },
-        });
-        created++;
+      // Aggregate hours for this specific day (timesheets are already in-range).
+      const employeeHours = {};
+      for (const t of timesheets) {
+        if (t.date >= dayStart && t.date <= dayEnd) {
+          employeeHours[t.employeeId] = (employeeHours[t.employeeId] || 0) + t.hoursWorked;
+        }
       }
-      attendanceRecords.push({ employeeId: emp.id, hours, status });
+
+      for (const emp of employees) {
+        const hours = employeeHours[emp.id] || 0;
+        let status = 'ABSENT';
+        if (hours === 0) status = 'ABSENT';
+        else if (hours < 8) status = 'HALF_DAY';
+        else if (hours >= 8) status = 'PRESENT';
+
+        const existingId = existingByKey.get(`${emp.id}|${dayStart.getTime()}`);
+
+        if (existingId) {
+          await prisma.attendance.update({
+            where: { id: existingId },
+            data: { status, workHours: hours, updatedAt: new Date() },
+          });
+          updated++;
+        } else {
+          await prisma.attendance.create({
+            data: { employeeId: emp.id, date: dayStart, status, workHours: hours },
+          });
+          created++;
+        }
+        attendanceRecords.push({ employeeId: emp.id, date: dayKey, hours, status });
+      }
     }
 
     res.json({ message: 'Created: ' + created + ', Updated: ' + updated, records: attendanceRecords });
@@ -302,11 +333,19 @@ const getDailySummary = async (req, res) => {
       timesheets.splice(0, timesheets.length, ...timesheets.filter((t) => employeeIds.has(t.employeeId)));
     }
 
+    // Key the breakdown by employeeId (not name) so employees with identical
+    // names do not merge into a single bucket.
     const employeeSummary = {};
     for (const t of timesheets) {
-      const name = t.employee.firstName + ' ' + t.employee.lastName;
-      if (!employeeSummary[name]) employeeSummary[name] = 0;
-      employeeSummary[name] += t.hoursWorked;
+      const empId = t.employeeId;
+      if (!employeeSummary[empId]) {
+        employeeSummary[empId] = {
+          employeeId: empId,
+          name: t.employee.firstName + ' ' + t.employee.lastName,
+          hours: 0,
+        };
+      }
+      employeeSummary[empId].hours += t.hoursWorked;
     }
 
     const empWhere = { isActive: true };
@@ -316,11 +355,11 @@ const getDailySummary = async (req, res) => {
     const activeEmployees = await prisma.employee.findMany({ where: empWhere, select: { id: true } });
 
     const totalHours = timesheets.reduce(function(sum, t) { return sum + t.hoursWorked; }, 0);
-    const presentKeys = Object.keys(employeeSummary).filter(function(name) { return employeeSummary[name] >= 8; });
-    const partialKeys = Object.keys(employeeSummary).filter(function(name) { return employeeSummary[name] > 0 && employeeSummary[name] < 8; });
-    const absent = Math.max(activeEmployees.length - presentKeys.length - partialKeys.length, 0);
+    const presentCount = Object.keys(employeeSummary).filter(function(id) { return employeeSummary[id].hours >= 8; }).length;
+    const partialCount = Object.keys(employeeSummary).filter(function(id) { return employeeSummary[id].hours > 0 && employeeSummary[id].hours < 8; }).length;
+    const absent = Math.max(activeEmployees.length - presentCount - partialCount, 0);
 
-    res.json({ date: targetDate.toISOString(), totalHours: totalHours, present: presentKeys.length, partial: partialKeys.length, absent, breakdown: employeeSummary });
+    res.json({ date: targetDate.toISOString(), totalHours: totalHours, present: presentCount, partial: partialCount, absent, breakdown: employeeSummary });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });

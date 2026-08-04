@@ -262,17 +262,21 @@ export default function TimesheetPage() {
 
             {dailySummary?.breakdown && (
               <Card title="Employee Hours Breakdown">
-                {Object.entries(dailySummary.breakdown).map(([name, hours]: any) => (
-                  <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)', gap: '1rem' }}>
-                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <div style={{ width: '100px' }}>
-                        <ProgressBar value={Math.min((hours / 8) * 100, 100)} tone={hours >= 8 ? 'success' : hours > 0 ? 'warning' : 'danger'} height={6} />
+                {Object.values(dailySummary.breakdown).map((item: any) => {
+                  const hours = Number(item?.hours) || 0;
+                  const label = item?.name || item?.employeeId || 'Employee';
+                  return (
+                    <div key={item?.employeeId || label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: '1px solid var(--border-subtle)', gap: '1rem' }}>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ width: '100px' }}>
+                          <ProgressBar value={Math.min((hours / 8) * 100, 100)} tone={hours >= 8 ? 'success' : hours > 0 ? 'warning' : 'danger'} height={6} />
+                        </div>
+                        <span style={{ fontWeight: 700, color: hours >= 8 ? 'var(--success)' : hours > 0 ? 'var(--warning)' : 'var(--danger)', minWidth: '45px', textAlign: 'right' }}>{hours.toFixed(1)}h</span>
                       </div>
-                      <span style={{ fontWeight: 700, color: hours >= 8 ? 'var(--success)' : hours > 0 ? 'var(--warning)' : 'var(--danger)', minWidth: '45px', textAlign: 'right' }}>{hours.toFixed(1)}h</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </Card>
             )}
 

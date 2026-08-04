@@ -5,7 +5,7 @@ test.describe('Authentication flow', () => {
     await page.goto('/login');
     await page.locator('input[type="email"]').fill('admin@hrms.com');
     await page.locator('input[type="password"]').fill('admin123');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
 
     // Successful login pushes to /dashboard (which may then route by role).
     await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
@@ -16,7 +16,7 @@ test.describe('Authentication flow', () => {
     await page.goto('/login');
     await page.locator('input[type="email"]').fill('admin@hrms.com');
     await page.locator('input[type="password"]').fill('wrong-password');
-    await page.getByRole('button', { name: 'Sign In' }).click();
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
 
     await expect(page.getByText(/Invalid credentials/i)).toBeVisible();
     await expect(page).not.toHaveURL(/\/dashboard/);

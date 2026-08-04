@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const crypto = require('crypto');
 const { detectAndCreateOvertime } = require('./overtimeController');
 const { toZonedTime, fromZonedTime, format } = require('date-fns-tz');
 const { canAccessEmployee, getEmployeeScopeIds, canApproveEmployeeWorkflow, isHr, isPayroll } = require('../services/accessControl');
@@ -556,8 +557,16 @@ const updateSettings = async (req, res) => {
 const syncBiometricLogs = async (req, res) => {
   try {
     const apiKey = req.query.apiKey || req.headers['x-api-key'];
-    const expectedKey = process.env.BIOMETRIC_API_KEY || 'TEST_SECRET';
-    if (!apiKey || apiKey !== expectedKey) {
+    // Fail closed: the webhook is only enabled when BIOMETRIC_API_KEY is explicitly
+    // configured. No hardcoded/fallback secrets are accepted.
+    const expectedKey = process.env.BIOMETRIC_API_KEY;
+    if (!expectedKey) {
+      return res.status(503).json({ error: 'Biometric webhook is not configured. Set BIOMETRIC_API_KEY to enable it.' });
+    }
+    const provided = Buffer.from(String(apiKey || ''));
+    const expected = Buffer.from(String(expectedKey));
+    const keyValid = provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+    if (!keyValid) {
       return res.status(401).json({ error: 'Unauthorized biometric webhook access' });
     }
 

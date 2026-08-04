@@ -78,7 +78,18 @@ const getClaims = async (req, res) => {
 const createClaim = async (req, res) => {
   try {
     const { title, category, amount, description, currency } = req.body;
-    const employeeId = req.user.employeeId;
+    // Self-service defaults to the requester's linked employee; HR/admin may
+    // explicitly pass an employeeId they are authorized for.
+    let employeeId = req.user.employeeId;
+    if (req.body.employeeId) {
+      if (!(await canAccessEmployee(req.user, req.body.employeeId))) {
+        return res.status(403).json({ error: 'Access denied. You can only create claims for authorized employees.' });
+      }
+      employeeId = req.body.employeeId;
+    }
+    if (!employeeId) {
+      return res.status(400).json({ error: 'No employee profile is linked to your account. Ask HR to link one before submitting expense claims.' });
+    }
 
     const parsedAmount = Number(amount);
     if (!title || !category || amount === undefined) {
@@ -222,6 +233,10 @@ const financeApproveClaim = async (req, res) => {
     if (!isPayroll(req.user)) {
       return res.status(403).json({ error: 'Only finance/payroll roles can approve claims at finance level' });
     }
+    // Enforce the two-level workflow: finance may only act on manager-approved claims.
+    if (claim.status !== 'APPROVED_BY_MANAGER') {
+      return res.status(409).json({ error: `Only manager-approved claims can be finance-approved. Current status: ${claim.status}` });
+    }
 
     const updated = await prisma.expenseClaim.update({
       where: { id },
@@ -344,7 +359,18 @@ const getAdvances = async (req, res) => {
 const createAdvance = async (req, res) => {
   try {
     const { purpose, amountRequested } = req.body;
-    const employeeId = req.user.employeeId;
+    // Self-service defaults to the requester's linked employee; HR/admin may
+    // explicitly pass an employeeId they are authorized for.
+    let employeeId = req.user.employeeId;
+    if (req.body.employeeId) {
+      if (!(await canAccessEmployee(req.user, req.body.employeeId))) {
+        return res.status(403).json({ error: 'Access denied. You can only create advances for authorized employees.' });
+      }
+      employeeId = req.body.employeeId;
+    }
+    if (!employeeId) {
+      return res.status(400).json({ error: 'No employee profile is linked to your account. Ask HR to link one before requesting travel advances.' });
+    }
 
     const requested = Number(amountRequested);
     if (!purpose || amountRequested === undefined) {
@@ -379,7 +405,7 @@ const createAdvance = async (req, res) => {
 const approveAdvance = async (req, res) => {
   try {
     const { id } = req.params;
-    const { amountApproved, remarks, status } = req.body;
+    const { amountApproved, remarks } = req.body;
 
     const advance = await prisma.travelAdvance.findUnique({ where: { id } });
     if (!advance) {
@@ -388,17 +414,22 @@ const approveAdvance = async (req, res) => {
     if (!isPayroll(req.user)) {
       return res.status(403).json({ error: 'Only finance/payroll roles can approve travel advances' });
     }
+    if (advance.status !== 'PENDING') {
+      return res.status(409).json({ error: `Only pending travel advances can be approved. Current status: ${advance.status}` });
+    }
     const approved = amountApproved !== undefined ? Number(amountApproved) : advance.amountRequested;
     if (!Number.isFinite(approved) || approved <= 0) {
       return res.status(400).json({ error: 'Approved amount must be greater than 0' });
     }
 
+    // Status is computed server-side; never trust a client-supplied status here.
+    // Only PENDING → APPROVED is supported by the approval endpoint.
     const updated = await prisma.travelAdvance.update({
       where: { id },
       data: {
         amountApproved: approved,
         advanceRemarks: remarks || 'Approved by Finance / HR',
-        status: status || 'APPROVED',
+        status: 'APPROVED',
       },
     });
 
@@ -434,6 +465,9 @@ const settleAdvance = async (req, res) => {
     }
     if (!isPayroll(req.user)) {
       return res.status(403).json({ error: 'Only finance/payroll roles can settle travel advances' });
+    }
+    if (advance.status !== 'APPROVED') {
+      return res.status(409).json({ error: `Only approved travel advances can be settled. Current status: ${advance.status}` });
     }
 
     const updated = await prisma.travelAdvance.update({
