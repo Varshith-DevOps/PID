@@ -427,7 +427,15 @@ function PlatformAdminPanel() {
       address: '',
       industry: '',
       companySize: '',
-      kycStatus: 'APPROVED'
+      kycStatus: 'APPROVED',
+      adminName: '',
+      adminEmail: '',
+      adminPassword: '',
+      code: '',
+      subdomain: '',
+      planId: '',
+      billingCycle: 'MONTHLY',
+      status: 'ACTIVE'
     });
     setActiveTab('tenants');
     setShowTenantModal(true);

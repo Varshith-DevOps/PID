@@ -223,7 +223,7 @@ export default function AssetsPage() {
             </Button>
           )}
           {canManageAssets && (a.status === 'AVAILABLE' || a.status === 'DAMAGED') && (
-            <Button size="sm" tone="danger" variant="ghost" onClick={() => { setActionAsset(a); setModalType('RETIRE'); }}>Retire</Button>
+            <Button size="sm" variant="danger" onClick={() => { setActionAsset(a); setModalType('RETIRE'); }}>Retire</Button>
           )}
         </div>
       )
@@ -242,8 +242,8 @@ export default function AssetsPage() {
       render: (a) => (
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
           <Button size="sm" variant="ghost" onClick={() => openHistory(a)}>History</Button>
-          {canManageAssets && a.status === 'AVAILABLE' && <Button size="sm" variant="outline" onClick={() => { setActionAsset(a); setModalType('ASSIGN'); }}>Assign</Button>}
-          {canManageAssets && a.status === 'ASSIGNED' && <Button size="sm" variant="outline" onClick={() => { setActionAsset(a); setModalType('RETURN'); }}>Return</Button>}
+          {canManageAssets && a.status === 'AVAILABLE' && <Button size="sm" variant="ghost" onClick={() => { setActionAsset(a); setModalType('ASSIGN'); }}>Assign</Button>}
+          {canManageAssets && a.status === 'ASSIGNED' && <Button size="sm" variant="ghost" onClick={() => { setActionAsset(a); setModalType('RETURN'); }}>Return</Button>}
         </div>
       )
     }
@@ -259,15 +259,15 @@ export default function AssetsPage() {
           title={canManageAssets ? "Asset Management" : "My Assets"}
           subtitle="Track and manage assets"
           icon={<div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #14b8a6, #0ea5e9)' }}>{ASSET_ICON}</div>}
-          action={canManageAssets && <Button variant="primary" onClick={() => setShowRegister(true)}>Register Asset</Button>}
+          actions={canManageAssets && <Button variant="primary" onClick={() => setShowRegister(true)}>Register Asset</Button>}
         />
 
         {canManageAssets && (
           <div className="grid grid-4" style={{ marginBottom: '1.5rem' }}>
-            <StatCard title="Total Assets" value={dashboard.TOTAL || 0} />
-            <StatCard title="Available" value={dashboard.AVAILABLE || 0} trend={{ value: 100, label: 'Ready', positive: true }} />
-            <StatCard title="Assigned" value={dashboard.ASSIGNED || 0} />
-            <StatCard title="In Maintenance" value={dashboard.MAINTENANCE || 0} trend={dashboard.MAINTENANCE > 0 ? { value: 1, label: 'Action needed', positive: false } : undefined} />
+            <StatCard label="Total Assets" value={dashboard.TOTAL || 0} />
+            <StatCard label="Available" value={dashboard.AVAILABLE || 0} trend={{ value: '100', direction: 'up' }} />
+            <StatCard label="Assigned" value={dashboard.ASSIGNED || 0} />
+            <StatCard label="In Maintenance" value={dashboard.MAINTENANCE || 0} trend={dashboard.MAINTENANCE > 0 ? { value: '1', direction: 'down' } : undefined} />
           </div>
         )}
 
@@ -284,7 +284,7 @@ export default function AssetsPage() {
           </div>
         )}
 
-        <Card title={activeTab === 'inventory' ? "Inventory" : "Assignments"} padded={false} action={canManageAssets && <Button size="sm" variant="outline" onClick={exportCSV}>Export CSV</Button>}>
+        <Card title={activeTab === 'inventory' ? "Inventory" : "Assignments"} padded={false} actions={canManageAssets && <Button size="sm" variant="ghost" onClick={exportCSV}>Export CSV</Button>}>
           {canManageAssets && (
             <FilterBar>
               <SearchInput placeholder="Search assets..." value={search} onChange={setSearch} />
@@ -382,11 +382,11 @@ export default function AssetsPage() {
         <Modal open={modalType === 'HISTORY'} onClose={() => setModalType(null)} title={`Asset History: ${actionAsset?.name}`}>
           <div style={{ marginTop: '1rem' }}>
             <Timeline items={historyItems.map((h: any) => ({
-              id: h.id,
+              key: h.id,
               title: h.action,
-              description: h.details,
-              timestamp: new Date(h.date).toLocaleString(),
-              status: h.action === 'CREATE' ? 'success' : h.action === 'MAINTENANCE' ? 'warning' : h.action === 'RETIRE' ? 'error' : 'default'
+              detail: h.details,
+              meta: new Date(h.date).toLocaleString(),
+              tone: h.action === 'CREATE' ? 'success' : h.action === 'MAINTENANCE' ? 'warning' : h.action === 'RETIRE' ? 'danger' : 'neutral'
             }))} />
             {historyItems.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No history available for this asset.</p>}
           </div>
@@ -398,7 +398,7 @@ export default function AssetsPage() {
               ||| |||| || ||| ||||
             </div>
             <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{actionAsset?.assetTag}</span>
-            <Button variant="outline" onClick={() => window.print()}>Print Label</Button>
+            <Button variant="ghost" onClick={() => window.print()}>Print Label</Button>
           </div>
         </Modal>
 
