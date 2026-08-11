@@ -109,7 +109,7 @@ export default function AttendancePage() {
     statusCorrection: 'PRESENT',
     reason: '',
   });
-  const [regSubmitted, setRegSubmitted] = useState(false);
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   const isEmployee = user?.role === 'EMPLOYEE';
   const canManageOthers = ['MANAGER', 'HR', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
