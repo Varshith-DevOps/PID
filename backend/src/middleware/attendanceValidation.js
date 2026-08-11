@@ -39,32 +39,31 @@ const validateAttendancePunch = async (req, res, next) => {
       deviceId
     } = req.body;
 
-    const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'];
+    const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'HR'];
     const isPrivileged = ADMIN_ROLES.includes(req.user?.role);
 
     // Build a companyId filter that avoids the Prisma "IS NULL" trap.
-    // When companyId is undefined we omit it so Prisma doesn't filter on it.
     const companyFilter = req.user.companyId ? { companyId: req.user.companyId } : {};
 
     // 1. Employee resolution
     let employee;
+    const ownEmployee = await prisma.employee.findFirst({
+      where: { userId: req.user.id, ...companyFilter },
+      include: { department: true }
+    });
 
-    if (!isPrivileged || !employeeId) {
-      // EMPLOYEE role: always resolve from the authenticated user's own linked record.
-      // Admins/Managers without an explicit employeeId also fall through here.
-      employee = await prisma.employee.findFirst({
-        where: { userId: req.user.id, ...companyFilter },
-        include: { department: true }
-      });
-      if (!employee) {
+    if (!employeeId || (ownEmployee && employeeId === ownEmployee.id) || !isPrivileged) {
+      // Self-service punch: always use authenticated user's own linked Employee record
+      if (!ownEmployee) {
         return res.status(400).json({
           error: 'Employee account is not linked to your login account. Please contact HR to fix this.'
         });
       }
+      employee = ownEmployee;
       employeeId = employee.id;
       req.body.employeeId = employeeId;
     } else {
-      // Privileged role with explicit employeeId — look up the target employee
+      // Privileged role punching on behalf of another employee
       employee = await prisma.employee.findFirst({
         where: { id: employeeId, ...companyFilter },
         include: { department: true }

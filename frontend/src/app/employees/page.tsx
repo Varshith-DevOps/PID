@@ -13,6 +13,8 @@ import {
 } from '@/components/ui';
 import type { Column } from '@/components/ui';
 
+import BulkImportModal from '@/components/BulkImportModal';
+
 interface Employee {
   id: string; employeeId: string; firstName: string; lastName: string; email: string;
   jobTitle: string; department: { id: string; name: string }; photoUrl?: string; accountStage?: string; joinDate?: string;
@@ -44,6 +46,7 @@ export default function EmployeesPage() {
 
   // Add Employee Form States
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -198,6 +201,8 @@ export default function EmployeesPage() {
     },
   ];
 
+  const canManageEmployees = ['SUPER_ADMIN', 'ADMIN', 'HR_ADMIN', 'HR'].includes(user.role || '');
+
   return (
     <div className="app-layout">
       <Sidebar />
@@ -206,8 +211,15 @@ export default function EmployeesPage() {
           title="Employees"
           subtitle="Organization directory"
           icon={<PeopleIcon />}
-          actions={isAdmin && (
-            <Button leftIcon={<PlusIcon />} onClick={() => setShowAddModal(true)}>Add Employee</Button>
+          actions={canManageEmployees && (
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <Button variant="ghost" leftIcon={<span>📥</span>} onClick={() => setShowBulkModal(true)}>
+                Bulk Add Employees
+              </Button>
+              <Button leftIcon={<PlusIcon />} onClick={() => setShowAddModal(true)}>
+                Add Employee
+              </Button>
+            </div>
           )}
         />
 
@@ -307,6 +319,16 @@ export default function EmployeesPage() {
             </div>
           </form>
         </Modal>
+
+        {/* Bulk Add Employees Modal */}
+        <BulkImportModal
+          isOpen={showBulkModal}
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={() => {
+            setShowBulkModal(false);
+            loadData();
+          }}
+        />
       </main>
     </div>
   );

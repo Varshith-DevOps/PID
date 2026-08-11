@@ -90,26 +90,26 @@ const checkIn = async (req, res) => {
     const yesterdayLocal = new Date(todayLocal);
     yesterdayLocal.setUTCDate(yesterdayLocal.getUTCDate() - 1);
 
-    // Look for active incomplete check-in from today or yesterday to support overnight shifts
-    const existing = await prisma.attendance.findFirst({
-      where: { employeeId, date: { gte: yesterdayLocal }, checkOut: null },
+    // Check if an attendance record already exists for today
+    const existingToday = await prisma.attendance.findFirst({
+      where: { employeeId, date: todayLocal },
     });
-    if (existing) {
-      if (new Date(existing.date).getTime() < todayLocal.getTime()) {
-        // Forgotten checkout from a prior calendar day: Auto-checkout it gracefully
-        const checkInTime = new Date(existing.checkIn);
-        const autoCheckOutTime = new Date(checkInTime.getTime() + 8 * 60 * 60 * 1000); // 8 hours fallback
-        await prisma.attendance.update({
-          where: { id: existing.id },
-          data: {
-            checkOut: autoCheckOutTime,
-            workHours: 8.0,
-            notes: (existing.notes ? existing.notes + ' ' : '') + '[Auto-checkout: missing checkout punch]',
-          },
-        });
-      } else {
+
+    if (existingToday) {
+      if (!existingToday.checkOut) {
         return res.status(400).json({ error: 'Already checked in (active incomplete session exists)' });
       }
+      // Re-opening or updating check-in session for today
+      const attendance = await prisma.attendance.update({
+        where: { id: existingToday.id },
+        data: {
+          checkIn: currentTime,
+          checkOut: null,
+          workHours: 0,
+          markedBy: req.user?.id,
+        },
+      });
+      return res.json(attendance);
     }
 
     // Resolve active shift for today

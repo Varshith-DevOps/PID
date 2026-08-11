@@ -46,8 +46,14 @@ const {
   getChangeHistory,
 } = require('../controllers/employeeController');
 const { exportEmployeeData, anonymizeEmployee } = require('../controllers/dpdpController');
+const { downloadTemplate, validateBulkImport, executeBulkImport } = require('../controllers/bulkImportController');
 const { validate } = require('../middleware/validate');
 const { employeeCreateSchema } = require('../schemas/employeeSchemas');
+
+// ──── Bulk Employee Import Routes ──────────────────────────────────────────
+router.get('/bulk-import/template', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), downloadTemplate);
+router.post('/bulk-import/validate', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), validateBulkImport);
+router.post('/bulk-import', authenticate, requireRole('SUPER_ADMIN', 'ADMIN', 'HR'), executeBulkImport);
 
 // ──── Photo Upload Configuration (Multer v2) ──────────────────────────────
 

@@ -201,6 +201,12 @@ export default function LoginPage() {
               placeholder="••••••••"
             />
 
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.25rem', marginBottom: '0.75rem' }}>
+              <Link href="/forgot-password" style={{ fontSize: '0.8rem', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+                Forgot Password?
+              </Link>
+            </div>
+
             <Button type="submit" loading={loading} fullWidth style={{ marginTop: '0.75rem' }}>
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
