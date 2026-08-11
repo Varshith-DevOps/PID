@@ -1,9 +1,5 @@
-# Local/staging PostgreSQL for the HRMS backend.
-# SQLite remains the default for quick local dev; use this to run the app against
-# PostgreSQL (the supported production database) before cutover.
-#
-#   docker compose up -d
-#
+# PID HCMS Production Docker Compose Configuration
+# Backend connects to its dedicated PostgreSQL database service (hrms_postgres).
 version: "3.9"
 
 services:
@@ -31,7 +27,7 @@ services:
     container_name: hrms_backend
     restart: unless-stopped
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       DATABASE_URL: postgresql://hrms:hrms@db:5432/hrms?schema=public
       DIRECT_URL: postgresql://hrms:hrms@db:5432/hrms?schema=public
       JWT_SECRET: "DuxLsbL0OhdVoVMKI9ixN7lmbaabdBlsHiaPxqvOmSAUnm7JtmkNjIcolf6YUEhS"
@@ -46,7 +42,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "npx prisma db push --schema=prisma/schema.postgres.prisma && node src/index.js"
+      sh -c "node scripts/make-postgres-schema.js && npx prisma db push --schema=prisma/schema.postgres.prisma && node scripts/verify-all-7-accounts.js && node src/index.js"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5000/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
@@ -58,7 +54,7 @@ services:
       context: .
       dockerfile: ./frontend/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:5000/api
+        NEXT_PUBLIC_API_URL: http://13.232.70.236:5000/api
     container_name: hrms_frontend
     restart: unless-stopped
     ports:
