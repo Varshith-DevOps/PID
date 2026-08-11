@@ -27,7 +27,7 @@ echo ""
 echo "=========================================================="
 echo " 4. SYNCING DEDICATED POSTGRESQL DATABASE SCHEMA"
 echo "=========================================================="
-docker exec -i hrms_backend sh -c "node scripts/make-postgres-schema.js && npx prisma db push --schema=prisma/schema.postgres.prisma"
+docker exec -i hrms_backend sh -c "node scripts/make-postgres-schema.js && npx prisma db push --schema=prisma/schema.postgres.prisma --accept-data-loss"
 
 echo ""
 echo "=========================================================="
