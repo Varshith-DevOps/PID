@@ -1,6 +1,5 @@
 #!/bin/bash
 # PID HCMS — EC2 Production Deployment & Database Provisioning
-# Execute this script on your EC2 server or local terminal
 set -e
 
 echo "=========================================================="
@@ -26,19 +25,25 @@ docker compose up -d --no-deps --build backend frontend
 
 echo ""
 echo "=========================================================="
-echo " 4. PROVISIONING & REPAIRING DATABASE PROFILES FOR ALL 7 TEST ACCOUNTS"
+echo " 4. SYNCING POSTGRESQL DATABASE SCHEMA"
+echo "=========================================================="
+docker exec -i hrms_backend npx prisma db push --accept-data-loss
+
+echo ""
+echo "=========================================================="
+echo " 5. PROVISIONING & REPAIRING DATABASE PROFILES FOR ALL 7 TEST ACCOUNTS"
 echo "=========================================================="
 docker exec -i hrms_backend node scripts/verify-all-7-accounts.js
 
 echo ""
 echo "=========================================================="
-echo " 5. RUNNING AUTOMATED ATTENDANCE MATRIX VERIFICATION"
+echo " 6. RUNNING AUTOMATED ATTENDANCE MATRIX VERIFICATION"
 echo "=========================================================="
 docker exec -i hrms_backend node scripts/test-all-roles-attendance.js
 
 echo ""
 echo "=========================================================="
-echo " 6. DEPLOYMENT & VERIFICATION COMPLETE"
+echo " 7. DEPLOYMENT & VERIFICATION COMPLETE"
 echo "=========================================================="
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 curl -sf http://localhost:5000/health/live && echo "Backend: OK" || echo "Backend check failed"
