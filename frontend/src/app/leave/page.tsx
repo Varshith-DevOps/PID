@@ -102,7 +102,7 @@ export default function LeavePage() {
   const [rejectSubmitted, setRejectSubmitted] = useState(false);
   const [processingLeaveId, setProcessingLeaveId] = useState<string | null>(null);
 
-  const isAdminView = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isAdminView = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'HR';
   const canCreateTab = !!user && hasPermission('LEAVE', 'CREATE');
 
   const getApiMessage = (err: unknown, fallback: string) => {

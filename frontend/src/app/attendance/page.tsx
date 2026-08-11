@@ -113,24 +113,25 @@ export default function AttendancePage() {
 
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   const isEmployee = user?.role === 'EMPLOYEE';
+  // HR, Manager, Admin, SuperAdmin also need self-service attendance
+  const isManagerOrAbove = ['MANAGER', 'HR', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
+  const canManageOthers = ['MANAGER', 'HR', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
   useEffect(() => { if (!authLoading && !user) router.push('/'); }, [user, authLoading]);
 
-  // Set default view based on role
+  // ALL roles default to 'my' tab — everyone can clock themselves in/out.
+  // After profile loads, if they have no employeeId, non-employees fall back to 'today'.
   useEffect(() => {
     if (user) {
-      if (isEmployee) {
-        setView('my');
-        loadProfile();
-      } else {
-        setView('today');
-      }
+      loadProfile();
+      // Default: self-service for all. Non-employees without employee profile fall back below.
+      setView('my');
     }
   }, [user]);
 
   useEffect(() => {
-    if (user && view === 'today' && !isEmployee) loadTodayAttendance();
-    if (user && view === 'report' && !isEmployee) loadMonthlyReport();
+    if (user && view === 'today') loadTodayAttendance();
+    if (user && view === 'report') loadMonthlyReport();
     if (user && view === 'settings' && isAdmin) loadSettings();
     if (user && view === 'my' && employeeId) loadMyAttendance();
     if (user && (view === 'regularization' || view === 'my')) loadRegularizations();
@@ -384,15 +385,11 @@ export default function AttendancePage() {
     );
   }
 
-  // Role-dependent tab set
-  const tabItems = isEmployee
+  // Tab set: ALL roles get 'My Attendance' if they have an employee profile.
+  // Admins/Managers/HR additionally get team-level Today/Report views.
+  const selfServiceTabs = employeeId
     ? [
         { key: 'my', label: 'My Attendance' },
-        { key: 'regularization', label: 'Correction Requests' },
-      ]
-    : [
-        { key: 'today', label: 'Today' },
-        { key: 'report', label: 'Report' },
         {
           key: 'regularization',
           label: (
@@ -402,8 +399,20 @@ export default function AttendancePage() {
             </span>
           ),
         },
+      ]
+    : [];
+
+  const adminTabs = canManageOthers
+    ? [
+        { key: 'today', label: 'Today' },
+        { key: 'report', label: 'Report' },
         ...(isAdmin ? [{ key: 'settings', label: 'Settings' }] : []),
-      ];
+      ]
+    : [];
+
+  const tabItems = isEmployee
+    ? selfServiceTabs
+    : [...selfServiceTabs, ...adminTabs];
 
   // ---- Column configs ----
   const myColumns: Column<AttendanceRec>[] = [
@@ -507,7 +516,7 @@ export default function AttendancePage() {
         />
 
         {/* Employee's own attendance view */}
-        {view === 'my' && isEmployee && (
+        {view === 'my' && (
           <>
             <Card style={{ marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -574,7 +583,7 @@ export default function AttendancePage() {
                       : 'Process and recalculate daily punches to resolve late minutes or weekly-off anomalies'}
                   </p>
                 </div>
-                {isEmployee && (
+                {employeeId && (
                   <Button variant="primary" onClick={() => setShowRegModal(true)} leftIcon={<span aria-hidden>➕</span>}>
                     Request Punch Correction
                   </Button>
@@ -724,8 +733,8 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* Admin: Today view */}
-        {view === 'today' && !isEmployee && (
+        {/* Admin: Today view — only for roles that manage others */}
+        {view === 'today' && canManageOthers && (
           <>
             <div style={{ marginBottom: '1.5rem' }}>
               <Banner tone="info" title="Attendance is self-service">
@@ -753,7 +762,7 @@ export default function AttendancePage() {
         )}
 
         {/* Report view */}
-        {view === 'report' && !isEmployee && (
+        {view === 'report' && canManageOthers && (
           <>
             <Card style={{ marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
