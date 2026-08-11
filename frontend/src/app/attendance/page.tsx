@@ -92,6 +92,10 @@ export default function AttendancePage() {
   const [view, setView] = useState<'today' | 'report' | 'settings' | 'my' | 'regularization'>('today');
   const [monthlyData, setMonthlyData] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
+  const [dateFilter, setDateFilter] = useState<{ month: number; year: number }>({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+  });
   const [employeeId, setEmployeeId] = useState(user?.employeeId || '');
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [clockLoading, setClockLoading] = useState(false);
