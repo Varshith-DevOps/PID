@@ -370,10 +370,11 @@ export default function AttendancePage() {
     );
   }
 
-  // Tab set: EVERY user gets 'My Attendance' & 'Corrections'
-  // Admins/Managers/HR additionally get team-level Today/Report views.
-  const selfServiceTabs = [
+  // Tab set: Available to EVERY authenticated user
+  const tabItems = [
     { key: 'my', label: 'My Attendance' },
+    { key: 'today', label: 'Today' },
+    { key: 'report', label: 'Report' },
     {
       key: 'regularization',
       label: (
@@ -383,17 +384,8 @@ export default function AttendancePage() {
         </span>
       ),
     },
+    { key: 'settings', label: 'Settings' },
   ];
-
-  const adminTabs = canManageOthers
-    ? [
-        { key: 'today', label: 'Today' },
-        { key: 'report', label: 'Report' },
-        ...(isAdmin ? [{ key: 'settings', label: 'Settings' }] : []),
-      ]
-    : [];
-
-  const tabItems = [...selfServiceTabs, ...adminTabs];
 
   // ---- Column configs ----
   const myColumns: Column<AttendanceRec>[] = [
@@ -535,7 +527,12 @@ export default function AttendancePage() {
                       </Button>
                     )}
                     {hasCheckedIn && hasCheckedOut && (
-                      <Badge tone="success" dot>Completed Today</Badge>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <Badge tone="success" dot>Completed Today</Badge>
+                        <Button variant="success" onClick={handleClockIn} loading={clockLoading}>
+                          Clock In Again
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -726,15 +723,15 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* Admin: Today view — only for roles that manage others */}
-        {view === 'today' && canManageOthers && (
+        {/* Today view — available to all */}
+        {view === 'today' && (
           <>
             {Boolean(employeeId) && (
               <Card style={{ marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                   <div>
                     <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
-                      My Personal Time Clock
+                      Time Clock
                     </h2>
                     <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                       {!hasCheckedIn && 'You have not clocked in today.'}
@@ -755,7 +752,12 @@ export default function AttendancePage() {
                       </Button>
                     )}
                     {hasCheckedIn && hasCheckedOut && (
-                      <Badge tone="success" dot>Completed Today</Badge>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <Badge tone="success" dot>Completed Today</Badge>
+                        <Button variant="success" onClick={handleClockIn} loading={clockLoading}>
+                          Clock In Again
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -788,7 +790,7 @@ export default function AttendancePage() {
         )}
 
         {/* Report view */}
-        {view === 'report' && canManageOthers && (
+        {view === 'report' && (
           <>
             <Card style={{ marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
@@ -825,18 +827,18 @@ export default function AttendancePage() {
         )}
 
         {/* Settings view */}
-        {view === 'settings' && settings && isAdmin && (
+        {view === 'settings' && (
           <Card style={{ maxWidth: '500px' }}>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem' }}>Attendance Settings</h2>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
-              <TimeField label="Check-in Start Time" value={settings.checkInStartTime} onChange={(v) => setSettings({ ...settings, checkInStartTime: v })} />
-              <TimeField label="Check-in End Time" value={settings.checkInEndTime} onChange={(v) => setSettings({ ...settings, checkInEndTime: v })} />
-              <TimeField label="Check-out Time" value={settings.checkOutTime} onChange={(v) => setSettings({ ...settings, checkOutTime: v })} />
+              <TimeField label="Check-in Start Time" value={settings?.checkInStartTime || '09:00'} onChange={(v) => setSettings({ ...settings, checkInStartTime: v })} />
+              <TimeField label="Check-in End Time" value={settings?.checkInEndTime || '10:00'} onChange={(v) => setSettings({ ...settings, checkInEndTime: v })} />
+              <TimeField label="Check-out Time" value={settings?.checkOutTime || '18:00'} onChange={(v) => setSettings({ ...settings, checkOutTime: v })} />
               <Field label="Late Threshold (minutes)">
-                <input type="number" value={settings.lateThreshold} onChange={(e) => setSettings({ ...settings, lateThreshold: parseInt(e.target.value) })} className="input-field" />
+                <input type="number" value={settings?.lateThreshold || 15} onChange={(e) => setSettings({ ...settings, lateThreshold: parseInt(e.target.value) })} className="input-field" />
               </Field>
               <Field label="Half Day Threshold (hours)">
-                <input type="number" value={settings.halfDayThreshold} onChange={(e) => setSettings({ ...settings, halfDayThreshold: parseInt(e.target.value) })} className="input-field" />
+                <input type="number" value={settings?.halfDayThreshold || 4} onChange={(e) => setSettings({ ...settings, halfDayThreshold: parseInt(e.target.value) })} className="input-field" />
               </Field>
               <div style={{ marginTop: '0.5rem' }}>
                 <Button variant="primary" onClick={handleSaveSettings}>Save Settings</Button>
