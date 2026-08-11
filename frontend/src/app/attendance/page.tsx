@@ -92,12 +92,24 @@ export default function AttendancePage() {
   const [view, setView] = useState<'today' | 'report' | 'settings' | 'my' | 'regularization'>('today');
   const [monthlyData, setMonthlyData] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
-  const [dateFilter, setDateFilter] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() });
   const [employeeId, setEmployeeId] = useState(user?.employeeId || '');
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [clockLoading, setClockLoading] = useState(false);
+  const [regAction, setRegAction] = useState<{ id: string; status: 'APPROVED' | 'REJECTED' } | null>(null);
+  const [regActionLoading, setRegActionLoading] = useState(false);
+  const [showFailsafeModal, setShowFailsafeModal] = useState(false);
+  const [failsafeReason, setFailsafeReason] = useState('');
+  const [gpsCoords, setGpsCoords] = useState('');
 
-  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+  const [regForm, setRegForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    requestType: 'MISSING_PUNCH_IN',
+    checkInCorrection: '09:00',
+    checkOutCorrection: '18:00',
+    statusCorrection: 'PRESENT',
+    reason: '',
+  });
+  const [regSubmitted, setRegSubmitted] = useState(false);
   const isEmployee = user?.role === 'EMPLOYEE';
   const canManageOthers = ['MANAGER', 'HR', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
