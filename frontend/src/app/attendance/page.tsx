@@ -219,7 +219,10 @@ export default function AttendancePage() {
     if (!employeeId) return;
     setClockLoading(true);
     try {
-      await checkIn(employeeId);
+      const res = await checkIn(employeeId);
+      if (res && res.id) {
+        setMyAttendance(prev => [res, ...prev.filter(a => a.id !== res.id)]);
+      }
       await reloadEmployeeAttendance();
       showToast('Checked in successfully.', 'success');
     } catch (err: any) {
@@ -282,7 +285,10 @@ export default function AttendancePage() {
     if (!employeeId) return;
     setClockLoading(true);
     try {
-      await checkOut(employeeId);
+      const res = await checkOut(employeeId);
+      if (res && res.id) {
+        setMyAttendance(prev => [res, ...prev.filter(a => a.id !== res.id)]);
+      }
       await reloadEmployeeAttendance();
       showToast('Checked out successfully.', 'success');
     } catch (err: any) {
@@ -371,8 +377,14 @@ export default function AttendancePage() {
   };
 
   const pendingCorrections = regularizations.filter(r => r.status === 'PENDING').length;
-  const todayKey = new Date().toLocaleDateString('en-CA');
-  const todayAttendance = myAttendance.find((a) => new Date(a.date).toLocaleDateString('en-CA') === todayKey);
+  const todayISO = new Date().toISOString().split('T')[0];
+  const todayLocalStr = new Date().toLocaleDateString('en-CA');
+  const todayAttendance = myAttendance.find((a) => {
+    if (!a || !a.date) return false;
+    const dIso = typeof a.date === 'string' ? a.date.split('T')[0] : new Date(a.date).toISOString().split('T')[0];
+    const dLocal = new Date(a.date).toLocaleDateString('en-CA');
+    return dIso === todayISO || dLocal === todayLocalStr || new Date(a.date).toDateString() === new Date().toDateString();
+  });
   const hasCheckedIn = Boolean(todayAttendance?.checkIn);
   const hasCheckedOut = Boolean(todayAttendance?.checkOut);
 
