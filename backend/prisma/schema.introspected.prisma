@@ -1,0 +1,620 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model attendance {
+  id              BigInt     @id @default(autoincrement())
+  company_id      String?    @db.VarChar(36)
+  employee_id     BigInt
+  attendance_date DateTime   @db.Date
+  check_in        DateTime?  @db.Timestamp(6)
+  check_out       DateTime?  @db.Timestamp(6)
+  working_hours   Float?
+  status          String     @db.VarChar(20)
+  latitude        Float?
+  longitude       Float?
+  geofence_status String?    @db.VarChar(30)
+  companies       companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_attendance_company")
+  employees       employees  @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_attendance_employee")
+
+  @@unique([employee_id, attendance_date], map: "uq_attendance_employee_date")
+  @@index([company_id], map: "idx_attendance_company")
+  @@index([attendance_date], map: "idx_attendance_date")
+  @@index([employee_id], map: "idx_attendance_employee")
+}
+
+model audit_logs {
+  id          BigInt     @id @default(autoincrement())
+  company_id  String?    @db.VarChar(36)
+  actor_email String     @db.VarChar(120)
+  action      String     @db.VarChar(60)
+  target_type String?    @db.VarChar(60)
+  target_id   String?    @db.VarChar(60)
+  details     String?
+  created_at  DateTime   @db.Timestamp(6)
+  companies   companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_audit_company")
+
+  @@index([company_id], map: "idx_audit_company")
+  @@index([created_at], map: "idx_audit_created")
+}
+
+model clients {
+  id            BigInt     @id @default(autoincrement())
+  company_id    String     @db.VarChar(36)
+  name          String     @db.VarChar(100)
+  contact_email String?    @db.VarChar(100)
+  contact_phone String?    @db.VarChar(20)
+  notes         String?
+  created_at    DateTime   @default(now()) @db.Timestamp(6)
+  updated_at    DateTime   @default(now()) @db.Timestamp(6)
+  projects      projects[]
+
+  @@index([company_id], map: "idx_client_company")
+}
+
+model companies {
+  id                     String                   @id @db.VarChar(36)
+  name                   String                   @db.VarChar(120)
+  legal_name             String?                  @db.VarChar(160)
+  email                  String                   @unique @db.VarChar(255)
+  phone                  String?                  @db.VarChar(20)
+  address                String?                  @db.VarChar(300)
+  country                String?                  @db.VarChar(60)
+  timezone               String?                  @db.VarChar(40)
+  currency               String?                  @db.VarChar(3)
+  logo_url               String?                  @db.VarChar(500)
+  primary_color          String?                  @db.VarChar(9)
+  accent_color           String?                  @db.VarChar(9)
+  theme                  String?                  @db.VarChar(20)
+  business_hours_start   String?                  @db.VarChar(8)
+  business_hours_end     String?                  @db.VarChar(8)
+  payroll_cycle          String?                  @db.VarChar(30)
+  annual_leave_allowance Int?
+  working_days           String?                  @db.VarChar(100)
+  holiday_calendar       String?
+  status                 String                   @db.VarChar(20)
+  created_at             DateTime                 @db.Timestamp(6)
+  updated_at             DateTime                 @db.Timestamp(6)
+  attendance             attendance[]
+  audit_logs             audit_logs[]
+  departments            departments[]
+  document_audit_logs    document_audit_logs[]
+  documents              documents[]
+  employees              employees[]
+  invitations            invitations[]
+  leave_balances         leave_balances[]
+  leave_requests         leave_requests[]
+  notifications          notifications[]
+  offboarding_cases      offboarding_cases[]
+  overtime_shifts        overtime_shifts[]
+  pay_grades             pay_grades[]
+  pay_runs               pay_runs[]
+  payroll_rules          payroll_rules[]
+  payrolls               payrolls[]
+  projects               projects[]
+  reimbursement_requests reimbursement_requests[]
+  subscriptions          subscriptions[]
+  tasks                  tasks[]
+  users                  users[]
+
+  @@index([email], map: "idx_company_email")
+  @@index([status], map: "idx_company_status")
+}
+
+model departments {
+  id              BigInt      @id @default(autoincrement())
+  company_id      String?     @db.VarChar(36)
+  department_code String      @unique @db.VarChar(20)
+  department_name String      @unique @db.VarChar(255)
+  description     String?     @db.VarChar(500)
+  created_at      DateTime    @db.Timestamp(6)
+  updated_at      DateTime    @db.Timestamp(6)
+  companies       companies?  @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_dept_company")
+  employees       employees[]
+
+  @@index([department_code], map: "idx_dept_code")
+  @@index([company_id], map: "idx_dept_company")
+  @@index([department_name], map: "idx_dept_name")
+}
+
+model document_audit_logs {
+  id          BigInt     @id @default(autoincrement())
+  company_id  String?    @db.VarChar(36)
+  document_id BigInt
+  actor_email String     @db.VarChar(120)
+  action      String     @db.VarChar(20)
+  timestamp   DateTime   @db.Timestamp(6)
+  ip_address  String?    @db.VarChar(45)
+  details     String?    @db.VarChar(500)
+  companies   companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_doc_audit_company")
+
+  @@index([actor_email], map: "idx_doc_audit_actor")
+  @@index([company_id], map: "idx_doc_audit_company")
+  @@index([document_id], map: "idx_doc_audit_document")
+}
+
+model documents {
+  id                  BigInt     @id @default(autoincrement())
+  company_id          String?    @db.VarChar(36)
+  employee_id         BigInt
+  document_name       String     @db.VarChar(200)
+  document_type       String     @db.VarChar(20)
+  category            String     @db.VarChar(40)
+  file_name           String     @db.VarChar(255)
+  file_size           BigInt
+  mime_type           String     @db.VarChar(120)
+  storage_path        String     @db.VarChar(500)
+  uploaded_by         String     @db.VarChar(120)
+  uploaded_date       DateTime   @db.Date
+  expiry_date         DateTime?  @db.Date
+  verified            Boolean    @default(false)
+  verification_status String     @db.VarChar(20)
+  verified_by         String?    @db.VarChar(120)
+  verified_date       DateTime?  @db.Timestamp(6)
+  remarks             String?    @db.VarChar(1000)
+  created_at          DateTime   @db.Timestamp(6)
+  updated_at          DateTime   @db.Timestamp(6)
+  companies           companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_document_company")
+  employees           employees  @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_document_employee")
+
+  @@index([category], map: "idx_doc_category")
+  @@index([company_id], map: "idx_doc_company")
+  @@index([employee_id], map: "idx_doc_employee")
+  @@index([expiry_date], map: "idx_doc_expiry")
+  @@index([verification_status], map: "idx_doc_status")
+}
+
+model employees {
+  id                                                   BigInt                    @id @default(autoincrement())
+  company_id                                           String?                   @db.VarChar(36)
+  employee_code                                        String                    @unique @db.VarChar(20)
+  first_name                                           String                    @db.VarChar(50)
+  last_name                                            String                    @db.VarChar(50)
+  email                                                String                    @unique @db.VarChar(255)
+  phone                                                String                    @db.VarChar(15)
+  date_of_birth                                        DateTime                  @db.Date
+  gender                                               String                    @db.VarChar(20)
+  hire_date                                            DateTime                  @db.Date
+  designation                                          String                    @db.VarChar(100)
+  salary                                               Decimal                   @db.Decimal(12, 2)
+  address                                              String?
+  emergency_contact                                    String?                   @db.VarChar(100)
+  status                                               String                    @db.VarChar(20)
+  department_id                                        BigInt?
+  user_id                                              BigInt?                   @unique
+  created_at                                           DateTime                  @db.Timestamp(6)
+  updated_at                                           DateTime                  @db.Timestamp(6)
+  pay_grade_id                                         BigInt?
+  employment_type                                      String?                   @db.VarChar(30)
+  reports_to                                           BigInt?
+  attendance                                           attendance[]
+  documents                                            documents[]
+  companies                                            companies?                @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_employee_company")
+  departments                                          departments?              @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_employee_department")
+  pay_grades                                           pay_grades?               @relation(fields: [pay_grade_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_employee_paygrade")
+  employees                                            employees?                @relation("employeesToemployees", fields: [reports_to], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_employee_reports_to")
+  other_employees                                      employees[]               @relation("employeesToemployees")
+  users                                                users?                    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_employee_user")
+  leave_balances                                       leave_balances[]
+  leave_requests_leave_requests_approved_byToemployees leave_requests[]          @relation("leave_requests_approved_byToemployees")
+  leave_requests_leave_requests_employee_idToemployees leave_requests[]          @relation("leave_requests_employee_idToemployees")
+  offboarding_cases                                    offboarding_cases[]
+  overtime_shifts                                      overtime_shifts[]
+  pay_run_employee_errors                              pay_run_employee_errors[]
+  payrolls                                             payrolls[]
+  reimbursement_requests                               reimbursement_requests[]
+  tasks_tasks_assigned_byToemployees                   tasks[]                   @relation("tasks_assigned_byToemployees")
+  tasks_tasks_assigned_toToemployees                   tasks[]                   @relation("tasks_assigned_toToemployees")
+
+  @@index([company_id], map: "idx_employee_company")
+  @@index([department_id], map: "idx_employee_department")
+  @@index([designation], map: "idx_employee_designation")
+  @@index([reports_to], map: "idx_employee_reports_to")
+  @@index([status], map: "idx_employee_status")
+}
+
+model flyway_schema_history {
+  installed_rank Int      @id(map: "flyway_schema_history_pk")
+  version        String?  @db.VarChar(50)
+  description    String   @db.VarChar(200)
+  type           String   @db.VarChar(20)
+  script         String   @db.VarChar(1000)
+  checksum       Int?
+  installed_by   String   @db.VarChar(100)
+  installed_on   DateTime @default(now()) @db.Timestamp(6)
+  execution_time Int
+  success        Boolean
+
+  @@index([success], map: "flyway_schema_history_s_idx")
+}
+
+model invitations {
+  id          BigInt     @id @default(autoincrement())
+  company_id  String?    @db.VarChar(36)
+  email       String     @db.VarChar(255)
+  full_name   String     @db.VarChar(120)
+  role_name   String     @db.VarChar(30)
+  status      String     @db.VarChar(20)
+  created_at  DateTime   @db.Timestamp(6)
+  expires_at  DateTime?  @db.Timestamp(6)
+  accepted_at DateTime?  @db.Timestamp(6)
+  companies   companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_inv_company")
+
+  @@index([company_id], map: "idx_inv_company")
+  @@index([email], map: "idx_inv_email")
+  @@index([status], map: "idx_inv_status")
+}
+
+model leave_balances {
+  id               BigInt     @id @default(autoincrement())
+  company_id       String?    @db.VarChar(36)
+  employee_id      BigInt
+  leave_type       String     @db.VarChar(30)
+  total_leaves     Int
+  used_leaves      Int
+  remaining_leaves Int
+  created_at       DateTime   @db.Timestamp(6)
+  updated_at       DateTime   @db.Timestamp(6)
+  companies        companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_lb_company")
+  employees        employees  @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_lb_employee")
+
+  @@unique([employee_id, leave_type], map: "uq_lb_employee_type")
+  @@index([company_id], map: "idx_lb_company")
+  @@index([employee_id], map: "idx_lb_employee")
+}
+
+model leave_requests {
+  id                                              BigInt     @id @default(autoincrement())
+  company_id                                      String?    @db.VarChar(36)
+  employee_id                                     BigInt
+  leave_type                                      String     @db.VarChar(30)
+  status                                          String     @db.VarChar(20)
+  start_date                                      DateTime   @db.Date
+  end_date                                        DateTime   @db.Date
+  total_days                                      Int
+  reason                                          String?    @db.VarChar(500)
+  remarks                                         String?    @db.VarChar(500)
+  approved_by                                     BigInt?
+  approved_at                                     DateTime?  @db.Timestamp(6)
+  created_at                                      DateTime   @db.Timestamp(6)
+  updated_at                                      DateTime   @db.Timestamp(6)
+  employees_leave_requests_approved_byToemployees employees? @relation("leave_requests_approved_byToemployees", fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_leave_approved_by")
+  companies                                       companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_leave_company")
+  employees_leave_requests_employee_idToemployees employees  @relation("leave_requests_employee_idToemployees", fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_leave_employee")
+
+  @@index([approved_by], map: "idx_leave_approved_by")
+  @@index([company_id], map: "idx_leave_company")
+  @@index([employee_id], map: "idx_leave_employee")
+  @@index([status], map: "idx_leave_status")
+}
+
+model notifications {
+  id            BigInt     @id @default(autoincrement())
+  company_id    String?    @db.VarChar(36)
+  recipient_id  BigInt
+  title         String     @db.VarChar(200)
+  message       String     @db.VarChar(2000)
+  type          String     @db.VarChar(30)
+  priority      String     @db.VarChar(15)
+  icon          String?    @db.VarChar(60)
+  is_read       Boolean    @default(false)
+  created_at    DateTime   @db.Timestamp(6)
+  expires_at    DateTime?  @db.Timestamp(6)
+  action_url    String?    @db.VarChar(300)
+  metadata_json String?
+  companies     companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_notification_company")
+  users         users      @relation(fields: [recipient_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_notification_recipient")
+
+  @@index([company_id], map: "idx_notif_company")
+  @@index([created_at], map: "idx_notif_created")
+  @@index([is_read], map: "idx_notif_read")
+  @@index([recipient_id], map: "idx_notif_recipient")
+  @@index([type], map: "idx_notif_type")
+}
+
+model offboarding_cases {
+  id                          BigInt              @id @default(autoincrement())
+  company_id                  String?             @db.VarChar(36)
+  employee_id                 BigInt
+  initiated_by                String              @db.VarChar(120)
+  initiated_at                DateTime            @db.Timestamp(6)
+  last_working_day            DateTime            @db.Date
+  overall_status              String              @db.VarChar(30)
+  leave_encashment_amount     Decimal?            @db.Decimal(12, 2)
+  final_settlement_payroll_id BigInt?
+  created_at                  DateTime            @db.Timestamp(6)
+  updated_at                  DateTime            @db.Timestamp(6)
+  companies                   companies?          @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_offboarding_case_company")
+  employees                   employees           @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_offboarding_case_employee")
+  payrolls                    payrolls?           @relation(fields: [final_settlement_payroll_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_offboarding_case_payroll")
+  offboarding_steps           offboarding_steps[]
+
+  @@index([company_id], map: "idx_offboarding_case_company")
+  @@index([employee_id], map: "idx_offboarding_case_employee")
+  @@index([overall_status], map: "idx_offboarding_case_status")
+}
+
+model offboarding_steps {
+  id                BigInt            @id @default(autoincrement())
+  case_id           BigInt
+  step_type         String            @db.VarChar(50)
+  status            String            @db.VarChar(30)
+  error_message     String?           @db.VarChar(1000)
+  resolved_by       String?           @db.VarChar(120)
+  resolution_note   String?           @db.VarChar(1000)
+  executed_at       DateTime?         @db.Timestamp(6)
+  created_at        DateTime          @db.Timestamp(6)
+  updated_at        DateTime          @db.Timestamp(6)
+  offboarding_cases offboarding_cases @relation(fields: [case_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_offboarding_step_case")
+
+  @@index([case_id], map: "idx_offboarding_step_case")
+  @@index([status], map: "idx_offboarding_step_status")
+}
+
+model overtime_shifts {
+  id                   BigInt     @id @default(autoincrement())
+  company_id           String     @db.VarChar(36)
+  shift_date           DateTime   @db.Date
+  start_time           DateTime   @db.Time(6)
+  end_time             DateTime   @db.Time(6)
+  location             String     @db.VarChar(255)
+  status               String     @default("OPEN") @db.VarChar(30)
+  created_by           String     @db.VarChar(120)
+  assigned_employee_id BigInt?
+  assigned_at          DateTime?  @db.Timestamp(6)
+  created_at           DateTime   @db.Timestamp(6)
+  updated_at           DateTime   @db.Timestamp(6)
+  companies            companies  @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_overtime_shift_company")
+  employees            employees? @relation(fields: [assigned_employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_overtime_shift_employee")
+
+  @@index([company_id], map: "idx_overtime_shift_company")
+  @@index([assigned_employee_id], map: "idx_overtime_shift_employee")
+}
+
+model pay_grades {
+  id          BigInt      @id @default(autoincrement())
+  company_id  String      @db.VarChar(36)
+  grade_name  String      @db.VarChar(50)
+  min_salary  Decimal     @db.Decimal(12, 2)
+  max_salary  Decimal     @db.Decimal(12, 2)
+  description String?     @db.VarChar(255)
+  created_at  DateTime    @db.Timestamp(6)
+  updated_at  DateTime    @db.Timestamp(6)
+  employees   employees[]
+  companies   companies   @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_paygrade_company")
+
+  @@index([company_id], map: "idx_paygrade_company")
+}
+
+model pay_run_employee_errors {
+  id              BigInt    @id @default(autoincrement())
+  pay_run_id      BigInt
+  employee_id     BigInt
+  stage_type      String    @db.VarChar(50)
+  error_message   String
+  resolved        Boolean   @default(false)
+  resolution_note String?
+  resolved_by     String?   @db.VarChar(120)
+  created_at      DateTime  @default(now()) @db.Timestamp(6)
+  employees       employees @relation(fields: [employee_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  pay_runs        pay_runs  @relation(fields: [pay_run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([employee_id], map: "idx_pay_run_errors_emp")
+  @@index([pay_run_id], map: "idx_pay_run_errors_run")
+}
+
+model pay_run_stages {
+  id                        BigInt    @id @default(autoincrement())
+  pay_run_id                BigInt
+  stage_type                String    @db.VarChar(50)
+  status                    String    @db.VarChar(30)
+  started_at                DateTime? @db.Timestamp(6)
+  completed_at              DateTime? @db.Timestamp(6)
+  employees_succeeded_count Int?      @default(0)
+  employees_failed_count    Int?      @default(0)
+  pay_runs                  pay_runs  @relation(fields: [pay_run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([pay_run_id], map: "idx_pay_run_stages_run")
+}
+
+model pay_runs {
+  id                      BigInt                    @id @default(autoincrement())
+  company_id              String                    @db.VarChar(36)
+  pay_period_month        Int
+  pay_period_year         Int
+  status                  String                    @db.VarChar(30)
+  employee_count          Int
+  total_gross_amount      Decimal                   @db.Decimal(15, 2)
+  total_net_amount        Decimal                   @db.Decimal(15, 2)
+  processed_by            String                    @db.VarChar(120)
+  error_message           String?
+  created_at              DateTime                  @db.Timestamp(6)
+  overall_status          String?                   @default("COMPLETED") @db.VarChar(30)
+  current_stage           String?                   @default("PAYMENT_GENERATION") @db.VarChar(50)
+  initiated_by            String?                   @db.VarChar(120)
+  initiated_at            DateTime?                 @db.Timestamp(6)
+  pay_run_employee_errors pay_run_employee_errors[]
+  pay_run_stages          pay_run_stages[]
+  companies               companies                 @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pay_run_company")
+
+  @@index([company_id], map: "idx_pay_run_company")
+}
+
+model payroll_rules {
+  id               BigInt    @id @default(autoincrement())
+  company_id       String    @db.VarChar(36)
+  rule_key         String    @db.VarChar(50)
+  rule_name        String    @db.VarChar(100)
+  rule_type        String    @db.VarChar(30)
+  calculation_base String    @db.VarChar(30)
+  percentage       Decimal   @db.Decimal(5, 4)
+  threshold        Decimal   @default(0.00) @db.Decimal(12, 2)
+  flat_amount      Decimal   @default(0.00) @db.Decimal(12, 2)
+  active           Boolean   @default(true)
+  created_at       DateTime  @db.Timestamp(6)
+  updated_at       DateTime  @db.Timestamp(6)
+  companies        companies @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rule_company")
+
+  @@unique([company_id, rule_key], map: "uq_rule_company_key")
+  @@index([company_id], map: "idx_rule_company")
+}
+
+model payrolls {
+  id                     BigInt                   @id @default(autoincrement())
+  company_id             String?                  @db.VarChar(36)
+  employee_id            BigInt
+  payroll_month          Int
+  payroll_year           Int
+  basic_salary           Decimal                  @db.Decimal(12, 2)
+  hra                    Decimal                  @db.Decimal(12, 2)
+  allowances             Decimal                  @db.Decimal(12, 2)
+  gross_pay              Decimal                  @db.Decimal(12, 2)
+  deductions             Decimal                  @db.Decimal(12, 2)
+  tax                    Decimal                  @db.Decimal(12, 2)
+  pf                     Decimal                  @db.Decimal(12, 2)
+  net_pay                Decimal                  @db.Decimal(12, 2)
+  total_days             Int
+  paid_days              Int
+  status                 String                   @db.VarChar(20)
+  paid_at                DateTime?                @db.Timestamp(6)
+  created_at             DateTime                 @db.Timestamp(6)
+  updated_at             DateTime                 @db.Timestamp(6)
+  reimbursements         Decimal                  @default(0.00) @db.Decimal(12, 2)
+  payslip_email_status   String                   @default("PENDING") @db.VarChar(30)
+  payslip_email_sent_at  DateTime?                @db.Timestamp(6)
+  offboarding_cases      offboarding_cases[]
+  companies              companies?               @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_payroll_company")
+  employees              employees                @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_payroll_employee")
+  reimbursement_requests reimbursement_requests[]
+
+  @@unique([employee_id, payroll_month, payroll_year], map: "uq_payroll_employee_period")
+  @@index([company_id], map: "idx_payroll_company")
+  @@index([employee_id], map: "idx_payroll_employee")
+  @@index([payroll_month, payroll_year], map: "idx_payroll_month_year")
+  @@index([status], map: "idx_payroll_status")
+}
+
+model projects {
+  id             BigInt    @id @default(autoincrement())
+  company_id     String    @db.VarChar(36)
+  name           String    @db.VarChar(100)
+  status         String    @default("ACTIVE") @db.VarChar(20)
+  start_date     DateTime  @db.Date
+  end_date       DateTime? @db.Date
+  created_by     String    @db.VarChar(100)
+  created_at     DateTime  @db.Timestamp(6)
+  updated_at     DateTime  @db.Timestamp(6)
+  client_id      BigInt?
+  contract_value Decimal?  @db.Decimal(15, 2)
+  companies      companies @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_project_company")
+  clients        clients?  @relation(fields: [client_id], references: [id], onUpdate: NoAction)
+  tasks          tasks[]
+
+  @@index([client_id], map: "idx_project_client")
+  @@index([company_id], map: "idx_project_company")
+  @@index([status], map: "idx_project_status")
+}
+
+model reimbursement_requests {
+  id                   BigInt    @id @default(autoincrement())
+  company_id           String    @db.VarChar(36)
+  employee_id          BigInt
+  amount               Decimal   @db.Decimal(12, 2)
+  description          String    @db.VarChar(500)
+  status               String    @default("PENDING") @db.VarChar(30)
+  receipt_filename     String    @db.VarChar(255)
+  receipt_storage_path String    @db.VarChar(500)
+  receipt_mime_type    String    @db.VarChar(120)
+  approved_by          String?   @db.VarChar(120)
+  approved_at          DateTime? @db.Timestamp(6)
+  remarks              String?   @db.VarChar(1000)
+  payroll_id           BigInt?
+  created_at           DateTime  @db.Timestamp(6)
+  updated_at           DateTime  @db.Timestamp(6)
+  companies            companies @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_reimbursement_company")
+  employees            employees @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_reimbursement_employee")
+  payrolls             payrolls? @relation(fields: [payroll_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_reimbursement_payroll")
+
+  @@index([company_id], map: "idx_reimbursement_company")
+  @@index([employee_id], map: "idx_reimbursement_employee")
+  @@index([payroll_id], map: "idx_reimbursement_payroll")
+  @@index([status], map: "idx_reimbursement_status")
+}
+
+model roles {
+  id        BigInt  @id @default(autoincrement())
+  role_name String  @unique @db.VarChar(255)
+  users     users[]
+}
+
+model subscriptions {
+  id             BigInt    @id @default(autoincrement())
+  company_id     String    @db.VarChar(36)
+  plan           String    @db.VarChar(20)
+  status         String    @db.VarChar(20)
+  seats          Int
+  price_per_seat Decimal   @db.Decimal(10, 2)
+  started_at     DateTime  @db.Date
+  renewal_date   DateTime? @db.Date
+  trial_ends_at  DateTime? @db.Date
+  created_at     DateTime  @db.Timestamp(6)
+  updated_at     DateTime  @db.Timestamp(6)
+  companies      companies @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sub_company")
+
+  @@index([company_id], map: "idx_sub_company")
+  @@index([plan], map: "idx_sub_plan")
+  @@index([status], map: "idx_sub_status")
+}
+
+model tasks {
+  id                                     BigInt    @id @default(autoincrement())
+  company_id                             String    @db.VarChar(36)
+  title                                  String    @db.VarChar(150)
+  description                            String?
+  assigned_to                            BigInt
+  assigned_by                            BigInt
+  project_id                             BigInt?
+  status                                 String    @default("TODO") @db.VarChar(20)
+  priority                               String    @default("MEDIUM") @db.VarChar(20)
+  due_date                               DateTime? @db.Date
+  created_at                             DateTime  @db.Timestamp(6)
+  updated_at                             DateTime  @db.Timestamp(6)
+  employees_tasks_assigned_byToemployees employees @relation("tasks_assigned_byToemployees", fields: [assigned_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_assigned_by")
+  employees_tasks_assigned_toToemployees employees @relation("tasks_assigned_toToemployees", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_assigned_to")
+  companies                              companies @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_task_company")
+  projects                               projects? @relation(fields: [project_id], references: [id], onUpdate: NoAction, map: "fk_task_project")
+
+  @@index([assigned_by], map: "idx_task_assigned_by")
+  @@index([assigned_to], map: "idx_task_assigned_to")
+  @@index([company_id], map: "idx_task_company")
+  @@index([project_id], map: "idx_task_project")
+  @@index([status], map: "idx_task_status")
+}
+
+model users {
+  id            BigInt          @id @default(autoincrement())
+  company_id    String?         @db.VarChar(36)
+  full_name     String          @db.VarChar(255)
+  email         String          @unique @db.VarChar(255)
+  password      String          @db.VarChar(255)
+  refresh_token String?         @db.VarChar(500)
+  profile_photo String?
+  created_at    DateTime        @db.Timestamp(6)
+  updated_at    DateTime        @db.Timestamp(6)
+  role_id       BigInt
+  enabled       Boolean         @default(true)
+  employees     employees?
+  notifications notifications[]
+  companies     companies?      @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_user_company")
+  roles         roles           @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_user_role")
+
+  @@index([company_id], map: "idx_user_company")
+  @@index([email], map: "idx_user_email")
+  @@index([role_id], map: "idx_user_role")
+}

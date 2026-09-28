@@ -1,4 +1,4 @@
-﻿const prisma = require('../config/database');
+const prisma = require('../config/database');
 
 const resetAllowanceJIT = async (employeeId, tx = prisma) => {
   const employee = await tx.employee.findUnique({ where: { id: employeeId } });
@@ -147,9 +147,37 @@ const getKudosWall = async (req, res) => {
   }
 };
 
+const getColleagues = async (req, res) => {
+  try {
+    const colleagues = await prisma.employee.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        jobTitle: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { firstName: 'asc' },
+    });
+
+    res.json(colleagues);
+  } catch (error) {
+    console.error('[GET KUDOS COLLEAGUES ERROR]:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   sendKudos,
   getReceivedKudos,
   getSentKudos,
-  getKudosWall
+  getKudosWall,
+  getColleagues,
 };
+

@@ -92,12 +92,8 @@ export default function AttendancePage() {
   const [view, setView] = useState<'today' | 'report' | 'settings' | 'my' | 'regularization'>('today');
   const [monthlyData, setMonthlyData] = useState<any>(null);
   const [settings, setSettings] = useState<any>(null);
-  const [dateFilter, setDateFilter] = useState<{ month: number; year: number }>({
-    month: new Date().getMonth() + 1,
-    year: new Date().getFullYear(),
-  });
-  const [employeeId, setEmployeeId] = useState(user?.employeeId || '');
-  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [dateFilter, setDateFilter] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() });
+  const [employeeId, setEmployeeId] = useState('');
   const [clockLoading, setClockLoading] = useState(false);
   const [regAction, setRegAction] = useState<{ id: string; status: 'APPROVED' | 'REJECTED' } | null>(null);
   const [regActionLoading, setRegActionLoading] = useState(false);
@@ -114,39 +110,40 @@ export default function AttendancePage() {
     reason: '',
   });
   const [regSubmitted, setRegSubmitted] = useState(false);
+
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
   const isEmployee = user?.role === 'EMPLOYEE';
-  const canManageOthers = ['MANAGER', 'HR', 'ADMIN', 'SUPER_ADMIN'].includes(user?.role || '');
 
   useEffect(() => { if (!authLoading && !user) router.push('/'); }, [user, authLoading]);
 
+  // Set default view based on role
   useEffect(() => {
     if (user) {
       loadProfile();
-      setView('my');
+      if (isEmployee) {
+        setView('my');
+      } else {
+        setView('today');
+      }
     }
   }, [user]);
 
   useEffect(() => {
-    if (user && view === 'today') loadTodayAttendance();
-    if (user && view === 'report') loadMonthlyReport();
+    if (user && view === 'today' && !isEmployee) loadTodayAttendance();
+    if (user && view === 'report' && !isEmployee) loadMonthlyReport();
     if (user && view === 'settings' && isAdmin) loadSettings();
     if (user && view === 'my' && employeeId) loadMyAttendance();
     if (user && (view === 'regularization' || view === 'my')) loadRegularizations();
   }, [user, view, employeeId]);
 
+
   const loadProfile = async () => {
     try {
       const profile = await getProfile();
-      const resolvedEmpId = profile.employeeId || user?.employeeId || '';
-      setEmployeeId(resolvedEmpId);
+      setEmployeeId(profile.employeeId || '');
     } catch (err) {
       console.error(err);
-      if (user?.employeeId) {
-        setEmployeeId(user.employeeId);
-      }
-    } finally {
-      setProfileLoaded(true);
+      showToast('Failed to load profile details.', 'error');
     }
   };
 
@@ -399,22 +396,27 @@ export default function AttendancePage() {
     );
   }
 
-  // Tab set: Available to EVERY authenticated user
-  const tabItems = [
-    { key: 'my', label: 'My Attendance' },
-    { key: 'today', label: 'Today' },
-    { key: 'report', label: 'Report' },
-    {
-      key: 'regularization',
-      label: (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-          Corrections
-          {pendingCorrections > 0 && <Badge tone="danger">{pendingCorrections}</Badge>}
-        </span>
-      ),
-    },
-    { key: 'settings', label: 'Settings' },
-  ];
+  // Role-dependent tab set
+  const tabItems = isEmployee
+    ? [
+        { key: 'my', label: 'My Attendance' },
+        { key: 'regularization', label: 'Correction Requests' },
+      ]
+    : [
+        { key: 'my', label: 'My Attendance' },
+        { key: 'today', label: 'Today' },
+        { key: 'report', label: 'Report' },
+        {
+          key: 'regularization',
+          label: (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              Corrections
+              {pendingCorrections > 0 && <Badge tone="danger">{pendingCorrections}</Badge>}
+            </span>
+          ),
+        },
+        ...(isAdmin ? [{ key: 'settings', label: 'Settings' }] : []),
+      ];
 
   // ---- Column configs ----
   const myColumns: Column<AttendanceRec>[] = [
@@ -444,7 +446,7 @@ export default function AttendancePage() {
   ];
 
   const correctionColumns: Column<any>[] = [
-    ...(canManageOthers ? [{
+    ...(!isEmployee ? [{
       key: 'employee', header: 'Employee', render: (reg: any) => (
         <div>
           <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{reg.employee?.firstName} {reg.employee?.lastName}</div>
@@ -491,7 +493,7 @@ export default function AttendancePage() {
     { key: 'auditStatus', header: 'Auditing Status', render: (reg) => <StatusChip status={reg.status} /> },
     {
       key: 'actions', header: 'Actions / Audit Trails', render: (reg) => (
-        reg.status === 'PENDING' && canManageOthers ? (
+        reg.status === 'PENDING' && !isEmployee ? (
           <div style={{ display: 'flex', gap: '0.35rem' }}>
             <Button variant="success" size="sm" onClick={() => setRegAction({ id: reg.id, status: 'APPROVED' })}>Approve</Button>
             <Button variant="danger" size="sm" onClick={() => setRegAction({ id: reg.id, status: 'REJECTED' })}>Reject</Button>
@@ -512,61 +514,49 @@ export default function AttendancePage() {
       <main className="main-content">
         <PageHeader
           title="Attendance"
-          subtitle={canManageOthers ? 'Track daily attendance & self-service clock' : 'View your attendance records'}
+          subtitle={isEmployee ? 'View your attendance records' : 'Track daily attendance'}
           icon={<div className="page-header-icon" style={{ background: 'linear-gradient(135deg, #10b981, #00A7B5)' }}>{CLOCK_ICON}</div>}
           actions={<Tabs items={tabItems} value={view} onChange={(k) => setView(k as typeof view)} />}
         />
 
-        {/* Employee Profile Not Linked Alert Banner */}
-        {profileLoaded && !employeeId && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <Banner tone="warning" title="Employee Profile Not Linked">
-              Your login account (<strong>{user?.email}</strong>) is not linked to an HR Employee profile.
-              Self-service Time Clock requires an active Employee record linked to your user account. Please contact your HR Administrator to link your account.
-            </Banner>
-          </div>
-        )}
-
         {/* Employee's own attendance view */}
         {view === 'my' && (
           <>
-            {Boolean(employeeId) && (
-              <Card style={{ marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                  <div>
-                    <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
-                      Time Clock
-                    </h2>
-                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      {!hasCheckedIn && 'You have not clocked in today.'}
-                      {hasCheckedIn && !hasCheckedOut && `Clocked in at ${new Date(todayAttendance!.checkIn!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
-                      {hasCheckedIn && hasCheckedOut && `Shift completed. Clocked out at ${new Date(todayAttendance!.checkOut!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
-                    </p>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    {!hasCheckedIn && (
-                      <Button variant="success" onClick={handleClockIn} loading={clockLoading}>
-                        Clock In
-                      </Button>
-                    )}
-                    {hasCheckedIn && !hasCheckedOut && (
-                      <Button variant="danger" onClick={handleClockOut} loading={clockLoading}>
-                        Clock Out
-                      </Button>
-                    )}
-                    {hasCheckedIn && hasCheckedOut && (
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <Badge tone="success" dot>Completed Today</Badge>
-                        <Button variant="success" onClick={handleClockIn} loading={clockLoading}>
-                          Clock In Again
-                        </Button>
-                      </div>
-                    )}
-                  </div>
+            <Card style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                    Time Clock
+                  </h2>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {!hasCheckedIn && 'You have not clocked in today.'}
+                    {hasCheckedIn && !hasCheckedOut && `Clocked in at ${new Date(todayAttendance!.checkIn!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
+                    {hasCheckedIn && hasCheckedOut && `Shift completed. Clocked out at ${new Date(todayAttendance!.checkOut!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
+                  </p>
                 </div>
-              </Card>
-            )}
+
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  {!hasCheckedIn && (
+                    <Button variant="success" onClick={handleClockIn} loading={clockLoading} disabled={!employeeId}>
+                      Clock In
+                    </Button>
+                  )}
+                  {hasCheckedIn && !hasCheckedOut && (
+                    <Button variant="danger" onClick={handleClockOut} loading={clockLoading} disabled={!employeeId}>
+                      Clock Out
+                    </Button>
+                  )}
+                  {hasCheckedIn && hasCheckedOut && (
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <Badge tone="success" dot>Completed Today</Badge>
+                      <Button variant="success" onClick={handleClockIn} loading={clockLoading}>
+                        Clock In Again
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
 
             <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
               <StatCard label="Present" value={<span className="text-success">{myStats.present}</span>} />
@@ -602,7 +592,7 @@ export default function AttendancePage() {
                       : 'Process and recalculate daily punches to resolve late minutes or weekly-off anomalies'}
                   </p>
                 </div>
-                {employeeId && (
+                {isEmployee && (
                   <Button variant="primary" onClick={() => setShowRegModal(true)} leftIcon={<span aria-hidden>➕</span>}>
                     Request Punch Correction
                   </Button>
@@ -752,49 +742,11 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* Today view — available to all */}
-        {view === 'today' && (
+        {/* Admin: Today view */}
+        {view === 'today' && !isEmployee && (
           <>
-            {Boolean(employeeId) && (
-              <Card style={{ marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                  <div>
-                    <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
-                      Time Clock
-                    </h2>
-                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      {!hasCheckedIn && 'You have not clocked in today.'}
-                      {hasCheckedIn && !hasCheckedOut && `Clocked in at ${new Date(todayAttendance!.checkIn!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
-                      {hasCheckedIn && hasCheckedOut && `Shift completed. Clocked out at ${new Date(todayAttendance!.checkOut!).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
-                    </p>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    {!hasCheckedIn && (
-                      <Button variant="success" onClick={handleClockIn} loading={clockLoading}>
-                        Clock In
-                      </Button>
-                    )}
-                    {hasCheckedIn && !hasCheckedOut && (
-                      <Button variant="danger" onClick={handleClockOut} loading={clockLoading}>
-                        Clock Out
-                      </Button>
-                    )}
-                    {hasCheckedIn && hasCheckedOut && (
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <Badge tone="success" dot>Completed Today</Badge>
-                        <Button variant="success" onClick={handleClockIn} loading={clockLoading}>
-                          Clock In Again
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )}
-
             <div style={{ marginBottom: '1.5rem' }}>
-              <Banner tone="info" title="Team Attendance Overview">
+              <Banner tone="info" title="Attendance is self-service">
                 Employees record their own attendance from the mobile app or web. To fix a missed or
                 wrong punch, use the <strong>Correction Requests</strong> tab — corrections are logged
                 and auditable. Admins don’t punch staff in or out manually.
@@ -819,7 +771,7 @@ export default function AttendancePage() {
         )}
 
         {/* Report view */}
-        {view === 'report' && (
+        {view === 'report' && !isEmployee && (
           <>
             <Card style={{ marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
@@ -856,18 +808,18 @@ export default function AttendancePage() {
         )}
 
         {/* Settings view */}
-        {view === 'settings' && (
+        {view === 'settings' && settings && isAdmin && (
           <Card style={{ maxWidth: '500px' }}>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1.5rem' }}>Attendance Settings</h2>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
-              <TimeField label="Check-in Start Time" value={settings?.checkInStartTime || '09:00'} onChange={(v) => setSettings({ ...settings, checkInStartTime: v })} />
-              <TimeField label="Check-in End Time" value={settings?.checkInEndTime || '10:00'} onChange={(v) => setSettings({ ...settings, checkInEndTime: v })} />
-              <TimeField label="Check-out Time" value={settings?.checkOutTime || '18:00'} onChange={(v) => setSettings({ ...settings, checkOutTime: v })} />
+              <TimeField label="Check-in Start Time" value={settings.checkInStartTime} onChange={(v) => setSettings({ ...settings, checkInStartTime: v })} />
+              <TimeField label="Check-in End Time" value={settings.checkInEndTime} onChange={(v) => setSettings({ ...settings, checkInEndTime: v })} />
+              <TimeField label="Check-out Time" value={settings.checkOutTime} onChange={(v) => setSettings({ ...settings, checkOutTime: v })} />
               <Field label="Late Threshold (minutes)">
-                <input type="number" value={settings?.lateThreshold || 15} onChange={(e) => setSettings({ ...settings, lateThreshold: parseInt(e.target.value) })} className="input-field" />
+                <input type="number" value={settings.lateThreshold} onChange={(e) => setSettings({ ...settings, lateThreshold: parseInt(e.target.value) })} className="input-field" />
               </Field>
               <Field label="Half Day Threshold (hours)">
-                <input type="number" value={settings?.halfDayThreshold || 4} onChange={(e) => setSettings({ ...settings, halfDayThreshold: parseInt(e.target.value) })} className="input-field" />
+                <input type="number" value={settings.halfDayThreshold} onChange={(e) => setSettings({ ...settings, halfDayThreshold: parseInt(e.target.value) })} className="input-field" />
               </Field>
               <div style={{ marginTop: '0.5rem' }}>
                 <Button variant="primary" onClick={handleSaveSettings}>Save Settings</Button>

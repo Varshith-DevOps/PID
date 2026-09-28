@@ -202,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: c.accent.withOpacity(0.12),
+                color: c.accent.withValues(alpha: 0.12),
               ),
             ),
           ),
@@ -214,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF182B6D).withOpacity(0.12),
+                color: const Color(0xFF182B6D).withValues(alpha: 0.12),
               ),
             ),
           ),
@@ -260,8 +260,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(14.0),
                       decoration: BoxDecoration(
-                        color: c.danger.withOpacity(0.12),
-                        border: Border.all(color: c.danger.withOpacity(0.3)),
+                        color: c.danger.withValues(alpha: 0.12),
+                        border: Border.all(color: c.danger.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -355,7 +355,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: c.accent.withOpacity(0.2),
+                                color: c.accent.withValues(alpha: 0.2),
                                 blurRadius: 16,
                                 offset: const Offset(0, 4),
                               ),
@@ -438,16 +438,16 @@ class _LoginScreenState extends State<LoginScreen> {
             prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),
             suffixIcon: suffixIcon,
             filled: true,
-            fillColor: const Color(0xFF1E293B).withOpacity(0.4),
+            fillColor: const Color(0xFF1E293B).withValues(alpha: 0.4),
             contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
             errorStyle: TextStyle(color: c.danger),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: const Color(0xFF334155).withOpacity(0.5)),
+              borderSide: BorderSide(color: const Color(0xFF334155).withValues(alpha: 0.5)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: const Color(0xFF334155).withOpacity(0.5)),
+              borderSide: BorderSide(color: const Color(0xFF334155).withValues(alpha: 0.5)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

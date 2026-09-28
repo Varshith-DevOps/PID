@@ -13,6 +13,8 @@ import {
 } from '@/components/ui';
 import { isOwnerRole } from '@/lib/platformRoles';
 
+const toArray = (val: any) => (Array.isArray(val) ? val : []);
+
 const money = (value: number) => `INR ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
 const shortDate = (value?: string) => {
@@ -80,9 +82,9 @@ export default function DashboardPage() {
     }
   };
 
-  const departmentData = useMemo(() => dashboard?.cards?.departments || [], [dashboard]);
-  const recruitmentData = useMemo(() => dashboard?.cards?.recruitment || [], [dashboard]);
-  const availabilityData = useMemo(() => dashboard?.cards?.teamAvailability || [], [dashboard]);
+  const departmentData = useMemo(() => Array.isArray(dashboard?.cards?.departments) ? dashboard.cards.departments : [], [dashboard]);
+  const recruitmentData = useMemo(() => Array.isArray(dashboard?.cards?.recruitment) ? dashboard.cards.recruitment : [], [dashboard]);
+  const availabilityData = useMemo(() => Array.isArray(dashboard?.cards?.teamAvailability) ? dashboard.cards.teamAvailability : [], [dashboard]);
 
   if (authLoading || !user) {
     return (
@@ -204,7 +206,7 @@ function SmartMetric({ label, value, note, tone = 'blue' }: { label: string; val
 function EmployeeDashboardView({ dashboard }: { dashboard: any }) {
   const focus = dashboard.focus || {};
   const cards = dashboard.cards || {};
-  const weeklyData = (cards.attendanceHistory || []).slice().reverse().map((row: any) => ({
+  const weeklyData = toArray(cards.attendanceHistory).slice().reverse().map((row: any) => ({
     date: shortDate(row.date),
     hours: row.workHours || 0,
   }));
@@ -233,27 +235,27 @@ function EmployeeDashboardView({ dashboard }: { dashboard: any }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
           <PulseSurveyWidget />
           <Card title="Team availability">
-            <AvailabilityList rows={cards.teamAvailability || []} />
+            <AvailabilityList rows={toArray(cards.teamAvailability)} />
           </Card>
         </div>
       </section>
 
       <section className="three-col">
-        <PanelList title="Assigned project status" rows={(cards.projects || []).map((project: any) => ({
+        <PanelList title="Assigned project status" rows={toArray(cards.projects).map((project: any) => ({
           title: project.name,
           sub: `${project.progress}% complete | ${project.openTasks} open tasks`,
           pill: project.status,
           tone: project.progress >= 70 ? 'success' : 'warning',
           coach: project.progress >= 70 ? 'This project is moving well. Keep status updates crisp so stakeholders stay confident.' : 'This project needs visible progress. Close small tasks first and flag dependencies early.',
         }))} empty="No active project allocations." />
-        <PanelList title="Tasks needing attention" rows={(cards.tasks || []).map((task: any) => ({
+        <PanelList title="Tasks needing attention" rows={toArray(cards.tasks).map((task: any) => ({
           title: task.title,
           sub: `${task.project} | Due ${shortDate(task.deadline)}`,
           pill: task.status.replaceAll('_', ' '),
           tone: task.status === 'COMPLETED' ? 'success' : 'blue',
           coach: task.actualHours >= task.estimatedHours && task.estimatedHours > 0 ? 'This task may exceed estimate. Add a note so expectations stay aligned.' : 'Good task hygiene. Update status as soon as progress changes.',
         }))} empty="No active tasks assigned." />
-        <PanelList title="Birthdays nearby" rows={(cards.birthdays || []).map((person: any) => ({
+        <PanelList title="Birthdays nearby" rows={toArray(cards.birthdays).map((person: any) => ({
           title: person.name,
           sub: person.department,
           pill: person.dayLabel,
@@ -268,7 +270,7 @@ function EmployeeDashboardView({ dashboard }: { dashboard: any }) {
 function ManagerDashboardView({ dashboard }: { dashboard: any }) {
   const focus = dashboard.focus || {};
   const cards = dashboard.cards || {};
-  const workload = cards.workload || [];
+  const workload = toArray(cards.workload);
 
   return (
     <>
@@ -303,26 +305,26 @@ function ManagerDashboardView({ dashboard }: { dashboard: any }) {
         </Card>
 
         <Card title="Team availability today">
-          <AvailabilityList rows={cards.teamAvailability || []} />
+          <AvailabilityList rows={toArray(cards.teamAvailability)} />
         </Card>
       </section>
 
       <section className="three-col">
-        <PanelList title="Task risk queue" rows={(cards.teamTasks || []).map((task: any) => ({
+        <PanelList title="Task risk queue" rows={toArray(cards.teamTasks).map((task: any) => ({
           title: task.title,
           sub: `${task.assignee} | ${task.project} | Due ${shortDate(task.deadline)}`,
           pill: task.status.replaceAll('_', ' '),
           tone: task.status === 'IN_PROGRESS' ? 'blue' : 'warning',
           coach: `Hover insight: ${task.assignee} owns this task. Confirm the next update before ${shortDate(task.deadline)}.`,
         }))} empty="No team tasks at risk." />
-        <PanelList title="Leave requests" rows={(cards.pendingLeaves || []).map((leave: any) => ({
+        <PanelList title="Leave requests" rows={toArray(cards.pendingLeaves).map((leave: any) => ({
           title: leave.employee,
           sub: `${shortDate(leave.startDate)} to ${shortDate(leave.endDate)} | ${leave.days} days`,
           pill: leave.leaveType,
           tone: 'warning',
           coach: 'Review team coverage before approving. Fast approval improves trust and planning accuracy.',
         }))} empty="No pending team leave requests." />
-        <PanelList title="Upcoming birthdays" rows={(cards.birthdays || []).map((person: any) => ({
+        <PanelList title="Upcoming birthdays" rows={toArray(cards.birthdays).map((person: any) => ({
           title: person.name,
           sub: person.department,
           pill: person.dayLabel,
@@ -371,7 +373,7 @@ function PayrollDashboardView({ dashboard, departmentData }: { dashboard: any; d
       <section className="three-col">
         <ChartPanel title="Department headcount" data={departmentData} dataKey="employees" nameKey="name" color="#182B6D" />
         <QuickLinks links={[['Payroll', '/payroll'], ['Payslips', '/payslips'], ['Reports', '/dashboard/admin/reports'], ['Employees', '/employees']]} />
-        <PanelList title="Upcoming birthdays" rows={(dashboard.cards?.birthdays || []).map((person: any) => ({ title: person.name, sub: person.department, pill: person.dayLabel, tone: 'violet', coach: 'Payroll teams can help HR spot lifecycle events and communication moments.' }))} empty="No birthdays nearby." />
+        <PanelList title="Upcoming birthdays" rows={toArray(dashboard?.cards?.birthdays).map((person: any) => ({ title: person.name, sub: person.department, pill: person.dayLabel, tone: 'violet', coach: 'Payroll teams can help HR spot lifecycle events and communication moments.' }))} empty="No birthdays nearby." />
       </section>
     </>
   );
@@ -409,14 +411,14 @@ function AdminHrDashboardView({ dashboard, departmentData, recruitmentData }: { 
       </section>
 
       <section className="three-col">
-        <PanelList title="Recent hires" rows={(dashboard.cards?.recentHires || []).map((hire: any) => ({
+        <PanelList title="Recent hires" rows={toArray(dashboard?.cards?.recentHires).map((hire: any) => ({
           title: hire.name,
           sub: `${hire.title} | ${hire.department}`,
           pill: shortDate(hire.joinDate),
           tone: 'success',
           coach: 'New hire experience is fragile. Check onboarding progress and manager connection.',
         }))} empty="No recent hires found." />
-        <PanelList title="Upcoming birthdays" rows={(dashboard.cards?.birthdays || []).map((person: any) => ({
+        <PanelList title="Upcoming birthdays" rows={toArray(dashboard?.cards?.birthdays).map((person: any) => ({
           title: person.name,
           sub: person.department,
           pill: person.dayLabel,
@@ -429,11 +431,12 @@ function AdminHrDashboardView({ dashboard, departmentData, recruitmentData }: { 
   );
 }
 
-function AvailabilityList({ rows }: { rows: any[] }) {
-  if (!rows.length) return <EmptyState title="No team members to show." />;
+function AvailabilityList({ rows = [] }: { rows?: any[] }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return <EmptyState title="No team members to show." />;
   return (
     <div className="list">
-      {rows.map((row) => {
+      {safeRows.map((row) => {
         const ok = row.status === 'AVAILABLE' || row.status === 'LATE_ONLINE';
         const tone = row.status === 'ON_LEAVE' ? 'warning' : ok ? 'success' : 'danger';
         const c = toneToken(tone);
@@ -457,11 +460,12 @@ function AvailabilityList({ rows }: { rows: any[] }) {
   );
 }
 
-function PanelList({ title, rows, empty }: { title: string; rows: any[]; empty: string }) {
+function PanelList({ title, rows = [], empty }: { title: string; rows?: any[]; empty: string }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
   return (
     <Card title={title}>
       <div className="list">
-        {rows.length ? rows.map((row, index) => {
+        {safeRows.length ? safeRows.map((row, index) => {
           const c = toneToken(row.tone);
           return (
             <div key={`${row.title}-${index}`} className="coach-card">
@@ -485,11 +489,12 @@ function PanelList({ title, rows, empty }: { title: string; rows: any[]; empty: 
   );
 }
 
-function ChartPanel({ title, data, dataKey, nameKey, color }: { title: string; data: any[]; dataKey: string; nameKey: string; color?: string }) {
+function ChartPanel({ title, data = [], dataKey, nameKey, color }: { title: string; data?: any[]; dataKey: string; nameKey: string; color?: string }) {
+  const safeData = Array.isArray(data) ? data : [];
   return (
     <Card title={title}>
-      {data.length ? (
-        <KpiBar data={data} xKey={nameKey} bars={[{ key: dataKey, color: color || '#182B6D' }]} height={230} />
+      {safeData.length ? (
+        <KpiBar data={safeData} xKey={nameKey} bars={[{ key: dataKey, color: color || '#182B6D' }]} height={230} />
       ) : (
         <EmptyState title="No data" />
       )}

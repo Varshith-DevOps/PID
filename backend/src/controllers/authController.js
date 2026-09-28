@@ -127,10 +127,16 @@ const clearAllAuthCookies = (res) => {
   }
 };
 
-const setRefreshCookie = (res, token) => {
+const isSecureCookie = (req) => {
+  if (process.env.COOKIE_SECURE === 'true') return true;
+  if (process.env.COOKIE_SECURE === 'false') return false;
+  return Boolean(req && (req.secure || req.headers?.['x-forwarded-proto'] === 'https'));
+};
+
+const setRefreshCookie = (req, res, token) => {
   res.cookie('refreshToken', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookie(req),
     sameSite: 'Lax',
     domain: COOKIE_DOMAIN,
     path: REFRESH_COOKIE_PATH, // only sent to /api/auth/* (refresh, logout)
@@ -138,18 +144,18 @@ const setRefreshCookie = (res, token) => {
   });
 };
 
-const setAuthCookie = (res, token, user) => {
+const setAuthCookie = (req, res, token, user) => {
   res.cookie('token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookie(req),
     sameSite: 'Lax',
     domain: COOKIE_DOMAIN,
     maxAge: 24 * 60 * 60 * 1000
   });
   // Pair the session cookie with a readable CSRF token (double-submit pattern).
-  setCsrfCookie(res, generateCsrfToken());
+  setCsrfCookie(req, res, generateCsrfToken());
   // Issue a long-lived refresh token so short-lived access tokens can be renewed.
-  if (user) setRefreshCookie(res, signRefreshToken(user));
+  if (user) setRefreshCookie(req, res, signRefreshToken(user));
 };
 
 const buildLoginPayload = async (user, token) => {
@@ -239,65 +245,66 @@ const buildLoginPayload = async (user, token) => {
  */
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
 
     // Clear any stale auth cookies from a previous session BEFORE processing
     // the login. This prevents expired/revoked token cookies from triggering
     // CSRF validation failures on the login request itself.
     clearAllAuthCookies(res);
 
-    if (!email || !password) {
+    if (!cleanEmail || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
     const ip = clientIp(req);
 
     // Account/IP lockout: slows credential stuffing even under the IP rate limit.
-    const lock = loginGuard.check(email, ip);
+    const lock = loginGuard.check(cleanEmail, ip);
     if (lock.locked) {
-      await logSecurityEvent(req, { action: 'AUTH_LOGIN_LOCKED', userEmail: email, details: { retryAfterSec: lock.retryAfterSec } });
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_LOCKED', userEmail: cleanEmail, details: { retryAfterSec: lock.retryAfterSec } });
       res.set('Retry-After', String(lock.retryAfterSec));
       return res.status(429).json({ error: 'Too many failed attempts. Please try again later.' });
     }
 
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: cleanEmail },
       include: { permissions: true },
     });
 
     if (!user) {
-      loginGuard.recordFailure(email, ip);
-      console.info(`[AUTH] Login failed: no account found for ${email}`);
-      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userEmail: email, details: { reason: 'unknown_user' } });
+      loginGuard.recordFailure(cleanEmail, ip);
+      console.info(`[AUTH] Login failed: no account found for ${cleanEmail}`);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userEmail: cleanEmail, details: { reason: 'unknown_user' } });
       return res.status(401).json({ error: 'No account found with this email address.' });
     }
     if (!user.isActive) {
-      loginGuard.recordFailure(email, ip);
-      console.info(`[AUTH] Login failed: deactivated account ${email}`);
-      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: email, details: { reason: 'deactivated_account' } });
+      loginGuard.recordFailure(cleanEmail, ip);
+      console.info(`[AUTH] Login failed: deactivated account ${cleanEmail}`);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: cleanEmail, details: { reason: 'deactivated_account' } });
       return res.status(403).json({ error: 'Your account has been deactivated. Contact HR.' });
     }
 
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
-      loginGuard.recordFailure(email, ip);
-      console.info(`[AUTH] Login failed: incorrect password for ${email}`);
-      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: email, details: { reason: 'bad_password' } });
+      loginGuard.recordFailure(cleanEmail, ip);
+      console.info(`[AUTH] Login failed: incorrect password for ${cleanEmail}`);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_FAILURE', userId: user.id, userEmail: cleanEmail, details: { reason: 'bad_password' } });
       return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
     // Strict workspace binding: tenant users only on their subdomain, owners on apex.
     const binding = await checkWorkspaceBinding(req, user);
     if (binding) {
-      loginGuard.recordFailure(email, ip);
-      await logSecurityEvent(req, { action: 'AUTH_LOGIN_WRONG_WORKSPACE', userId: user.id, userEmail: email });
+      loginGuard.recordFailure(cleanEmail, ip);
+      await logSecurityEvent(req, { action: 'AUTH_LOGIN_WRONG_WORKSPACE', userId: user.id, userEmail: cleanEmail });
       return res.status(binding.status).json(binding.body);
     }
 
     // Anomalous login detection: geo-velocity
     const geoAnomalous = await checkGeoVelocity(req, user);
     if (geoAnomalous) {
-      loginGuard.recordFailure(email, ip);
+      loginGuard.recordFailure(cleanEmail, ip);
       return res.status(403).json({ error: geoAnomalous.message });
     }
 
@@ -307,20 +314,20 @@ const login = async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: MFA_TOKEN_TTL }
       );
-      await logSecurityEvent(req, { action: 'AUTH_MFA_CHALLENGE', level: 'info', userId: user.id, userEmail: email });
+      await logSecurityEvent(req, { action: 'AUTH_MFA_CHALLENGE', level: 'info', userId: user.id, userEmail: cleanEmail });
       return res.json({ mfaRequired: true, mfaToken, user: { email: user.email, role: user.role } });
     }
 
-    loginGuard.reset(email, ip);
+    loginGuard.reset(cleanEmail, ip);
     const token = signAccessToken(user);
-    setAuthCookie(res, token, user);
+    setAuthCookie(req, res, token, user);
 
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() }
     }).catch(() => {});
 
-    await logSecurityEvent(req, { action: 'AUTH_LOGIN_SUCCESS', level: 'info', userId: user.id, userEmail: email });
+    await logSecurityEvent(req, { action: 'AUTH_LOGIN_SUCCESS', level: 'info', userId: user.id, userEmail: cleanEmail });
     res.json(await buildLoginPayload(user, token));
   } catch (error) {
     console.error('[LOGIN ERROR]:', error.message);
@@ -1389,6 +1396,93 @@ const ssoRequestAccess = async (req, res) => {
   }
 };
 
+/**
+ * Initiate password reset by generating a secure token.
+ * Generic response is always returned to prevent email enumeration.
+ */
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (cleanEmail) {
+      const user = await prisma.user.findFirst({ where: { email: cleanEmail } });
+      if (user && user.isActive) {
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+        const expires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes TTL
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            resetPasswordToken: hashedToken,
+            resetPasswordExpires: expires,
+          },
+        });
+
+        console.log(`[FORGOT PASSWORD RESET LINK]: http://13.232.70.236/reset-password?token=${rawToken}`);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'If an account exists for this email, a password reset link has been sent.',
+    });
+  } catch (err) {
+    console.error('[FORGOT PASSWORD ERROR]:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+/**
+ * Reset password using a valid, non-expired token.
+ */
+const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body || {};
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Reset token and new password are required.' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters long.' });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const user = await prisma.user.findFirst({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { gt: new Date() },
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired password reset token.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: passwordHash,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        mustChangePassword: false,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully. You can now sign in.',
+    });
+  } catch (err) {
+    console.error('[RESET PASSWORD ERROR]:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = {
   login,
   register,
@@ -1396,6 +1490,8 @@ module.exports = {
   getProfile,
   changePassword,
   resetPasswordForUser,
+  forgotPassword,
+  resetPassword,
   setupMfa,
   enableMfa,
   disableMfa,

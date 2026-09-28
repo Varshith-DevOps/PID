@@ -73,8 +73,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback((_token: string | undefined, userData: User, userPermissions?: Permission[]) => {
+  const login = useCallback((token: string | undefined, userData: User, userPermissions?: Permission[]) => {
     clearApiCache();
+    if (token && typeof document !== 'undefined') {
+      document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`;
+    }
     setUser(userData);
     setPermissions(userPermissions || []);
   }, []);

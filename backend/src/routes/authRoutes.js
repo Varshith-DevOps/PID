@@ -7,6 +7,8 @@ const {
   getProfile,
   changePassword,
   resetPasswordForUser,
+  forgotPassword,
+  resetPassword,
   setupMfa,
   enableMfa,
   disableMfa,
@@ -30,6 +32,8 @@ const { loginSchema, changePasswordSchema, resetPasswordSchema } = require('../s
 const { signupSchema } = require('../schemas/publicSchemas');
 
 router.post('/login', loginLimiter, validate(loginSchema), login);
+router.post('/forgot-password', sensitiveLimiter, forgotPassword);
+router.post('/reset-password', sensitiveLimiter, resetPassword);
 router.post('/signup', registerLimiter, validate(signupSchema), signup);
 router.post('/mfa/verify-login', loginLimiter, verifyMfaLogin);
 router.post('/refresh', loginLimiter, refresh);

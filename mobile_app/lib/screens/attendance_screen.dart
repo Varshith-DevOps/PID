@@ -182,9 +182,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               Container(
                 padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
-                  color: c.danger.withOpacity(0.1),
+                  color: c.danger.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: c.danger.withOpacity(0.2)),
+                  border: Border.all(color: c.danger.withValues(alpha: 0.2)),
                 ),
                 child: Text(
                   _errorMessage!,
@@ -202,13 +202,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   shape: BoxShape.circle,
                   color: c.raised,
                   border: Border.all(
-                    color: _isCheckedIn ? c.accent.withOpacity(0.3) : c.border,
+                    color: _isCheckedIn ? c.accent.withValues(alpha: 0.3) : c.border,
                     width: 6,
                   ),
                   boxShadow: [
                     if (_isCheckedIn)
                       BoxShadow(
-                        color: c.accent.withOpacity(0.15),
+                        color: c.accent.withValues(alpha: 0.15),
                         blurRadius: 40,
                         spreadRadius: 2,
                       ),
@@ -285,14 +285,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                 children: [
                                   Icon(
                                     Icons.double_arrow_rounded,
-                                    color: actionColor.withOpacity(0.6),
+                                    color: actionColor.withValues(alpha: 0.6),
                                     size: 16,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     _isCheckedIn ? 'SLIDE TO CHECK-OUT' : 'SLIDE TO CHECK-IN',
                                     style: TextStyle(
-                                      color: actionColor.withOpacity(0.7),
+                                      color: actionColor.withValues(alpha: 0.7),
                                       fontSize: 11,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 1.5,
@@ -327,12 +327,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                   shape: BoxShape.circle,
                                   gradient: LinearGradient(
                                     colors: _isCheckedIn
-                                        ? [c.danger, c.danger.withOpacity(0.7)]
-                                        : [c.accent, c.accent.withOpacity(0.7)],
+                                        ? [c.danger, c.danger.withValues(alpha: 0.7)]
+                                        : [c.accent, c.accent.withValues(alpha: 0.7)],
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: actionColor.withOpacity(0.3),
+                                      color: actionColor.withValues(alpha: 0.3),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),

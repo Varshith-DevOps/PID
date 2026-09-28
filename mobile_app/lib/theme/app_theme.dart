@@ -164,7 +164,7 @@ class AppTheme {
       cardTheme: CardTheme(
         color: c.raised,
         elevation: isDark ? 0 : 1,
-        shadowColor: Colors.black.withOpacity(0.08),
+        shadowColor: Colors.black.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: c.border),
@@ -178,7 +178,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: c.raised,
-        indicatorColor: c.accent.withOpacity(0.16),
+        indicatorColor: c.accent.withValues(alpha: 0.16),
         labelTextStyle: WidgetStatePropertyAll(TextStyle(fontSize: 11, color: c.textSecondary)),
       ),
       dividerColor: c.border,

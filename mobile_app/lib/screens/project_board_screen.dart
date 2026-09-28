@@ -194,7 +194,7 @@ class _ProjectBoardScreenState extends State<ProjectBoardScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: DropdownButtonFormField<String>(
-                value: _projectId,
+                initialValue: _projectId,
                 dropdownColor: c.raised,
                 isExpanded: true,
                 style: TextStyle(color: c.textPrimary),
@@ -277,7 +277,7 @@ class _BoardColumn extends StatelessWidget {
                 const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(999)),
+                  decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
                   child: Text('${tasks.length}', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
                 ),
               ],
@@ -333,7 +333,7 @@ class _TaskCard extends StatelessWidget {
                 if (priority != null && priority.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(color: accent.withOpacity(0.14), borderRadius: BorderRadius.circular(6)),
+                    decoration: BoxDecoration(color: accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
                     child: Text(priority, style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w700)),
                   ),
                 const Spacer(),

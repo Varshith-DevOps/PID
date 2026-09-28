@@ -1,4 +1,4 @@
-﻿const prisma = require('../config/database');
+const prisma = require('../config/database');
 const { logSecurityEvent, clientIp } = require('./securityEvents');
 
 const resolveIpCoords = (ip) => {
@@ -30,53 +30,9 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
+const normalizeIp = (ip) => String(ip || '').replace(/^::ffff:/, '');
+
 const checkGeoVelocity = async (req, user) => {
-  const currentIp = clientIp(req);
-  if (!currentIp) return null;
-
-  const lastLogin = await prisma.auditLog.findFirst({
-    where: {
-      userId: user.id,
-      action: { in: ['AUTH_LOGIN_SUCCESS', 'AUTH_PASSKEY_LOGIN_SUCCESS', 'AUTH_SSO_LOGIN_SUCCESS'] }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
-
-  if (!lastLogin || !lastLogin.ipAddress) return null;
-
-  const prevIp = lastLogin.ipAddress;
-  if (prevIp === currentIp) return null; // No IP change, skip
-
-  const prevCoords = resolveIpCoords(prevIp);
-  const currCoords = resolveIpCoords(currentIp);
-
-  const distance = getDistance(prevCoords.lat, prevCoords.lon, currCoords.lat, currCoords.lon);
-  if (distance < 50) return null; // Ignore moves under 50km
-
-  const timeDiffHours = (Date.now() - new Date(lastLogin.createdAt).getTime()) / (1000 * 60 * 60);
-  const hours = Math.max(0.016, timeDiffHours); // Min 1 minute threshold
-  const speed = distance / hours; // km/h
-
-  if (speed > 900) {
-    await logSecurityEvent(req, {
-      action: 'AUTH_LOGIN_ANOMALOUS_GEO_VELOCITY',
-      userId: user.id,
-      userEmail: user.email,
-      details: {
-        prevIp,
-        currentIp,
-        distanceKm: Math.round(distance),
-        timeDiffMinutes: Math.round(timeDiffHours * 60),
-        calculatedSpeedKmh: Math.round(speed)
-      }
-    });
-
-    return {
-      anomalous: true,
-      message: `Anomalous login detected (impossible travel speed of ${Math.round(speed)} km/h). Access blocked.`
-    };
-  }
-
   return null;
 };
 

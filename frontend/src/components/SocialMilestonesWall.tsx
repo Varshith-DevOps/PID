@@ -28,6 +28,7 @@ interface WallResponse {
 export default function SocialMilestonesWall() {
   const [wallData, setWallData] = useState<WallResponse | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [receiverId, setReceiverId] = useState<string>('');
   const [points, setPoints] = useState<number>(10);
   const [message, setMessage] = useState<string>('');
@@ -44,7 +45,10 @@ export default function SocialMilestonesWall() {
       const res = await fetch('/api/kudos/wall');
       if (res.ok) {
         const data = await res.json();
-        setWallData(data);
+        setWallData({
+          ...data,
+          wall: Array.isArray(data?.wall) ? data.wall : [],
+        });
       }
     } catch (err) {
       console.error('Failed to load kudos wall:', err);
@@ -53,16 +57,24 @@ export default function SocialMilestonesWall() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch('/api/employees');
+      const res = await fetch('/api/kudos/colleagues');
       if (res.ok) {
         const data = await res.json();
-        // Exclude caller if possible, or just load all
-        setEmployees(data);
+        const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : (Array.isArray(data?.employees) ? data.employees : []));
+        setEmployees(list);
       }
     } catch (err) {
       console.error('Failed to load employee list:', err);
     }
   };
+
+  const filteredEmployees = (Array.isArray(employees) ? employees : []).filter((emp) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    const name = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase();
+    const title = (emp.jobTitle || '').toLowerCase();
+    return name.includes(term) || title.includes(term);
+  });
 
   const handleSendKudos = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,20 +171,28 @@ export default function SocialMilestonesWall() {
           <form onSubmit={handleSendKudos} style={styles.form}>
             <div style={styles.formGroup}>
               <label style={styles.label}>Select Colleague</label>
+              <input
+                type="text"
+                placeholder="Search colleague by name or title..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ ...styles.input, marginBottom: '8px' }}
+              />
               <select
                 value={receiverId}
                 onChange={(e) => setReceiverId(e.target.value)}
                 style={styles.select}
                 required
               >
-                <option value="">Choose employee...</option>
-                {employees.map((emp) => (
+                <option value="">Choose employee ({filteredEmployees.length} available)...</option>
+                {filteredEmployees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {emp.firstName} {emp.lastName} ({emp.jobTitle})
+                    {emp.firstName} {emp.lastName} {emp.jobTitle ? `(${emp.jobTitle})` : ''}
                   </option>
                 ))}
               </select>
             </div>
+
 
             <div style={styles.formGroup}>
               <label style={styles.label}>Points to Give</label>

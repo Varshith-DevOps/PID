@@ -379,8 +379,9 @@ async function main() {
 
   // System users (admin accounts)
   const hashedAdmin = await bcrypt.hash('admin123', 10);
+  const hashedSuperAdmin = await bcrypt.hash('Noallow#835', 10);
   const sysUsers = [
-    { email:'superadmin@hrms.com', name:'Super Admin', role:'SUPER_ADMIN', companyId: null },
+    { email:'PIDsuperadmin@hcms.pid', name:'Super Admin', role:'SUPER_ADMIN', companyId: null, password: hashedSuperAdmin },
     { email:'admin@hrms.com', name:'Admin User', role:'ADMIN', companyId: defaultCompany.id },
     { email:'manager@hrms.com', name:'Manager User', role:'MANAGER', companyId: defaultCompany.id },
     // Platform (owner-side) staff — separation of duties. No home company.
@@ -391,7 +392,7 @@ async function main() {
     { email:'auditor@hrms.com', name:'Auditor', role:'AUDITOR', companyId: null },
   ];
   for (const u of sysUsers) {
-    await prisma.user.create({ data:{ email:u.email, password:hashedAdmin, name:u.name, role:u.role, companyId:u.companyId, permissions:{ create:getPermissions(u.role) } } });
+    await prisma.user.create({ data:{ email:u.email, password: u.password || hashedAdmin, name:u.name, role:u.role, companyId:u.companyId, permissions:{ create:getPermissions(u.role) } } });
   }
   console.log('✅ System users created');
 

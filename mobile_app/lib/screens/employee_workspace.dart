@@ -260,7 +260,7 @@ class _EmployeeTimeScreenState extends State<EmployeeTimeScreen> {
           children: [
             const _FieldLabel('Task'),
             DropdownButtonFormField<String?>(
-              value: taskId,
+              initialValue: taskId,
               dropdownColor: context.colors.raised,
               decoration: _inputDecoration(context, 'Select a task'),
               items: [
@@ -458,7 +458,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
           children: [
             const _FieldLabel('Leave type'),
             DropdownButtonFormField<String>(
-              value: leaveType,
+              initialValue: leaveType,
               dropdownColor: context.colors.raised,
               decoration: _inputDecoration(context, 'Leave type'),
               items: const ['CASUAL', 'SICK', 'EARNED', 'UNPAID']
@@ -825,7 +825,7 @@ class _EmployeeMoreScreenState extends State<EmployeeMoreScreen> {
           children: [
             const _FieldLabel('Category'),
             DropdownButtonFormField<String>(
-              value: category,
+              initialValue: category,
               dropdownColor: context.colors.raised,
               decoration: _inputDecoration(context, 'Category'),
               items: const ['HR', 'IT', 'PAYROLL', 'ADMIN']
@@ -836,7 +836,7 @@ class _EmployeeMoreScreenState extends State<EmployeeMoreScreen> {
             const SizedBox(height: 12),
             const _FieldLabel('Priority'),
             DropdownButtonFormField<String>(
-              value: priority,
+              initialValue: priority,
               dropdownColor: context.colors.raised,
               decoration: _inputDecoration(context, 'Priority'),
               items: const ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
@@ -1005,7 +1005,7 @@ class _HeroPanel extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundColor: c.accent.withOpacity(0.16),
+            backgroundColor: c.accent.withValues(alpha: 0.16),
             child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'E', style: TextStyle(color: c.accent, fontWeight: FontWeight.w900, fontSize: 22)),
           ),
           const SizedBox(width: 14),
@@ -1151,7 +1151,7 @@ class _ActionCard extends StatelessWidget {
           Container(
             width: 38,
             height: 38,
-            decoration: BoxDecoration(color: action.color.withOpacity(0.14), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: action.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
             child: Icon(action.icon, color: action.color, size: 20),
           ),
           const SizedBox(width: 10),
@@ -1183,7 +1183,7 @@ class _InlineMessage extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: c.danger.withOpacity(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: c.danger.withOpacity(0.35))),
+      decoration: BoxDecoration(color: c.danger.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: c.danger.withValues(alpha: 0.35))),
       child: Row(
         children: [
           Icon(Icons.info_outline, color: c.danger, size: 18),
@@ -1560,7 +1560,7 @@ class _ListCard extends StatelessWidget {
             Container(
               width: 38,
               height: 38,
-              decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
               child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(width: 12),
@@ -1597,7 +1597,7 @@ class _ProfilePanel extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 25,
-            backgroundColor: c.leave.withOpacity(0.16),
+            backgroundColor: c.leave.withValues(alpha: 0.16),
             child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'E', style: TextStyle(color: c.leave, fontSize: 20, fontWeight: FontWeight.w900)),
           ),
           const SizedBox(width: 12),

@@ -3,9 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
+
 
 model User {
   id                 String              @id @default(uuid())
@@ -27,6 +28,8 @@ model User {
   employee           Employee?           @relation("UserEmployee")
   supportAssignments SupportAssignment[] @relation("SupportStaffAssignments")
   authenticators     Authenticator[]
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 

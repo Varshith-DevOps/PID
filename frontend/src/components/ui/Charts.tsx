@@ -35,15 +35,17 @@ export function KpiBar({ data, xKey, bars, height = 260, stacked }: {
   height?: number;
   stacked?: boolean;
 }) {
+  const safeData = Array.isArray(data) ? data : [];
+  const safeBars = Array.isArray(bars) ? bars : [];
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data}>
+      <BarChart data={safeData}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
         <XAxis dataKey={xKey} {...axisProps} />
         <YAxis {...axisProps} />
         <Tooltip {...tooltipStyle} cursor={{ fill: 'var(--hover-overlay)' }} />
-        {bars.length > 1 && <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)' }} />}
-        {bars.map((b, i) => (
+        {safeBars.length > 1 && <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)' }} />}
+        {safeBars.map((b, i) => (
           <Bar key={b.key} dataKey={b.key} name={b.name || b.key} stackId={stacked ? 'a' : undefined} fill={b.color || CHART_COLORS[i % CHART_COLORS.length]} radius={[4, 4, 0, 0]} />
         ))}
       </BarChart>
@@ -58,15 +60,17 @@ export function KpiLine({ data, xKey, lines, height = 260, area }: {
   height?: number;
   area?: boolean;
 }) {
+  const safeData = Array.isArray(data) ? data : [];
+  const safeLines = Array.isArray(lines) ? lines : [];
   if (area) {
     return (
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data}>
+        <AreaChart data={safeData}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
           <XAxis dataKey={xKey} {...axisProps} />
           <YAxis {...axisProps} />
           <Tooltip {...tooltipStyle} />
-          {lines.map((l, i) => {
+          {safeLines.map((l, i) => {
             const color = l.color || CHART_COLORS[i % CHART_COLORS.length];
             return <Area key={l.key} type="monotone" dataKey={l.key} name={l.name || l.key} stroke={color} fill={color} fillOpacity={0.15} strokeWidth={2} />;
           })}
@@ -76,13 +80,13 @@ export function KpiLine({ data, xKey, lines, height = 260, area }: {
   }
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data}>
+      <LineChart data={safeData}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
         <XAxis dataKey={xKey} {...axisProps} />
         <YAxis {...axisProps} />
         <Tooltip {...tooltipStyle} />
-        {lines.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
-        {lines.map((l, i) => (
+        {safeLines.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
+        {safeLines.map((l, i) => (
           <Line key={l.key} type="monotone" dataKey={l.key} name={l.name || l.key} stroke={l.color || CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={false} />
         ))}
       </LineChart>
@@ -97,12 +101,13 @@ export function KpiPie({ data, dataKey = 'value', nameKey = 'name', height = 260
   height?: number;
   colors?: string[];
 }) {
+  const safeData = Array.isArray(data) ? data : [];
   const palette = colors || CHART_COLORS;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
-        <Pie data={data} dataKey={dataKey} nameKey={nameKey} innerRadius="55%" outerRadius="80%" paddingAngle={2}>
-          {data.map((_, i) => <Cell key={i} fill={palette[i % palette.length]} stroke="var(--surface-raised)" strokeWidth={2} />)}
+        <Pie data={safeData} dataKey={dataKey} nameKey={nameKey} innerRadius="55%" outerRadius="80%" paddingAngle={2}>
+          {safeData.map((_, i) => <Cell key={i} fill={palette[i % palette.length]} stroke="var(--surface-raised)" strokeWidth={2} />)}
         </Pie>
         <Tooltip {...tooltipStyle} />
         <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)' }} />

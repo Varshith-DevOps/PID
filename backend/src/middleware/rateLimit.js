@@ -65,11 +65,13 @@ const publicFormLimiter = rateLimit({
 });
 
 /**
- * Limit login requests to 5 per minute per IP.
+ * Limit failed login requests to 15 per minute per IP.
+ * Successful logins do not count against the brute-force rate limit.
  */
 const loginLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 5,
+  max: Number(process.env.LOGIN_RATE_LIMIT_MAX) || 15,
+  skipSuccessfulRequests: true,
   message: { error: 'Too many login attempts. Please try again after a minute.' },
   standardHeaders: true,
   legacyHeaders: false,

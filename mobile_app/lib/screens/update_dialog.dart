@@ -131,9 +131,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: _rose.withOpacity(0.08),
+                    color: _rose.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _rose.withOpacity(0.3)),
+                    border: Border.all(color: _rose.withValues(alpha: 0.3)),
                   ),
                   child: const Text(
                     'This update is mandatory and must be installed to continue.',

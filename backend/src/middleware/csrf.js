@@ -27,10 +27,16 @@ function generateCsrfToken() {
  * Set the CSRF cookie. Readable by JS (NOT httpOnly) so the SPA can echo it back
  * in the x-csrf-token header — the second half of the double-submit check.
  */
-function setCsrfCookie(res, token) {
+function isSecureCookie(req) {
+  if (process.env.COOKIE_SECURE === 'true') return true;
+  if (process.env.COOKIE_SECURE === 'false') return false;
+  return Boolean(req && (req.secure || req.headers?.['x-forwarded-proto'] === 'https'));
+}
+
+function setCsrfCookie(req, res, token) {
   res.cookie(CSRF_COOKIE, token, {
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookie(req),
     sameSite: 'Lax',
     domain: process.env.COOKIE_DOMAIN || undefined,
     maxAge: 24 * 60 * 60 * 1000,

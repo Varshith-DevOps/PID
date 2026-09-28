@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const kudosController = require('../controllers/kudosController');
@@ -9,5 +9,7 @@ router.post('/', kudosController.sendKudos);
 router.get('/received', kudosController.getReceivedKudos);
 router.get('/sent', kudosController.getSentKudos);
 router.get('/wall', kudosController.getKudosWall);
+router.get('/colleagues', kudosController.getColleagues);
 
 module.exports = router;
+

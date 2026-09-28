@@ -119,7 +119,7 @@ class _DashboardShellState extends State<DashboardShell> {
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
           backgroundColor: c.raised,
-          indicatorColor: c.accent.withOpacity(0.16),
+          indicatorColor: c.accent.withValues(alpha: 0.16),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final selected = states.contains(WidgetState.selected);
             return TextStyle(

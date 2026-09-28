@@ -54,6 +54,10 @@ api.interceptors.request.use(
   (config) => {
     apiEvents.emit('request-start', config.url || '');
     if (typeof window !== 'undefined') {
+      const matchToken = document.cookie.match(/(?:^|;\s*)token=([^;]+)/);
+      if (matchToken && matchToken[1] && !config.headers['Authorization']) {
+        config.headers['Authorization'] = `Bearer ${decodeURIComponent(matchToken[1])}`;
+      }
       // Double-submit CSRF: echo the readable csrfToken cookie on mutations.
       const method = (config.method || 'get').toLowerCase();
       if (['post', 'put', 'patch', 'delete'].includes(method)) {
@@ -220,6 +224,9 @@ export const login = async (email: string, password: string) => {
   const { data } = await api.post('/auth/login', { email, password }, {
     headers: { Authorization: undefined }
   });
+  if (data?.token && typeof document !== 'undefined') {
+    document.cookie = `token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+  }
   return data;
 };
 

@@ -63,4 +63,8 @@ function reset(email, ip) {
   buckets.delete(keyFor(email, ip));
 }
 
-module.exports = { check, recordFailure, reset, MAX_FAILURES };
+function resetAll() {
+  buckets.clear();
+}
+
+module.exports = { check, recordFailure, reset, resetAll, MAX_FAILURES };
